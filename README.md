@@ -38,4 +38,4 @@ Contributions are welcome. Please open issues or pull requests for bug reports, 
 
 ## License
 
-Add your license information here.
+LGPL-3.0 License
