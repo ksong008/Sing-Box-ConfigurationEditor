@@ -1986,7 +1986,7 @@ ${ipv6Block}
 # ip rule add fwmark ${markHex} lookup 100
 # ip route add local default dev lo table 100${ipv6 ? '\n# ip -6 rule add fwmark ' + markHex + ' lookup 100\n# ip -6 route add local default dev lo table 100' : ''}
 # ════════════════════════════════════════════════════════════════════
-# Systemd-Network方式
+# Systemd-Network方式,以下为ip4 only，如果是 ipv6，请自行添加对应规则
 # cat > /etc/systemd/system/tproxy-route.service << 'EOF'
 # [Unit]
 # Description=tproxy routing rules
