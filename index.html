@@ -1,0 +1,2577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sing-Box v1.12 配置生成器</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 编辑器和日志区域专属深色滚动条 */
+        .dark-scroll::-webkit-scrollbar-track { background: #1f2937; }
+        .dark-scroll::-webkit-scrollbar-thumb { background: #4b5563; }
+        .dark-scroll::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        .tab-active { border-bottom: 2px solid #4f46e5; color: #4f46e5; font-weight: 700; background: #fff; }
+        .tab-inactive { color: #6b7280; background: #f9fafb; }
+        .tab-inactive:hover { color: #374151; background: #f3f4f6; }
+        [v-cloak] { display: none; }
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+        
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #cbd5e1; transition: .3s; border-radius: 24px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input:checked + .toggle-slider { background: #4f46e5; }
+        input:checked + .toggle-slider:before { transform: translateX(20px); }
+        
+        .panel-card { border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 16px; cursor: pointer; transition: all .2s; background: #f9fafb; }
+        .panel-card:hover { border-color: #a5b4fc; background: #eef2ff; }
+        .panel-card.selected { border-color: #4f46e5; background: #eef2ff; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); }
+        .stitle { font-size: 14px; font-weight: 700; color: #374151; border-left: 4px solid #4f46e5; padding-left: 10px; margin-bottom: 16px; }
+        
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+        .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 95%; max-width: 1000px; height: 85vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0,0,0,.3); }
+        
+        /* 覆盖 Forms 插件默认样式，让输入框更柔和 */
+        [type='text'], [type='number'], select, textarea {
+            border-color: #d1d5db !important; 
+            box-shadow: none !important;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        [type='text']:focus, [type='number']:focus, select:focus, textarea:focus {
+            border-color: #6366f1 !important; 
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+            outline: none !important;
+        }
+        [type='checkbox'] { border-color: #d1d5db !important; transition: all 0.2s; }
+        [type='checkbox']:focus { box-shadow: none !important; outline: none !important; }
+        [type='checkbox']:checked { background-color: #4f46e5 !important; border-color: #4f46e5 !important; }
+
+        /* Toast 通知 */
+        #toast-container { position:fixed; top:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+        .toast { display:flex; align-items:center; gap:10px; padding:12px 18px; border-radius:12px; font-size:13px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.18); pointer-events:auto; animation:toastIn .25s cubic-bezier(.34,1.56,.64,1); max-width:360px; }
+        .toast.toast-ok   { background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; }
+        .toast.toast-err  { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+        .toast.toast-info { background:#eff6ff; color:#1e40af; border:1px solid #93c5fd; }
+        .toast.toast-warn { background:#fffbeb; color:#92400e; border:1px solid #fcd34d; }
+        @keyframes toastIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+        /* 确认对话框 */
+        .confirm-box { background:#fff; border-radius:16px; padding:28px; width:92%; max-width:400px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+        .confirm-box h3 { font-size:16px; font-weight:800; color:#1f2937; margin-bottom:10px; }
+        .confirm-box p  { font-size:13px; color:#6b7280; margin-bottom:24px; line-height:1.6; }
+        .confirm-box .btns { display:flex; gap:10px; justify-content:flex-end; }
+        .confirm-box .btn-cancel { padding:8px 20px; border-radius:8px; border:1px solid #d1d5db; background:#f9fafb; color:#374151; font-size:13px; font-weight:700; cursor:pointer; transition:.2s; }
+        .confirm-box .btn-cancel:hover { background:#f3f4f6; }
+        .confirm-box .btn-ok     { padding:8px 20px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:.2s; }
+        .confirm-box .btn-ok:hover { background:#dc2626; }
+        .confirm-box .btn-ok.safe { background:#4f46e5; }
+        .confirm-box .btn-ok.safe:hover { background:#4338ca; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased h-screen flex flex-col overflow-hidden">
+<div id="toast-container"></div>
+<div id="app" v-cloak class="container mx-auto px-4 max-w-[1500px] py-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+
+    <div v-if="showImportExport" class="modal-overlay" @click.self="showImportExport=false">
+        <div class="modal-box">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-xl font-bold text-gray-800"><i class="fas fa-exchange-alt mr-2 text-indigo-500"></i>配置导入 / 导出</h2>
+                <button @click="showImportExport=false" class="text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex gap-3 mb-5 p-1 bg-gray-100 rounded-xl shrink-0">
+                <button @click="importExportTab='export'" :class="importExportTab==='export'?'bg-white text-indigo-600 shadow-sm':'text-gray-500 hover:text-gray-700'" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition"><i class="fas fa-file-export mr-1.5"></i>导出配置</button>
+                <button @click="importExportTab='import'" :class="importExportTab==='import'?'bg-white text-indigo-600 shadow-sm':'text-gray-500 hover:text-gray-700'" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition"><i class="fas fa-file-import mr-1.5"></i>导入配置</button>
+            </div>
+
+            <div v-if="importExportTab==='export'" class="flex flex-col gap-4 flex-1 min-h-0">
+                <p class="text-sm text-gray-500 shrink-0">将当前所有设置导出为 JSON。可选择保存为"面板配置"以便后续重新导入修改，或直接下载可供 Sing-Box 运行的标准配置。</p>
+                <div class="grid grid-cols-2 gap-3 shrink-0">
+                    <button @click="doExportDownload" class="bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-bold transition shadow-sm"><i class="fas fa-download mr-2"></i>下载面板配置文件 (备份)</button>
+                    <button @click="doExportRuntimeDownload" class="bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-sm font-bold transition shadow-sm"><i class="fas fa-file-code mr-2"></i>下载运行配置文件 (Sing-Box)</button>
+                    <button @click="doExportCopy" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 py-3 rounded-xl text-sm font-bold transition"><i class="fas fa-copy mr-2"></i>复制面板配置至剪贴板</button>
+                    <button @click="doExportRuntimeCopy" class="bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 py-3 rounded-xl text-sm font-bold transition"><i class="fas fa-copy mr-2"></i>复制运行配置至剪贴板</button>
+                </div>
+                <div class="flex gap-1 p-1 bg-gray-100 rounded-lg shrink-0">
+                    <button @click="exportPreviewTab='panel'" :class="exportPreviewTab==='panel'?'bg-white text-emerald-700 shadow-sm font-bold':'text-gray-500 hover:text-gray-700'" class="flex-1 py-1.5 rounded-md text-xs font-semibold transition"><i class="fas fa-sliders-h mr-1"></i>面板配置预览</button>
+                    <button @click="exportPreviewTab='runtime'" :class="exportPreviewTab==='runtime'?'bg-white text-blue-700 shadow-sm font-bold':'text-gray-500 hover:text-gray-700'" class="flex-1 py-1.5 rounded-md text-xs font-semibold transition"><i class="fas fa-cog mr-1"></i>运行配置预览 (Sing-Box)</button>
+                </div>
+                <textarea :value="exportPreviewTab==='runtime' ? generatedJson : exportPreviewJson" readonly class="flex-1 w-full p-5 text-[13px] leading-relaxed font-mono bg-[#1e1e1e] text-green-400 border-0 rounded-xl outline-none resize-none dark-scroll shadow-inner"></textarea>
+            </div>
+
+            <div v-if="importExportTab==='import'" class="flex flex-col gap-4 flex-1 min-h-0">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 shadow-sm shrink-0">
+                    <p class="text-sm text-amber-800 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>注意：只能导入“面板配置文件”。导入将覆盖当前所有设置，请确保已备份。</p>
+                </div>
+                <label class="cursor-pointer group shrink-0">
+                    <div class="bg-indigo-600 group-hover:bg-indigo-500 text-white py-3 rounded-xl text-sm font-bold text-center transition shadow-sm"><i class="fas fa-folder-open mr-2"></i>选择本地 JSON 文件</div>
+                    <input type="file" accept=".json" @change="doImportFile" class="hidden">
+                </label>
+                <div class="relative flex items-center py-2 shrink-0">
+                    <div class="flex-grow border-t border-gray-200"></div>
+                    <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">或粘贴 JSON 内容</span>
+                    <div class="flex-grow border-t border-gray-200"></div>
+                </div>
+                <textarea v-model="importJsonText" placeholder='{"log":{"level":"info"},...}' class="flex-1 w-full p-5 text-[13px] leading-relaxed font-mono bg-[#1e1e1e] text-green-400 border-0 rounded-xl outline-none resize-none dark-scroll shadow-inner"></textarea>
+                <div v-if="importError" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 font-semibold shrink-0">{{ importError }}</div>
+                <button @click="doImportText" class="bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-sm font-bold transition shadow-sm shrink-0"><i class="fas fa-check mr-2"></i>确认导入文本</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+            <h1 class="text-3xl font-extrabold text-indigo-700 tracking-tight mb-2">
+                <i class="fas fa-cube mr-2"></i>Sing-Box Config
+                <span class="text-sm bg-gradient-to-r from-indigo-500 to-violet-600 text-white px-2.5 py-0.5 rounded-md align-top shadow-sm ml-1">Ultra</span>
+            </h1>
+            <p class="text-sm text-gray-500 font-medium">仅适配 sing-box v1.12 · 实时缓存防丢失 · 多面板 · 全协议</p>
+        </div>
+        <div class="flex gap-3 flex-wrap">
+            <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2 shadow-sm text-xs text-gray-500">
+                <i class="fas fa-database text-gray-400"></i>
+                <span v-if="lastSavedAt" class="font-medium">缓存：{{ storageSavedAgo }} · 7天自动清除或者点重置配置清除</span>
+                <span v-else class="text-gray-400">无本地缓存</span>
+                <button v-if="lastSavedAt" @click="clearLocalStorage" class="ml-1 text-red-500 hover:text-red-700 font-bold transition" title="手动清除本地缓存"><i class="fas fa-times-circle"></i></button>
+            </div>
+            <button @click="resetConfig" class="bg-white border border-red-200 hover:bg-red-50 text-red-600 px-5 py-2.5 rounded-xl font-bold transition shadow-sm flex items-center gap-2 text-sm">
+                <i class="fas fa-trash-restore"></i>重置配置
+            </button>
+            <button @click="openImportExport('import')" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-5 py-2.5 rounded-xl font-bold transition shadow-sm flex items-center gap-2 text-sm">
+                <i class="fas fa-file-import text-indigo-500"></i>导入
+            </button>
+            <button @click="openImportExport('export')" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-5 py-2.5 rounded-xl font-bold transition shadow-sm flex items-center gap-2 text-sm">
+                <i class="fas fa-file-export text-indigo-500"></i>导出
+            </button>
+            <button @click="copyConfig" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-bold transition shadow flex items-center gap-2">
+                <i :class="copyIcon"></i>{{ copyText }}
+            </button>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 min-h-0">
+
+        <div class="xl:col-span-7 bg-white rounded-2xl shadow-lg border border-gray-200 flex flex-col overflow-hidden max-h-full">
+            <div class="flex border-b border-gray-200 overflow-x-auto shrink-0 bg-gray-50">
+                <button v-for="tab in tabs" :key="tab.id" @click="currentTab=tab.id"
+                    class="flex-shrink-0 py-4 px-5 text-sm transition-all text-center border-r border-gray-200/60 last:border-0"
+                    :class="currentTab===tab.id?'tab-active':'tab-inactive'">
+                    <i :class="tab.icon" class="mr-1.5"></i>{{ tab.name }}
+                </button>
+            </div>
+            
+            <div class="p-5 overflow-y-auto flex-1 bg-[#f8fafc]" ref="tabContentContainer">
+
+                <div v-show="currentTab==='dns'" class="space-y-5">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="stitle">基础设置</div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mixed 代理端口</label><input type="number" v-model.number="settings.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none"></div>
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">日志级别</label>
+                                <select v-model="settings.log_level" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none">
+                                    <option value="trace">Trace</option><option value="debug">Debug</option><option value="info">Info</option><option value="warn">Warn</option><option value="error">Error</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 策略</label>
+                                <select v-model="settings.dns_strategy" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none">
+                                    <option value="ipv4_only">仅 IPv4</option><option value="ipv6_only">仅 IPv6</option><option value="prefer_ipv4">优先 IPv4</option><option value="prefer_ipv6">优先 IPv6</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认域名解析 <span class="text-indigo-400 normal-case font-normal">(route)</span></label>
+                                <select v-model="settings.default_domain_resolver" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-indigo-700">
+                                    <option value="">不指定</option>
+                                    <option v-for="d in dnsList" :value="d.tag">{{ d.tag }}</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 最终解析器 <span class="text-violet-400 normal-case font-normal">(dns.final)</span></label>
+                                <select v-model="settings.dns_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-violet-700">
+                                    <option value="">不指定</option>
+                                    <option v-for="d in dnsList" :value="d.tag">{{ d.tag }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">DNS 服务器</div>
+                                <span class="badge bg-emerald-100 text-emerald-700 border border-emerald-200">新格式</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="addBootstrapDns" class="text-xs bg-violet-50 text-violet-700 px-3 py-1.5 rounded-lg hover:bg-violet-100 border border-violet-200 font-bold transition" title="添加一条 UDP 类型的纯 IP DNS，专供其他 DoH/DoT 服务器用作 domain_resolver，避免循环解析"><i class="fas fa-anchor mr-1"></i>添加 Bootstrap DNS</button>
+                                <button @click="addDns" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 border border-indigo-200 font-bold transition"><i class="fas fa-plus mr-1"></i>添加</button>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-12 gap-2 items-center px-1 mb-1">
+                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">标签</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">类型</div>
+                                <div class="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">服务器地址</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">出站 (detour)</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-violet-500">域名解析器</div>
+                                <div class="col-span-1"></div>
+                            </div>
+                            <div v-for="(dns,idx) in dnsList" :key="idx" class="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors">
+                                <div class="grid grid-cols-12 gap-2 items-center">
+                                    <input v-model="dns.tag" placeholder="标签" class="col-span-2 px-2.5 py-1.5 text-xs border rounded-md outline-none bg-white font-bold text-indigo-700">
+                                    <select v-model="dns.type" class="col-span-2 px-1.5 py-1.5 text-xs border rounded-md outline-none bg-white font-semibold text-gray-700">
+                                        <option value="tls">DoT</option><option value="https">DoH</option><option value="udp">UDP</option>
+                                        <option value="tcp">TCP</option><option value="quic">DoQ</option><option value="h3">DoH3</option><option value="local">本地</option>
+                                    </select>
+                                    <input v-if="dns.type!=='local'" v-model="dns.server" placeholder="IP或域名" class="col-span-4 px-2.5 py-1.5 text-xs border rounded-md outline-none bg-white font-mono">
+                                    <div v-else class="col-span-4 text-xs text-gray-400 italic px-2.5 py-1.5 bg-gray-100 rounded-md border border-dashed border-gray-300 text-center">使用系统 DNS</div>
+                                    <select v-model="dns.detour" class="col-span-2 px-2 py-1.5 text-xs border rounded-md outline-none bg-white">
+                                        <option value="">(默认出站)</option>
+                                        <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                    </select>
+                                    <select v-if="['tls','https','quic','h3'].includes(dns.type)" v-model="dns.domain_resolver" class="col-span-2 px-2 py-1.5 text-xs border rounded-md outline-none bg-white text-violet-700 font-semibold">
+                                        <option value="">(无解析器)</option>
+                                        <option v-for="d in dnsList.filter(x=>x.tag&&x.tag!==dns.tag)" :value="d.tag">{{ d.tag }}</option>
+                                    </select>
+                                    <div v-else class="col-span-2 text-[10px] text-gray-300 text-center italic py-1.5">仅加密协议需要</div>
+                                    <button @click="removeDns(idx)" class="col-span-1 flex justify-center text-red-400 hover:text-white hover:bg-red-500 p-1.5 rounded-md transition-colors"><i class="fas fa-trash-alt text-xs"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-5 bg-indigo-50/50 p-3 rounded-lg">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" v-model="settings.independent_cache" class="w-4 h-4 text-indigo-600 rounded">
+                                <span class="text-sm text-gray-700 font-medium">独立缓存 <span class="text-gray-400 text-xs font-normal">(FakeIP 必需)</span></span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" v-model="settings.reverse_mapping" class="w-4 h-4 text-indigo-600 rounded">
+                                <span class="text-sm text-gray-700 font-medium">反向映射 (reverse_mapping)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">FakeIP 模式</div>
+                                <span class="badge bg-purple-100 text-purple-700 border border-purple-200">TUN 推荐</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="fakeip.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="fakeip.enabled" class="space-y-4">
+                            <p class="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 font-medium">
+                                <i class="fas fa-info-circle mr-1.5"></i>启用后自动生成 FakeIP DNS 服务器及对应规则。需配合 TUN 模式使用。
+                            </p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">服务器标签</label><input v-model="fakeip.tag" placeholder="fakeip" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"></div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">触发查询类型</label>
+                                    <div class="flex gap-5 mt-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="fakeip.queryA" class="w-4 h-4 text-purple-600 rounded"><span class="text-xs font-bold text-gray-700">A (IPv4)</span></label>
+                                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="fakeip.queryAAAA" class="w-4 h-4 text-purple-600 rounded"><span class="text-xs font-bold text-gray-700">AAAA (IPv6)</span></label>
+                                    </div>
+                                </div>
+                                <div v-if="fakeip.queryA"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">IPv4 范围</label><input v-model="fakeip.inet4_range" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"></div>
+                                <div v-if="fakeip.queryAAAA"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">IPv6 范围</label><input v-model="fakeip.inet6_range" placeholder="fc00::/18" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"></div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">排除域名后缀（每行一条，无需添加 + 或 .）</label>
+                                <textarea v-model="fakeip.excludeText" @blur="cleanExcludeText" @paste="handlePasteCleanup" rows="3" placeholder="lan&#10;local&#10;time.apple.com" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none bg-gray-50 focus:bg-white font-mono resize-none"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab==='nodes'" class="space-y-5">
+                    <div class="bg-emerald-50/50 p-5 rounded-xl border border-emerald-200 shadow-sm">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-base font-extrabold text-emerald-800"><i class="fas fa-clipboard-check mr-2"></i>手动粘贴解析</span>
+                            <div class="flex flex-wrap gap-1 ml-2">
+                                <span v-for="p in ['VLESS','VMess','Trojan','SS','SSR','Hy2','TUIC','SOCKS','HTTP','WireGuard']" :key="p" class="badge bg-white text-emerald-700 border border-emerald-200">{{p}}</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-emerald-700 mb-3 font-medium">将订阅链接在浏览器打开后复制内容粘贴，支持 Base64 编码或明文协议链接（多行混合）。</p>
+                        <textarea v-model="rawPastedText" rows="4" placeholder="vless://...&#10;vmess://...&#10;ss://...&#10;hysteria2://...&#10;tuic://...&#10;&#10;或 Base64 内容" class="w-full px-4 py-3 text-xs border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 font-mono bg-white mb-3 resize-none shadow-inner"></textarea>
+                        <div class="flex justify-end"><button @click="parseManualText" class="text-sm font-bold bg-emerald-600 text-white px-5 py-2.5 rounded-lg hover:bg-emerald-500 shadow-md transition-colors"><i class="fas fa-magic mr-2"></i>提取节点</button></div>
+                    </div>
+
+                    <div class="bg-indigo-50/40 p-5 rounded-xl border border-indigo-100 shadow-sm">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-base font-extrabold text-indigo-800"><i class="fas fa-link mr-2"></i>订阅源</span>
+                            <button @click="addProvider" class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-500 shadow-sm transition"><i class="fas fa-plus mr-1"></i>添加订阅</button>
+                        </div>
+                        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <div class="flex items-start justify-between gap-3">
+                                <p class="text-xs text-amber-800 font-semibold"><i class="fas fa-shield-alt mr-1.5"></i>试验性功能，直接拉取可能因跨域限制失败。开启 CORS 代理后，订阅链接将经第三方服务器转发，存在<strong>链接泄露风险</strong>。建议优先手动复制订阅链接在浏览器打开后复制内容粘贴内容到上方解析框。</p>
+                                <label class="flex items-center gap-2 cursor-pointer shrink-0 bg-white px-3 py-1.5 rounded-lg border border-amber-300 shadow-sm">
+                                    <input type="checkbox" v-model="corsProxyEnabled" class="w-4 h-4 text-amber-600 rounded">
+                                    <span class="text-xs text-amber-800 font-bold whitespace-nowrap">{{ corsProxyEnabled ? '代理已开启' : '开启代理' }}</span>
+                                </label>
+                            </div>
+                            <p v-if="corsProxyEnabled" class="text-xs text-red-700 font-bold mt-2 bg-red-50 border border-red-200 rounded px-2 py-1"><i class="fas fa-exclamation-triangle mr-1"></i>代理已开启，订阅链接将经第三方转发，拉取完成后建议立即关闭。</p>
+                        </div>
+                        <div v-if="fetchStatus" class="mb-4 px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm"
+                            :class="fetchStatus.type==='ok'?'bg-green-50 text-green-700 border border-green-200':fetchStatus.type==='err'?'bg-red-50 text-red-700 border border-red-200':fetchStatus.type==='warn'?'bg-amber-50 text-amber-800 border border-amber-200':'bg-blue-50 text-blue-700 border border-blue-200'">
+                            <i :class="fetchStatus.type==='ok'?'fas fa-check-circle':fetchStatus.type==='err'?'fas fa-exclamation-circle':fetchStatus.type==='warn'?'fas fa-exclamation-triangle':'fas fa-spinner fa-spin'"></i>
+                            <span>{{ fetchStatus.msg }}</span>
+                        </div>
+                        <div class="space-y-3">
+                            <div v-for="(prov,idx) in providers" :key="idx" class="bg-white p-4 rounded-xl border border-indigo-100 relative group shadow-sm hover:border-indigo-300 transition-colors">
+                                <button @click="removeProvider(idx)" class="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-gray-50 hover:bg-red-500 text-gray-400 hover:text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"><i class="fas fa-trash-alt text-sm"></i></button>
+                                <div class="flex items-center gap-3 mb-3 pr-10">
+                                    <input type="text" v-model="prov.tag" placeholder="机场名称" class="w-[25%] px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none font-bold text-indigo-700 focus:ring-1">
+                                    <input type="text" v-model="prov.url" placeholder="https://... 订阅链接" class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none focus:ring-1">
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-[11px] text-gray-400 font-medium">支持 Base64 编码订阅或多行明文</p>
+                                    <button @click="fetchAndParse(idx)" :disabled="isFetching" class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-lg hover:bg-indigo-100 disabled:opacity-50 font-bold shadow-sm transition">
+                                        <i :class="isFetching?'fas fa-spinner fa-spin':'fas fa-cloud-download-alt'" class="mr-1.5"></i>{{ isFetching?'拉取解析中...':'在线拉取' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <span class="text-base font-extrabold text-gray-800"><i class="fas fa-server mr-2 text-indigo-500"></i>代理节点 <span class="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-black">{{ nodes.length }}</span></span>
+                        <div class="flex gap-3">
+                            <button @click="clearNodes" class="text-xs font-bold bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-100 transition"><i class="fas fa-trash mr-1.5"></i>清空全部</button>
+                            <button @click="addNode" class="text-xs font-bold bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建节点</button>
+                        </div>
+                    </div>
+
+                    <div v-for="(node,idx) in nodes" :key="idx" :id="`node-card-${idx}`" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-colors">
+                        <button @click="removeNode(idx)" class="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-white text-red-400 border border-red-200 hover:text-white hover:bg-red-500 hover:border-red-500 rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-all z-10"><i class="fas fa-times text-xs"></i></button>
+                        
+                        <div class="grid grid-cols-12 gap-3 mb-3">
+                            <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">节点名称</label><input type="text" v-model="node.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-1 focus:bg-white"></div>
+                            <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
+                                <select v-model="node.type" @change="onNodeTypeChange(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:ring-1 focus:bg-white">
+                                    <optgroup label="常用">
+                                        <option value="vless">VLESS</option>
+                                        <option value="vmess">VMess</option>
+                                        <option value="trojan">Trojan</option>
+                                        <option value="shadowsocks">Shadowsocks</option>
+                                    </optgroup>
+                                    <optgroup label="新型">
+                                        <option value="hysteria2">Hysteria2</option>
+                                        <option value="hysteria">Hysteria</option>
+                                        <option value="tuic">TUIC v5</option>
+                                    </optgroup>
+                                    <optgroup label="基础">
+                                        <option value="socks">SOCKS5</option>
+                                        <option value="http">HTTP</option>
+                                        <option value="wireguard">WireGuard</option>
+                                        <option value="ssh">SSH</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="col-span-4 grid grid-cols-3 gap-2">
+                                <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                            </div>
+                        </div>
+
+                        <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2','hysteria'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ ['vless','vmess','tuic'].includes(node.type)?'UUID':'密码 (Password)' }}</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div v-show="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div v-show="['hysteria2','hysteria'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                        </div>
+
+                        <div v-if="node.type==='shadowsocks'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法</label>
+                                <select v-model="node.ss_method" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+                                    <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="aes-256-gcm">aes-256-gcm</option>
+                                    <option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm</option>
+                                    <option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
+                                    <option value="2022-blake3-chacha20-poly1305">2022-blake3-chacha20-poly1305</option>
+                                    <option value="rc4-md5">rc4-md5 (不推荐)</option>
+                                    <option value="aes-128-cfb">aes-128-cfb (不推荐)</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">插件 (Plugin)</label>
+                                <select v-model="node.ss_plugin" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">无</option>
+                                    <option value="obfs-local">obfs-local</option>
+                                    <option value="v2ray-plugin">v2ray-plugin</option>
+                                </select>
+                            </div>
+                            <div v-if="node.ss_plugin" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">插件参数 (Plugin Opts)</label><input type="text" v-model="node.ss_plugin_opts" placeholder="obfs=http;obfs-host=www.bing.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                        </div>
+
+                        <div v-if="node.type==='tuic'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input type="text" v-model="node.tuic_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拥塞控制</label>
+                                <select v-model="node.tuic_congestion" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="cubic">cubic</option><option value="new_reno">new_reno</option><option value="bbr">bbr</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Relay Mode</label>
+                                <select v-model="node.tuic_udp_relay_mode" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="native">native</option><option value="quic">quic</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div v-if="node.type==='hysteria'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_up_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_down_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥</label><input type="text" v-model="node.hy_obfs" placeholder="salamander" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证协议</label>
+                                <select v-model="node.hy_auth_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="str">string</option><option value="base64">base64</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div v-if="node.type==='hysteria2'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (up_mbps)</label><input type="text" v-model="node.hy2_up" placeholder="100 mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (down_mbps)</label><input type="text" v-model="node.hy2_down" placeholder="100 mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 类型</label>
+                                <select v-model="node.hy2_obfs_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">无</option><option value="salamander">salamander</option>
+                                </select>
+                            </div>
+                            <div v-if="node.hy2_obfs_type"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥</label><input type="text" v-model="node.hy2_obfs_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                        </div>
+
+                        <div v-if="node.type==='socks'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本</label>
+                                <select v-model="node.socks_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="5">SOCKS5</option><option value="4a">SOCKS4a</option><option value="4">SOCKS4</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                        </div>
+
+                        <div v-if="node.type==='http'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div class="col-span-2"><label class="flex items-center gap-2 cursor-pointer bg-gray-50 p-2 rounded-lg border border-gray-200"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 TLS</span></label></div>
+                        </div>
+
+                        <div v-if="node.type==='wireguard'" class="grid grid-cols-1 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地私钥 (Private Key)</label><input type="text" v-model="node.wg_private_key" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">对端公钥 (Peer Public Key)</label><input type="text" v-model="node.wg_peer_pubkey" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地地址 (Local Address)</label><input type="text" v-model="node.wg_local_address" placeholder="10.0.0.2/32" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Pre-Shared Key (可选)</label><input type="text" v-model="node.wg_psk" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU</label><input type="number" v-model.number="node.wg_mtu" placeholder="1280" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reserved (逗号分隔)</label><input type="text" v-model="node.wg_reserved" placeholder="0,0,0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            </div>
+                        </div>
+
+                        <div v-if="node.type==='ssh'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证方式</label>
+                                <select v-model="node.ssh_auth_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="password">密码</option><option value="key">私钥</option>
+                                </select>
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ node.ssh_auth_type==='key'?'私钥内容 (PEM)':'密码' }}</label>
+                                <textarea v-if="node.ssh_auth_type==='key'" v-model="node.secret" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
+                                <input v-else type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                        </div>
+
+                        <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
+                            <div class="grid grid-cols-3 gap-3 mb-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
+                                    <select v-model="node.transport" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
+                                        <option value="">TCP (默认)</option>
+                                        <option value="ws">WebSocket</option>
+                                        <option value="grpc">gRPC</option>
+                                        <option value="http">HTTP/2</option>
+                                        <option value="httpupgrade">HTTPUpgrade</option>
+                                        <option value="quic">QUIC</option>
+                                    </select>
+                                </div>
+                                <div v-if="['ws','http','httpupgrade'].includes(node.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input type="text" v-model="node.path" placeholder="/ws" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div v-if="node.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Service Name</label><input type="text" v-model="node.path" placeholder="grpc" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div v-if="node.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">WS Host Header</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div v-if="node.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP Host</label><input type="text" v-model="node.ws_host" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label><input type="text" v-model="node.flow" placeholder="xtls-rprx-vision" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            </div>
+                            <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <label class="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input type="checkbox" v-model="node.mux_enabled" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm font-bold text-gray-700">启用多路复用 (Multiplex / Mux)</span>
+                                </label>
+                                <div v-if="node.mux_enabled" class="grid grid-cols-3 gap-3">
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
+                                        <select v-model="node.mux_protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                            <option value="smux">smux</option><option value="yamux">yamux</option><option value="h2mux">h2mux</option>
+                                        </select>
+                                    </div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大并发</label><input type="number" v-model.number="node.mux_max_connections" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">每连接最大流</label><input type="number" v-model.number="node.mux_min_streams" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
+                            <label v-if="['vless','vmess','trojan','http','socks'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
+                            <template v-if="node.tls || ['hysteria2','hysteria','tuic'].includes(node.type)">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
+                                <label v-if="['vless','trojan'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
+                                <div v-if="['vless','vmess','trojan'].includes(node.type)" class="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
+                                    <span class="text-xs font-bold text-gray-500">uTLS:</span>
+                                    <select v-model="node.utls_fingerprint" class="px-2 py-1 border border-gray-300 rounded-md text-xs outline-none bg-white font-mono">
+                                        <option value="">不启用</option>
+                                        <option value="chrome">chrome</option><option value="firefox">firefox</option><option value="safari">safari</option><option value="edge">edge</option><option value="ios">ios</option><option value="android">android</option><option value="random">random</option><option value="randomized">randomized</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
+                                    <span class="text-xs font-bold text-gray-500">ALPN:</span>
+                                    <input type="text" v-model="node.alpn" placeholder="h2,http/1.1" class="px-2 py-1 border border-gray-300 rounded-md text-xs outline-none font-mono bg-white w-32 focus:ring-1">
+                                </div>
+                            </template>
+                        </div>
+
+                        <div v-if="node.reality && ['vless','trojan'].includes(node.type) && node.tls" class="mt-4 grid grid-cols-2 gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                            <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Public Key</label><input type="text" v-model="node.reality_pubkey" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
+                            <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Short ID</label><input type="text" v-model="node.reality_sid" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab==='groups'" class="space-y-5">
+                    <div class="flex justify-between items-center bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <span class="text-base font-extrabold text-gray-800"><i class="fas fa-layer-group mr-2 text-indigo-500"></i>策略组管理</span>
+                        <span v-if="duplicateOutboundTags.length>0" class="badge bg-red-100 text-red-700 border border-red-200 ml-2"><i class="fas fa-exclamation-triangle mr-1"></i>Tag 重名: {{ duplicateOutboundTags.join(', ') }}</span>
+                        <div class="flex gap-3">
+                            <button @click="generateCountryGroups" class="text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-100 transition"><i class="fas fa-globe-asia mr-2"></i>自动生成地区组</button>
+                            <button @click="addGroup" class="text-sm font-bold bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 shadow-md transition"><i class="fas fa-plus mr-2"></i>新建策略组</button>
+                        </div>
+                    </div>
+                    
+                    <div v-for="(group,gIdx) in groups" :key="group.id" 
+                         :draggable="group.draggable || false"
+                         @dragstart="onGroupDragStart(gIdx, $event)"
+                         @dragenter.prevent="onGroupDragEnter(gIdx)"
+                         @dragover.prevent
+                         @drop="onGroupDrop(gIdx)"
+                         @dragend="onGroupDragEnd"
+                         :class="{
+                             'opacity-40 border-dashed border-indigo-400': draggedGroupIndex === gIdx,
+                             'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex > gIdx,
+                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex < gIdx
+                         }"
+                         class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative hover:border-indigo-300 transition-all">
+                        
+                        <button @click="removeGroup(gIdx)" class="absolute top-4 right-4 text-red-400 hover:text-white hover:bg-red-500 w-7 h-7 flex justify-center items-center rounded-lg transition-colors z-20"><i class="fas fa-trash-alt text-sm"></i></button>
+                        
+                        <div class="flex items-start gap-4 mb-4 pr-10">
+                            <div class="flex items-center justify-center shrink-0 w-8 h-8 cursor-move text-gray-400 hover:text-indigo-600 bg-gray-50 border border-gray-200 rounded-lg shadow-sm transition-colors mt-6" 
+                                 title="按住此处拖动排顺"
+                                 @mouseenter="group.draggable = true"
+                                 @mouseleave="group.draggable = false"
+                                 @mousedown="group.draggable = true"
+                                 @mouseup="group.draggable = false">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            
+                            <div class="flex-1 grid grid-cols-12 gap-3">
+                                <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">组名称</label><input type="text" :value="group.tag" @change="updateGroupTag(gIdx, $event.target.value)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:bg-white focus:ring-1"></div>
+                                <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">策略</label>
+                                    <select v-model="group.type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 outline-none focus:bg-white focus:ring-1">
+                                        <option value="selector">手动选择</option><option value="urltest">自动测速</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-4"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">正则过滤 (匹配节点名称)</label><input type="text" v-model="group.regex" placeholder="港|HK" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-emerald-600 font-mono focus:bg-white focus:ring-1"></div>
+                            </div>
+                        </div>
+                        
+                        <div v-if="group.type==='urltest'" class="mb-4 grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 ml-12">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">URL</label><input type="text" v-model="group.url" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">测速间隔</label><input type="text" v-model="group.interval" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">容差(ms)</label><input type="number" v-model.number="group.tolerance" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
+                        </div>
+                        <div class="border-t border-gray-100 pt-3 ml-12">
+                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">引用目标</label>
+                            <div class="flex flex-wrap gap-2">
+                                <label v-for="tag in getAllPossibleMembers(group.tag)" :key="'m'+tag" class="inline-flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-white hover:border-indigo-300 transition-colors shadow-sm">
+                                    <input type="checkbox" :value="tag" v-model="group.members" class="w-3.5 h-3.5 text-indigo-600 rounded mr-2">
+                                    <span class="text-xs font-semibold text-gray-700">{{ tag }}</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab==='rules'" class="space-y-5">
+                    
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div>
+                                <div class="stitle mb-0">规则集配置 (Rule Sets)</div>
+                                <p class="text-xs text-gray-500 mt-1 pl-3">在此配置远程规则集库，供下方的rule-set路由规则引用。<br>默认使用MetaCubeX库（https://github.com/MetaCubeX/meta-rules-dat/tree/sing/geo）。<br>输入 geosite/ip-xxx 后自动补全。使用第三方库，删除自动生成的链接后自行填入。</p>
+                            </div>
+                            <button @click="addRuleSet" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>添加规则集</button>
+                        </div>
+                        <div class="space-y-3 max-h-[360px] overflow-y-auto pr-2" ref="ruleSetContainer">
+                            <div v-for="(rs, idx) in ruleSets" :key="rs.id" class="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
+                                <input type="text" v-model="rs.tag" placeholder="标签(如 geosite-cn)" @change="onRuleSetTagChange(rs)" class="col-span-3 px-3 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-indigo-700 focus:bg-white focus:ring-1">
+                                <select v-model="rs.format" class="col-span-2 px-2 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
+                                    <option value="binary">binary</option>
+                                    <option value="source">source</option>
+                                </select>
+                                <input type="text" v-model="rs.url" placeholder="https://..." class="col-span-4 px-3 py-2 text-[11px] font-mono border border-gray-300 rounded-lg outline-none text-gray-600 focus:bg-white focus:ring-1">
+                                <select v-model="rs.detour" class="col-span-2 px-2 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
+                                    <option value="direct">direct</option>
+                                    <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                </select>
+                                <button @click="removeRuleSet(idx)" class="col-span-1 mx-auto w-8 h-8 flex justify-center items-center text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors shadow-sm"><i class="fas fa-trash-alt text-sm"></i></button>
+                            </div>
+                            <div v-if="ruleSets.length === 0" class="text-center text-sm font-bold text-gray-400 py-6 border-2 border-dashed border-gray-200 rounded-xl">暂无规则集配置，请点击右上方添加。</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div>
+                                <div class="stitle mb-0">路由规则 (Route Rules)</div>
+                                <p class="text-xs text-gray-500 mt-1 pl-3">从上到下顺序匹配。按住左侧 <i class="fas fa-grip-vertical mx-1"></i> 图标可拖拽排序。</p>
+                            </div>
+                            <button @click="addCustomRule" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建规则</button>
+                        </div>
+                        
+                        <div class="mb-5 p-4 bg-indigo-50/70 border border-indigo-100 rounded-xl flex flex-wrap gap-5 items-center shadow-sm">
+                            <span class="text-sm font-extrabold text-indigo-800"><i class="fas fa-cloud-download-alt mr-2"></i>默认拉取设置:</span>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" v-model="settings.rule_set_cdn" class="w-4 h-4 text-indigo-600 rounded">
+                                <span class="text-xs text-gray-700 font-bold">使用 cdn.jsdelivr.net 加速下载 (国内推荐)</span>
+                            </label>
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-xs text-gray-700 font-bold">全局默认出站:</span>
+                                <select v-model="settings.rule_set_detour" class="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs outline-none font-bold text-indigo-700 shadow-sm focus:ring-1">
+                                    <option value="direct">direct (直连)</option>
+                                    <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-5 p-3 bg-blue-50/50 border border-blue-200 rounded-xl shadow-sm">
+                            <p class="text-xs text-blue-800 font-extrabold mb-3 pl-1"><i class="fas fa-shield-alt mr-1.5"></i>内建防护与探测 (Action 控制):</p>
+                            <div class="flex flex-wrap gap-3 items-center">
+                                <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-lg border border-blue-200 hover:border-blue-300 transition-colors shadow-sm">
+                                    <input type="checkbox" v-model="settings.private_direct" class="w-4 h-4 text-blue-600 rounded">
+                                    <span class="text-xs text-blue-800 font-bold">私有IP直连 (ip_is_private)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-lg border border-blue-200 hover:border-blue-300 transition-colors shadow-sm">
+                                    <input type="checkbox" v-model="settings.hijack_dns" class="w-4 h-4 text-blue-600 rounded">
+                                    <span class="text-xs text-blue-800 font-bold">拦截DNS解析 (hijack-dns)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-lg border border-blue-200 hover:border-blue-300 transition-colors shadow-sm">
+                                    <input type="checkbox" v-model="settings.sniff_enabled" class="w-4 h-4 text-blue-600 rounded">
+                                    <span class="text-xs text-blue-800 font-bold">启用嗅探 (sniff)</span>
+                                </label>
+                                <template v-if="settings.sniff_enabled">
+                                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-lg border border-blue-200 shadow-sm hover:border-blue-300">
+                                        <input type="checkbox" v-model="settings.sniff_override_destination" class="w-4 h-4 text-blue-600 rounded">
+                                        <span class="text-xs text-blue-800 font-bold">重写目标 (override_destination)</span>
+                                    </label>
+                                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm">
+                                        <span class="text-xs text-blue-800 font-bold">嗅探超时:</span>
+                                        <input type="text" v-model="settings.sniff_timeout" class="w-20 px-2 py-1 text-xs border border-blue-200 rounded-md outline-none text-center font-mono focus:ring-1 focus:border-blue-400">
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div v-for="(rule,rIdx) in routeRules" :key="rule.id" 
+                                 :draggable="rule.draggable || false"
+                                 @dragstart="onRuleDragStart(rIdx, $event)"
+                                 @dragenter.prevent="onRuleDragEnter(rIdx)"
+                                 @dragover.prevent
+                                 @drop="onRuleDrop(rIdx)"
+                                 @dragend="onRuleDragEnd"
+                                 :class="{
+                                     'opacity-40 border-dashed border-indigo-400': draggedRuleIndex === rIdx,
+                                     'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverRuleIndex === rIdx && draggedRuleIndex > rIdx,
+                                     'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverRuleIndex === rIdx && draggedRuleIndex < rIdx
+                                 }"
+                                 class="flex flex-col bg-gray-50 p-3 rounded-xl border border-gray-200 hover:border-indigo-300 transition-all shadow-sm">
+                                
+                                <div class="flex items-center">
+                                    <div class="flex items-center justify-center shrink-0 w-8 h-8 cursor-move text-gray-400 hover:text-indigo-600 bg-white border border-gray-200 rounded-lg shadow-sm mr-3 transition-colors" 
+                                         title="按住此处拖动排顺"
+                                         @mouseenter="rule.draggable = true"
+                                         @mouseleave="rule.draggable = false"
+                                         @mousedown="rule.draggable = true"
+                                         @mouseup="rule.draggable = false">
+                                        <i class="fas fa-grip-vertical"></i>
+                                    </div>
+                                    
+                                    <div class="w-[35%] flex items-center gap-3">
+                                        <input type="checkbox" v-model="rule.enabled" class="w-5 h-5 text-indigo-600 rounded shrink-0 transition-colors cursor-pointer">
+                                        <input v-if="rule.isEditing" type="text" v-model="rule.name" class="px-3 py-1.5 text-sm font-extrabold border border-indigo-300 rounded-md w-full outline-none focus:ring-2 focus:ring-indigo-200 text-indigo-800">
+                                        <span v-else class="text-sm font-extrabold text-gray-800 truncate w-full" :title="rule.name" :class="{'opacity-50 line-through':!rule.enabled}">{{ rule.name }}</span>
+                                    </div>
+                                    <div class="flex-1 flex items-center justify-end gap-3 pl-3">
+                                        <i class="fas fa-arrow-right text-gray-300 text-sm"></i>
+                                        <select v-model="rule.outbound" :disabled="!rule.enabled" class="w-[140px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-black text-indigo-700 disabled:opacity-50 shadow-sm focus:ring-1 focus:border-indigo-400">
+                                            <option value="__reject__">拒绝 (reject)</option>
+                                            <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                        </select>
+                                        <button @click="removeRule(rIdx)" class="w-9 h-9 flex items-center justify-center text-red-500 hover:text-white hover:bg-red-500 rounded-lg bg-white border border-red-200 transition-colors shadow-sm"><i class="fas fa-trash-alt text-sm"></i></button>
+                                    </div>
+                                </div>
+                                
+                                <div v-if="rule.enabled" class="mt-4 pl-[2.75rem] flex items-center gap-3">
+                                    <select v-model="rule.matchType" :disabled="!rule.isEditing" class="px-3 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:opacity-80 w-[130px] shadow-sm">
+                                        <option value="rule_set">rule_set</option><option value="domain">domain</option><option value="domain_suffix">domain_suffix</option>
+                                        <option value="domain_keyword">domain_keyword</option><option value="domain_regex">domain_regex</option>
+                                        <option value="ip_cidr">ip_cidr</option><option value="port">port</option>
+                                        <option value="port_range">port_range</option><option value="protocol">protocol</option>
+                                        <option value="network">network (tcp/udp)</option><option value="process_name">process_name</option>
+                                        <option value="geoip">geoip (旧版)</option><option value="source_ip_cidr">source_ip_cidr</option>
+                                    </select>
+                                    <template v-if="rule.isEditing">
+                                        <div class="flex-1 flex flex-col gap-2">
+                                            <input type="text" v-model="rule.tagsStr" :placeholder="rule.matchType==='rule_set'?'可直接编辑，或点击下方规则集快速添加/移除':'值1, 值2'" class="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-100 shadow-sm text-gray-700">
+                                            <div v-if="rule.matchType==='rule_set'" class="flex flex-wrap gap-1.5">
+                                                <button v-for="rs in ruleSets" :key="rs.id"
+                                                    @click="toggleRuleSet(rule, rs.tag)"
+                                                    :class="rule.tagsStr.split(',').map(s=>s.trim()).includes(rs.tag)
+                                                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'"
+                                                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-all cursor-pointer select-none">
+                                                    <i :class="rule.tagsStr.split(',').map(s=>s.trim()).includes(rs.tag) ? 'fas fa-check-circle' : 'far fa-circle'" class="text-[10px]"></i>
+                                                    {{ rs.tag }}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button @click="rule.isEditing=false" class="text-sm font-bold bg-emerald-500 text-white px-5 py-2 rounded-lg hover:bg-emerald-600 shrink-0 shadow-md transition-colors self-start"><i class="fas fa-check mr-1.5"></i>保存</button>
+                                    </template>
+                                    <template v-else>
+                                        <div class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-500 truncate shadow-inner" :title="rule.tagsStr">{{ rule.tagsStr||'（未填写匹配条件）' }}</div>
+                                        <button @click="rule.isEditing=true" class="text-sm font-bold bg-white text-indigo-600 border border-indigo-200 px-5 py-2 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 shrink-0 shadow-sm transition-colors"><i class="fas fa-edit mr-1.5"></i>编辑匹配项</button>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 shadow-sm">
+                            <span class="text-sm font-extrabold text-gray-800"><i class="fas fa-flag-checkered mr-2 text-indigo-500"></i>默认路由 (Final Outbound)</span>
+                            <select v-model="settings.final_outbound" class="w-1/3 px-3 py-2 bg-white border border-indigo-300 rounded-lg text-sm outline-none font-black text-indigo-700 shadow-sm focus:ring-2 focus:ring-indigo-100">
+                                <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-show="currentTab==='advanced'" class="space-y-5">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">TUN 模式</div>
+                                <span class="badge bg-purple-100 text-purple-700 border border-purple-200">透明代理</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="tun.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="tun.enabled" class="space-y-4">
+                            <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 font-medium">
+                                <i class="fas fa-exclamation-triangle mr-1.5"></i>注意 v1.12 格式使用 <code>address</code> 数组，旧版的 <code>inet4_address</code> 参数已废弃。
+                            </p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">接口名称</label><input v-model="tun.interface_name" placeholder="tun0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TUN 栈</label>
+                                    <select v-model="tun.stack" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
+                                        <option value="system">system (推荐)</option><option value="gvisor">gvisor</option><option value="mixed">mixed</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 地址</label><input v-model="tun.address_v4" placeholder="172.19.0.1/30" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 地址 (可选)</label><input v-model="tun.address_v6" placeholder="fdfe:dcba:9876::1/126" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU</label><input type="number" v-model.number="tun.mtu" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mt-2">
+                                <label v-for="opt in tunOpts" :key="opt.key" class="flex items-center gap-3 cursor-pointer p-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-purple-300 transition-colors">
+                                    <input type="checkbox" v-model="tun[opt.key]" class="w-4 h-4 text-purple-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">{{ opt.label }}</span><span class="block text-xs text-gray-400">{{ opt.desc }}</span></div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">Clash API + Web 面板</div>
+                                <span class="badge bg-orange-100 text-orange-700 border border-orange-200">Experimental</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="clashApi.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="clashApi.enabled" class="space-y-5">
+                            <div>
+                                <p class="text-sm font-bold text-gray-600 mb-3">选择前端控制面板</p>
+                                <div class="grid grid-cols-2 gap-3 mb-4">
+                                    <div v-for="p in panels" :key="p.id" @click="pickPanel(p)" class="panel-card" :class="{selected:clashApi.panel===p.id}">
+                                        <div class="flex items-center gap-3">
+                                            <i :class="p.icon" class="text-indigo-500 w-6 text-center text-lg"></i>
+                                            <div><div class="text-sm font-extrabold text-gray-800">{{ p.name }}</div><div class="text-[10px] text-gray-500 mt-1">{{ p.desc }}</div></div>
+                                        </div>
+                                    </div>
+                                    <div @click="pickPanel({id:'custom',url:''})" class="panel-card" :class="{selected:clashApi.panel==='custom'}">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-code text-gray-400 w-6 text-center text-lg"></i>
+                                            <div><div class="text-sm font-extrabold text-gray-800">自定义 URL</div><div class="text-[10px] text-gray-500 mt-1">填写任意前端 ZIP 链接</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="clashApi.panel">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">external_ui_download_url</label>
+                                    <input v-model="clashApi.download_url" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label><input v-model="clashApi.external_controller" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密钥 (Secret)</label><input v-model="clashApi.secret" placeholder="可选" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地 external_ui 目录</label><input v-model="clashApi.external_ui" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">默认模式 (default_mode)</label>
+                                    <select v-model="clashApi.default_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
+                                        <option value="rule">rule（按规则分流）</option>
+                                        <option value="global">global（全部走代理）</option>
+                                        <option value="direct">direct（全部直连）</option>
+                                    </select>
+                                    <p class="text-[11px] text-gray-400 mt-1 leading-relaxed"><i class="fas fa-info-circle mr-1"></i>global / direct 需通过 <code class="bg-gray-100 px-1 rounded">clash_mode</code> 路由规则实现，配置文件会自动在路由最前端插入对应规则。</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-5 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.store_fakeip" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">持久化保存 FakeIP 缓存</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.allow_lan" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">允许局域网设备访问 API</span></label>
+                            </div>
+                            <div v-if="clashApi.panel" class="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 shadow-sm">
+                                <p class="text-xs text-indigo-800 font-bold mb-2"><i class="fas fa-link mr-1"></i>面板在线访问地址快捷链接</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <a v-for="link in panelLinks" :key="link.name" :href="link.url" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-indigo-700 hover:text-white hover:bg-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors shadow-sm">
+                                        <i class="fas fa-external-link-alt mr-1"></i>{{ link.name }}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="stitle">路由高级选项</div>
+                        <label class="flex items-center gap-3 cursor-pointer p-3 bg-gray-50 rounded-lg border border-gray-200 mb-4 hover:border-teal-300 transition-colors">
+                            <input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-teal-600 rounded">
+                            <div><span class="block text-sm font-bold text-gray-700">auto_detect_interface</span><span class="block text-xs text-gray-500">使用 TUN 模式时必须开启，用于防止流量回环</span></div>
+                        </label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_interface</label><input v-model="settings.default_interface" placeholder="eth0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_mark</label><input type="number" v-model.number="settings.default_mark" placeholder="fwmark" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="stitle mb-0">NTP 时间同步</div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="ntp.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="ntp.enabled" class="grid grid-cols-2 gap-4">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="ntp.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="ntp.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">同步间隔</label><input v-model="ntp.interval" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站</label>
+                                <select v-model="ntp.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:bg-white focus:ring-1">
+                                    <option value="direct">direct</option>
+                                    <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div v-show="currentTab==='tproxy'" class="space-y-5">
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">TProxy 透明代理</div>
+                                <span class="badge bg-blue-100 text-blue-700 border border-blue-200">Linux 专用</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="tproxy.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+
+                        <div v-if="!tproxy.enabled" class="text-center py-8 text-gray-400">
+                            <i class="fas fa-network-wired text-4xl mb-3 block text-gray-300"></i>
+                            <p class="text-sm font-semibold">开启后将在 sing-box 配置中生成 tproxy inbound</p>
+                            <p class="text-xs mt-1">并在下方生成对应的 NFTables 规则文件</p>
+                        </div>
+
+                        <div v-if="tproxy.enabled" class="space-y-5">
+                            <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 font-medium leading-relaxed">
+                                <i class="fas fa-info-circle mr-1.5"></i>
+                                TProxy 模式需要 sing-box 以 <code class="bg-blue-100 px-1 rounded">root</code> 或具备 <code class="bg-blue-100 px-1 rounded">CAP_NET_ADMIN</code> 权限的用户运行，并配合 NFTables + 策略路由使用。
+                                内核需支持 <code class="bg-blue-100 px-1 rounded">CONFIG_NETFILTER_XT_TARGET_TPROXY</code>。
+                            </div>
+
+                            <!-- 冲突警告实时显示 -->
+                            <div v-if="tproxyConflicts.length > 0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                                <p class="text-xs font-extrabold text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>检测到 {{ tproxyConflicts.length }} 个配置冲突</p>
+                                <div v-for="c in tproxyConflicts" :key="c.key" class="flex items-center justify-between py-1.5 border-b border-red-200 last:border-0">
+                                    <span class="text-xs text-red-700 font-semibold">{{ c.label }}</span>
+                                    <button @click="c.fix()" class="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition shrink-0 ml-3">{{ c.fixLabel }}</button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TProxy 监听端口</label>
+                                    <input type="number" v-model.number="tproxy.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">NFTables 表名</label>
+                                    <input type="text" v-model="tproxy.nft_table" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Mark (hex)</label>
+                                    <input type="text" v-model="tproxy.mark" placeholder="0x01" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box 运行用户 (uid)</label>
+                                    <input type="text" v-model="tproxy.uid" placeholder="sing-box" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">用于跳过自身流量，防止回环（skuid）</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box DNS 入站端口 <span class="text-indigo-400 normal-case font-normal">(dns-in)</span></label>
+                                    <input type="number" v-model.number="tproxy.dns_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">nft 将 53 端口 DNAT 至此端口，需与 dns-in inbound 一致</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">局域网网卡</label>
+                                    <input type="text" v-model="tproxy.iface" placeholder="eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅处理此接口入站流量，留空则处理所有接口</p>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
+                                    <input type="checkbox" v-model="tproxy.bypass_private" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">绕过私有地址</span><span class="block text-xs text-gray-400">10.x / 192.168.x / 127.x 等直连</span></div>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
+                                    <input type="checkbox" v-model="tproxy.ipv6" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">启用 IPv6 规则</span><span class="block text-xs text-gray-400">生成对应 ip6 规则链</span></div>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition col-span-2">
+                                    <input type="checkbox" v-model="tproxy.udp_fragment" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">启用 UDP 分片 <code class="text-[11px] font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 ml-1">udp_fragment</code></span><span class="block text-xs text-gray-400">QUIC / Hysteria2 / TUIC 等基于 UDP 的协议必须开启，否则大包传输会丢失</span></div>
+                                </label>
+                            </div>
+
+                            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                <p class="text-xs font-black text-amber-800 mb-2"><i class="fas fa-terminal mr-1.5"></i>策略路由（加载 NFT 规则后在 Shell 中执行）</p>
+                                <pre class="text-xs font-mono text-amber-900 bg-amber-100 rounded-lg p-3 select-all leading-relaxed">ip rule add fwmark {{ tproxy.mark || '0x01' }} lookup 100
+ip route add local default dev lo table 100{{ tproxy.ipv6 ? '\nip -6 rule add fwmark ' + (tproxy.mark||'0x01') + ' lookup 100\nip -6 route add local default dev lo table 100' : '' }}</pre>
+                                <p class="text-[10px] text-amber-700 mt-2">这两条命令在重启后失效，建议写入 <code>/etc/network/interfaces</code> 或 systemd 服务。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="tproxy.enabled" class="bg-[#1e1e1e] rounded-xl border border-gray-700 overflow-hidden shadow-xl">
+                        <div class="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b border-[#3d3d3d]">
+                            <span class="text-gray-200 font-mono text-sm font-bold"><i class="fas fa-file-code mr-2 text-blue-400"></i>{{ tproxy.nft_table || 'singbox' }}.nft</span>
+                            <div class="flex gap-2">
+                                <button @click="copyNft" class="text-xs bg-[#3d3d3d] hover:bg-indigo-600 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
+                                    <i :class="nftCopyIcon"></i>{{ nftCopyText }}
+                                </button>
+                                <button @click="downloadNft" class="text-xs bg-[#3d3d3d] hover:bg-emerald-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
+                                    <i class="fas fa-download"></i>下载 .nft
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-y-auto max-h-[480px] dark-scroll">
+                            <pre class="p-5 text-[12px] font-mono leading-relaxed text-[#9cdcfe] whitespace-pre-wrap break-words">{{ generatedNft }}</pre>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <div class="xl:col-span-5 bg-[#1e1e1e] rounded-2xl shadow-xl flex flex-col overflow-hidden border border-gray-800 max-h-full relative">
+            <div class="bg-[#2d2d2d] px-6 py-4 border-b border-[#3d3d3d] flex justify-between items-center shadow-md z-10">
+                <span class="text-gray-200 font-mono text-sm font-bold tracking-wide"><i class="fas fa-file-code mr-2 text-indigo-400"></i>config.json</span>
+                <span class="text-emerald-400 text-xs font-mono font-bold bg-emerald-400/10 px-3 py-1 rounded-md border border-emerald-400/20 shadow-sm"><i class="fas fa-sync-alt fa-spin mr-1.5 opacity-70"></i>实时同步</span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 relative dark-scroll" ref="jsonContainer">
+                <pre class="text-[#d4d4d4] font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words">{{ generatedJson }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, watch, nextTick } = Vue;
+createApp({
+    setup() {
+        const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        // ── 工具函数 ──────────────────────────────────
+        const showToast = (msg, type='ok', duration=2800) => {
+            const icons = { ok:'fas fa-check-circle', err:'fas fa-exclamation-circle', info:'fas fa-info-circle', warn:'fas fa-exclamation-triangle' };
+            const el = document.createElement('div');
+            el.className = `toast toast-${type}`;
+            el.innerHTML = `<i class="${icons[type]||icons.info}"></i><span>${msg}</span>`;
+            const container = document.getElementById('toast-container');
+            container.appendChild(el);
+            setTimeout(() => { el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(), 350); }, duration);
+        };
+
+        const showConfirm = (msg, onOk, { title='确认操作', okText='确认', safe=false } = {}) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.zIndex = '2000';
+            overlay.innerHTML = `
+                <div class="confirm-box">
+                    <h3>${title}</h3>
+                    <p>${msg}</p>
+                    <div class="btns">
+                        <button class="btn-cancel">取消</button>
+                        <button class="btn-ok${safe?' safe':''}">${okText}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('.btn-cancel').onclick = () => overlay.remove();
+            overlay.querySelector('.btn-ok').onclick = () => { overlay.remove(); onOk(); };
+            overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
+        };
+
+        const copyToClipboard = async (text) => {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    const ok = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    return ok;
+                } catch { return false; }
+            }
+        };
+        // ─────────────────────────────────────────────
+
+
+        const copyText = ref('复制配置'), copyIcon = ref('fas fa-copy');
+        const tabs = [
+            { id:'dns',      name:'基础/DNS',  icon:'fas fa-network-wired' },
+            { id:'nodes',    name:'订阅/节点', icon:'fas fa-link' },
+            { id:'groups',   name:'策略组',    icon:'fas fa-layer-group' },
+            { id:'rules',    name:'路由分流',  icon:'fas fa-route' },
+            { id:'advanced', name:'其他设置',  icon:'fas fa-sliders-h' },
+            { id:'tproxy',   name:'TProxy',    icon:'fas fa-network-wired' },
+        ];
+        
+        const currentTab = ref('dns');
+        
+        const isFetching = ref(false), fetchStatus = ref(null), rawPastedText = ref('');
+
+        const showImportExport = ref(false);
+        const importExportTab = ref('export');
+        const exportPreviewTab = ref('panel');
+        const importJsonText = ref('');
+        const importError = ref('');
+        
+        const jsonContainer = ref(null);
+        const ruleSetContainer = ref(null);
+        const tabContentContainer = ref(null);
+
+        const settings = ref({ 
+            listen_port:2080, log_level:'info', final_outbound:'节点选择', 
+            dns_strategy:'ipv4_only', default_domain_resolver:'remote-dns', dns_final:'remote-dns', 
+            sniff_enabled:true, sniff_override_destination:true, sniff_timeout:'300ms',
+            hijack_dns:true, private_direct:true, 
+            independent_cache:false, reverse_mapping:false, 
+            auto_detect_interface:true, default_interface:'', default_mark:null,
+            rule_set_cdn:true, rule_set_detour:'direct' 
+        });
+
+        const fakeip = ref({ enabled:false, tag:'fakeip', inet4_range:'198.18.0.0/15', inet6_range:'fc00::/18', queryA:true, queryAAAA:true, excludeText:'lan\nlocal' });
+
+        const cleanExcludeText = () => {
+            if (!fakeip.value.excludeText) return;
+            fakeip.value.excludeText = fakeip.value.excludeText
+                .split('\n')
+                .map(s => s.replace(/^[-*\s]+/, '').replace(/['"]/g, '').replace(/^\+\./, '').trim())
+                .filter(s => s)
+                .join('\n');
+        };
+        
+        const handlePasteCleanup = () => { setTimeout(cleanExcludeText, 50); };
+
+        watch(() => fakeip.value.enabled, (newVal) => {
+            settings.value.independent_cache = newVal;
+        });
+
+        const tun = ref({ enabled:false, interface_name:'tun0', stack:'system', address_v4:'172.19.0.1/30', address_v6:'', mtu:9000, auto_route:true, strict_route:true, auto_redirect:false, endpoint_independent_nat:false });
+        const tunOpts = [
+            { key:'auto_route',               label:'auto_route',               desc:'自动配置系统路由' },
+            { key:'strict_route',             label:'strict_route',             desc:'严格路由，防泄漏' },
+            { key:'auto_redirect',            label:'auto_redirect',            desc:'Linux 高性能重定向' },
+            { key:'endpoint_independent_nat', label:'endpoint_independent_nat', desc:'Full Cone NAT (UDP)' },
+        ];
+
+        const panels = [
+            { id:'zashboard', name:'Zashboard',    icon:'fas fa-tachometer-alt', desc:'现代化界面，支持 sing-box',   url:'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip' },
+            { id:'metacubexd',name:'MetaCubeX-D',  icon:'fas fa-cube',           desc:'MetaCubeX 官方面板',          url:'https://github.com/MetaCubeX/metacubexd/archive/gh-pages.zip' },
+            { id:'yacd-meta', name:'Yacd-meta',    icon:'fas fa-chart-bar',      desc:'Yacd 增强版，MetaCubeX 出品', url:'https://github.com/MetaCubeX/Yacd-meta/archive/gh-pages.zip' },
+            { id:'yacd',      name:'Yacd',         icon:'fas fa-chart-line',     desc:'经典 Yacd 原版',              url:'https://github.com/haishanh/yacd/archive/gh-pages.zip' },
+        ];
+
+        const clashApi = ref({ enabled:false, panel:'', download_url:'', external_controller:'127.0.0.1:9090', external_ui:'./ui', secret:'', default_mode:'rule', store_fakeip:false, allow_lan:false });
+        const pickPanel = (p) => { clashApi.value.panel=p.id; if(p.url) clashApi.value.download_url=p.url; };
+
+        const panelLinks = computed(() => {
+            const ctrl = clashApi.value.external_controller || '127.0.0.1:9090';
+            const pid = clashApi.value.panel;
+            const links = [{ name:'本地 /ui', url:`http://${ctrl}/ui/` }];
+            if(pid==='zashboard')  links.push({ name:'zashboard.pages.dev', url:`https://board.zash.run.place/#/` });
+            if(pid==='metacubexd') links.push({ name:'metacubex.github.io', url:`https://metacubex.github.io/metacubexd/#/` });
+            if(pid==='yacd-meta')  links.push({ name:'yacd.metacubex.one', url:`http://yacd.metacubex.one/` });
+            if(pid==='yacd')       links.push({ name:'yacd.haishan.me', url:`http://yacd.haishan.me/` });
+            return links;
+        });
+
+        const ntp = ref({ enabled:false, server:'time.apple.com', server_port:123, interval:'30m', detour:'direct' });
+
+        const tproxy = ref({
+            enabled: false,
+            listen_port: 7893,
+            bypass_private: true,
+            nft_table: 'singbox',
+            mark: '0x01',
+            uid: 'sing-box',                    // sing-box 运行用户，用于跳过自身流量
+            ipv6: false,
+            udp_fragment: true,                 // 是否允许 UDP 分片（QUIC/Hysteria2 必需）
+            dns_port: 1053,                     // sing-box dns-in 监听端口（接收 nft DNAT 过来的 DNS 请求）
+            iface: 'eth0',                      // 局域网网卡（用于局域网透明代理）
+        });
+
+        // TProxy 与 TUN/DNS 冲突检测：开启 tproxy 时检测并提示处理冲突项
+        const tproxyConflicts = computed(() => {
+            if (!tproxy.value.enabled) return [];
+            const conflicts = [];
+            if (tun.value.enabled) {
+                conflicts.push({
+                    key: 'tun',
+                    label: 'TUN 模式已启用',
+                    desc: 'TProxy 和 TUN 模式会同时接管系统路由，导致流量重复处理或回环。建议只选择其中一种透明代理方式。',
+                    fix: () => { tun.value.enabled = false; },
+                    fixLabel: '自动关闭 TUN',
+                });
+            }
+            if (tun.value.auto_route && tun.value.enabled) {
+                conflicts.push({
+                    key: 'tun_auto_route',
+                    label: 'TUN auto_route 已启用',
+                    desc: 'auto_route 会自动配置路由表，与 TProxy 的策略路由（fwmark）冲突。',
+                    fix: () => { tun.value.auto_route = false; },
+                    fixLabel: '关闭 auto_route',
+                });
+            }
+            return conflicts;
+        });
+
+        // 显示冲突弹窗的函数
+        const showTproxyConflictModal = (conflicts) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.zIndex = '2000';
+
+            // 追踪已修复数量，全部修复后按钮自动变为"完成"
+            let fixedCount = 0;
+            const total = conflicts.length;
+
+            const renderConflicts = () => conflicts.map((c, i) => `
+                <div id="conflict-item-${i}" style="margin-bottom:12px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:13px;"></i>
+                        <span style="font-weight:800;color:#991b1b;font-size:13px;">${c.label}</span>
+                    </div>
+                    <p style="font-size:12px;color:#b91c1c;line-height:1.6;margin:0 0 8px;">${c.desc}</p>
+                    <button data-fix="${i}" class="fix-btn" style="font-size:12px;font-weight:700;background:#ef4444;color:#fff;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;transition:background .2s;">${c.fixLabel}</button>
+                </div>
+            `).join('');
+
+            const getFooterHtml = (allFixed) => allFixed
+                ? `<button id="tproxy-conflict-done" style="padding:9px 24px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:700;cursor:pointer;"><i class="fas fa-check" style="margin-right:6px;"></i>全部已修复，关闭</button>`
+                : `<button id="tproxy-conflict-cancel" style="padding:9px 20px;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;color:#374151;font-size:13px;font-weight:700;cursor:pointer;">取消（关闭 TProxy）</button>
+                   <button id="tproxy-conflict-ignore" style="padding:9px 20px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">忽略，继续启用</button>`;
+
+            overlay.innerHTML = `
+                <div id="conflict-box" style="background:#fff;border-radius:16px;padding:28px;width:95%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:88vh;overflow-y:auto;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <i class="fas fa-exclamation-circle" style="color:#ef4444;font-size:20px;"></i>
+                            <h3 style="font-size:16px;font-weight:800;color:#1f2937;margin:0;">TProxy 冲突检测</h3>
+                        </div>
+                        <span id="conflict-counter" style="font-size:12px;font-weight:700;color:#ef4444;background:#fef2f2;padding:3px 10px;border-radius:20px;border:1px solid #fca5a5;">待修复 ${total} 项</span>
+                    </div>
+                    <p style="font-size:13px;color:#6b7280;margin-bottom:18px;line-height:1.6;">开启 TProxy 后检测到以下冲突，建议逐项修复。也可忽略直接启用（可能导致功能异常）。</p>
+                    <div id="conflict-list">${renderConflicts()}</div>
+                    <div id="conflict-footer" style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb;">
+                        ${getFooterHtml(false)}
+                    </div>
+                </div>`;
+
+            document.body.appendChild(overlay);
+
+            const updateFooter = () => {
+                const allFixed = fixedCount >= total;
+                document.getElementById('conflict-footer').innerHTML = getFooterHtml(allFixed);
+                const counter = document.getElementById('conflict-counter');
+                const remaining = total - fixedCount;
+                if (allFixed) {
+                    counter.textContent = '✓ 全部已修复';
+                    counter.style.color = '#065f46';
+                    counter.style.background = '#ecfdf5';
+                    counter.style.borderColor = '#6ee7b7';
+                } else {
+                    counter.textContent = `待修复 ${remaining} 项`;
+                }
+                bindFooterButtons();
+            };
+
+            const bindFooterButtons = () => {
+                const cancelBtn = document.getElementById('tproxy-conflict-cancel');
+                const ignoreBtn = document.getElementById('tproxy-conflict-ignore');
+                const doneBtn = document.getElementById('tproxy-conflict-done');
+                if (cancelBtn) cancelBtn.onclick = () => { overlay.remove(); tproxy.value.enabled = false; };
+                if (ignoreBtn) ignoreBtn.onclick = () => overlay.remove();
+                if (doneBtn) doneBtn.onclick = () => overlay.remove();
+            };
+
+            // 绑定各个修复按钮
+            overlay.querySelectorAll('.fix-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.fix);
+                    conflicts[idx].fix();
+                    fixedCount++;
+                    // 将该冲突项变为"已修复"样式
+                    const item = document.getElementById(`conflict-item-${idx}`);
+                    if (item) {
+                        item.style.background = '#f0fdf4';
+                        item.style.borderColor = '#86efac';
+                        btn.textContent = '✓ 已修复';
+                        btn.style.background = '#10b981';
+                        btn.style.cursor = 'default';
+                        btn.disabled = true;
+                    }
+                    updateFooter();
+                });
+            });
+
+            bindFooterButtons();
+            // 点击蒙层外部不关闭（防止误触取消）
+        };
+
+        watch(() => tproxy.value.enabled, (newVal) => {
+            if (newVal) {
+                // 使用 nextTick 确保响应式数据已更新
+                Vue.nextTick(() => {
+                    const conflicts = tproxyConflicts.value;
+                    if (conflicts.length > 0) {
+                        showTproxyConflictModal(conflicts);
+                    }
+                });
+            }
+        });
+
+        const dnsList = ref([
+            { tag:'remote-dns', type:'tls',  server:'8.8.8.8',   detour:'节点选择', domain_resolver:'local-dns', inet4_range:'', inet6_range:'' },
+            { tag:'local-dns',  type:'udp',  server:'223.5.5.5', detour:'',            domain_resolver:'', inet4_range:'', inet6_range:'' },
+        ]);
+        const addDns = () => dnsList.value.push({ tag:`dns-${dnsList.value.length+1}`, type:'udp', server:'', detour:'', domain_resolver:'', inet4_range:'', inet6_range:'' });
+        const addBootstrapDns = () => {
+            const existing = dnsList.value.find(d => d.tag === 'bootstrap-dns');
+            if (existing) { showToast('已存在 bootstrap-dns，可直接在其他服务器的域名解析器中选择它','info'); return; }
+            dnsList.value.push({ tag:'bootstrap-dns', type:'udp', server:'223.5.5.5', detour:'', domain_resolver:'', inet4_range:'', inet6_range:'' });
+            showToast('Bootstrap DNS 已添加，可在其他 DoH/DoT 服务器的「域名解析器」中选择 bootstrap-dns','ok', 4000);
+        };
+        const removeDns = (i) => { showConfirm('确定要删除此 DNS 服务器吗？', ()=>dnsList.value.splice(i,1), {title:'删除 DNS 服务器', okText:'删除'}); };
+
+        const providers = ref([{ tag:'MySub', url:'' }]);
+        const corsProxyEnabled = ref(false);
+        const addProvider    = () => providers.value.push({ tag:`Sub${providers.value.length+1}`, url:'' });
+        const removeProvider = (i) => { showConfirm('确定要删除此订阅源吗？', ()=>providers.value.splice(i,1), {title:'删除订阅源', okText:'删除'}); };
+
+        const makeNode = (overrides={}) => ({
+            tag:'', type:'vless', server:'', port:443, secret:'', sni:'',
+            transport:'', path:'', ws_host:'', flow:'',
+            mux_enabled:false, mux_protocol:'smux', mux_max_connections:4, mux_min_streams:4,
+            tls:true, insecure:false, reality:false, reality_pubkey:'', reality_sid:'',
+            utls_fingerprint:'', alpn:'',
+            ss_method:'chacha20-ietf-poly1305', ss_plugin:'', ss_plugin_opts:'',
+            tuic_password:'', tuic_congestion:'cubic', tuic_udp_relay_mode:'native',
+            hy_up_mbps:100, hy_down_mbps:100, hy_obfs:'', hy_auth_type:'str',
+            hy2_up:'', hy2_down:'', hy2_obfs_type:'', hy2_obfs_password:'',
+            username:'', socks_version:'5',
+            wg_private_key:'', wg_peer_pubkey:'', wg_local_address:'', wg_psk:'', wg_mtu:1280, wg_reserved:'',
+            ssh_auth_type:'password',
+            ...overrides
+        });
+
+        const nodes = ref([]);
+        const addNode = async () => {
+            nodes.value.push(makeNode({ tag:`Node-${nodes.value.length+1}` }));
+            await nextTick();
+            const newIdx = nodes.value.length - 1;
+            const el = document.getElementById(`node-card-${newIdx}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 短暂高亮新节点卡片，引导用户视线
+                el.style.transition = 'box-shadow 0.2s, border-color 0.2s';
+                el.style.borderColor = '#6366f1';
+                el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.25)';
+                setTimeout(() => {
+                    el.style.borderColor = '';
+                    el.style.boxShadow = '';
+                }, 1800);
+                // 聚焦节点名称输入框，可立即键入
+                const nameInput = el.querySelector('input[type="text"]');
+                if (nameInput) setTimeout(() => nameInput.focus(), 300);
+            }
+        };
+
+        const onNodeTypeChange = (node) => {
+            if(!['vless','vmess','trojan'].includes(node.type)) node.transport = '';
+        };
+
+        const removeNode = (i) => {
+            showConfirm('确定要删除此节点吗？此操作不可恢复。', () => {
+                const tagToRemove = nodes.value[i].tag;
+                nodes.value.splice(i,1);
+                groups.value.forEach(g => { const idx = g.members.indexOf(tagToRemove); if (idx !== -1) g.members.splice(idx, 1); });
+                dnsList.value.forEach(d => { if (d.detour === tagToRemove) d.detour = ''; });
+                if (ntp.value.detour === tagToRemove) ntp.value.detour = 'direct';
+                routeRules.value.forEach(r => { if (r.outbound === tagToRemove) r.outbound = 'direct'; });
+                if (settings.value.final_outbound === tagToRemove) settings.value.final_outbound = 'direct';
+            }, {title:'删除节点', okText:'删除'});
+        };
+        const clearNodes = () => { 
+            showConfirm('确定清空所有节点吗？此操作不可恢复！', () => {
+                const nodeTags = new Set(nodes.value.map(n => n.tag));
+                nodes.value=[]; 
+                groups.value.forEach(g => { g.members = g.members.filter(m => !nodeTags.has(m)); });
+            }, {title:'清空节点', okText:'清空'});
+        };
+
+        const groups = ref([
+            { id: generateId('g'), tag:'节点选择', type:'selector', members:['自动选择','direct'], regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 },
+            { id: generateId('g'), tag:'自动选择', type:'urltest',  members:[],                        regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 },
+        ]);
+        const addGroup    = async () => { 
+            groups.value.push({ id: generateId('g'), tag:`Group-${groups.value.length+1}`, type:'selector', members:[], regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 });
+            await nextTick();
+            if (tabContentContainer.value) {
+                tabContentContainer.value.scrollTo({ top: tabContentContainer.value.scrollHeight, behavior: 'smooth' });
+            }
+        };
+        
+        const removeGroup = (i) => {
+            showConfirm('确定要删除此策略组吗？相关路由将被重置。', () => {
+                const tagToRemove = groups.value[i].tag;
+                groups.value.splice(i, 1);
+                groups.value.forEach(g => { const idx = g.members.indexOf(tagToRemove); if (idx !== -1) g.members.splice(idx, 1); });
+                dnsList.value.forEach(d => { if (d.detour === tagToRemove) d.detour = ''; });
+                if (ntp.value.detour === tagToRemove) ntp.value.detour = 'direct';
+                routeRules.value.forEach(r => { if (r.outbound === tagToRemove) r.outbound = 'direct'; });
+                if (settings.value.final_outbound === tagToRemove) settings.value.final_outbound = 'direct';
+            }, {title:'删除策略组', okText:'删除'});
+        };
+        
+        const updateGroupTag = (gIdx, newTag) => {
+            const oldTag = groups.value[gIdx].tag;
+            if (!newTag || newTag === oldTag) return;
+            groups.value[gIdx].tag = newTag;
+            groups.value.forEach(g => { const i = g.members.indexOf(oldTag); if (i !== -1) g.members.splice(i, 1, newTag); });
+            dnsList.value.forEach(d => { if (d.detour === oldTag) d.detour = newTag; });
+            if (ntp.value.detour === oldTag) ntp.value.detour = newTag;
+            routeRules.value.forEach(r => { if (r.outbound === oldTag) r.outbound = newTag; });
+            if (settings.value.final_outbound === oldTag) settings.value.final_outbound = newTag;
+        };
+
+        const generateCountryGroups = () => {
+            if (nodes.value.length === 0) return showToast('当前没有节点，无法生成地区组！','warn');
+            let generatedCount = 0;
+            const targetRegions = [
+                { name:'香港节点', reg:'(港|HK|Hong)' },
+                { name:'台湾节点', reg:'(台|TW|Taiwan)' },
+                { name:'日本节点', reg:'(日|JP|Japan)' },
+                { name:'新加坡节点', reg:'(新加坡|SG|Singapore)' },
+                { name:'美国节点', reg:'(美|US|United)' },
+                { name:'韩国节点', reg:'(韩|KR|Korea)' }
+            ];
+            targetRegions.forEach(c => {
+                const pat = new RegExp(c.reg, 'i');
+                const matchingNodes = nodes.value.filter(n => pat.test(n.tag)).map(n => n.tag);
+                if (matchingNodes.length > 0) {
+                    let g = groups.value.find(g => g.tag === c.name);
+                    if (!g) {
+                        groups.value.push({ id: generateId('g'), tag: c.name, type: 'urltest', members: [...matchingNodes], regex: c.reg, url: 'https://www.gstatic.com/generate_204', interval: '3m', tolerance: 50 });
+                        generatedCount++;
+                    } else {
+                        matchingNodes.forEach(t => { if (!g.members.includes(t)) g.members.push(t); });
+                    }
+                    const main = groups.value.find(g => g.tag === '节点选择');
+                    if (main && !main.members.includes(c.name)) {
+                        const di = main.members.indexOf('direct'); 
+                        di !== -1 ? main.members.splice(di, 0, c.name) : main.members.push(c.name);
+                    }
+                }
+            });
+            if (generatedCount > 0) showToast('地区组生成完毕！','ok');
+            else showToast('已存在相关地区组，或未匹配到符合地区规则的节点。','info');
+        };
+
+        // 策略组拖拽排序逻辑
+        const draggedGroupIndex = ref(null);
+        const dragOverGroupIndex = ref(null);
+        const onGroupDragStart = (idx, e) => {
+            draggedGroupIndex.value = idx;
+            e.dataTransfer.effectAllowed = 'move';
+        };
+        const onGroupDragEnter = (idx) => {
+            if (draggedGroupIndex.value !== null) {
+                dragOverGroupIndex.value = idx;
+            }
+        };
+        const onGroupDragEnd = () => {
+            draggedGroupIndex.value = null;
+            dragOverGroupIndex.value = null;
+            groups.value.forEach(g => g.draggable = false);
+        };
+        const onGroupDrop = (idx) => {
+            const from = draggedGroupIndex.value;
+            if (from !== null && from !== idx) {
+                const arr = groups.value;
+                const item = arr.splice(from, 1)[0];
+                arr.splice(idx, 0, item);
+            }
+            onGroupDragEnd();
+        };
+
+        const availableOutboundTags = computed(() => [...groups.value.map(g=>g.tag),...nodes.value.map(n=>n.tag),'direct']);
+        const duplicateOutboundTags = computed(() => {
+            const all = [...groups.value.map(g=>g.tag), ...nodes.value.map(n=>n.tag)];
+            const cnt = {}; all.forEach(t => cnt[t]=(cnt[t]||0)+1);
+            return Object.keys(cnt).filter(t=>cnt[t]>1);
+        });
+        const getAllPossibleMembers  = (cur) => availableOutboundTags.value.filter(t=>t!==cur);
+
+        const ruleSets = ref([
+            { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/google.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/netflix.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/telegram.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs', detour: 'direct' }
+        ]);
+
+        const addRuleSet = async () => {
+            ruleSets.value.push({ id: generateId('rs'), tag: '', format: 'binary', url: '', detour: settings.value.rule_set_detour || 'direct' });
+            await nextTick();
+            if (ruleSetContainer.value) {
+                ruleSetContainer.value.scrollTo({ top: ruleSetContainer.value.scrollHeight, behavior: 'smooth' });
+            }
+        };
+        const removeRuleSet = (i) => { showConfirm('确定要删除此规则集吗？', ()=>ruleSets.value.splice(i,1), {title:'删除规则集', okText:'删除'}); };
+        
+        const onRuleSetTagChange = (rs) => {
+            if (!rs.tag) return; 
+            let type = '';
+            if (rs.tag.includes('geoip')) type = 'geoip';
+            else if (rs.tag.includes('geosite')) type = 'geosite';
+            else if (rs.tag.match(/^(ip|ipcidr)-/i)) type = 'geoip';
+            else if (rs.tag.match(/^(domain|site)-/i)) type = 'geosite';
+            
+            if (type) {
+                let name = rs.tag.replace(/^(geosite|geoip|geostie|geosiet|geopi)-/i, '');
+                rs.url = settings.value.rule_set_cdn
+                    ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${type}/${name}.srs`
+                    : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${type}/${name}.srs`;
+                rs.format = 'binary';
+            }
+        };
+
+        watch(() => settings.value.rule_set_cdn, (useCdn) => {
+            ruleSets.value.forEach(rs => {
+                if (rs.url.includes('MetaCubeX/meta-rules-dat')) {
+                    let match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.srs/);
+                    if (match) {
+                        rs.url = useCdn 
+                            ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${match[1]}/${match[2]}.srs`
+                            : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${match[1]}/${match[2]}.srs`;
+                    }
+                }
+            });
+        });
+        watch(() => settings.value.rule_set_detour, (newDetour) => {
+            ruleSets.value.forEach(rs => rs.detour = newDetour);
+        });
+
+        const routeRules = ref([
+            { id: generateId('r'), enabled:true,  name:'拦截广告',  tagsStr:'geosite-category-ads-all',          matchType:'rule_set', outbound:'__reject__', isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Google',    tagsStr:'geosite-google, geoip-google',      matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Netflix',   tagsStr:'geosite-netflix, geoip-netflix',    matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Telegram',  tagsStr:'geosite-telegram, geoip-telegram',  matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'中国直连',  tagsStr:'geosite-cn, geoip-cn',              matchType:'rule_set', outbound:'direct', isEditing: false, draggable: false }
+        ]);
+        
+        const addCustomRule = () => routeRules.value.unshift({ id: generateId('r'), enabled:true, name:'自定义规则', tagsStr:'', isEditing:true, matchType:'rule_set', outbound:'direct', draggable: false });
+        const removeRule    = (i) => { showConfirm('确定要删除此路由规则吗？', ()=>routeRules.value.splice(i,1), {title:'删除路由规则', okText:'删除'}); };
+
+        // 点击规则集 tag 切换选中/取消状态
+        const toggleRuleSet = (rule, tag) => {
+            let tags = rule.tagsStr ? rule.tagsStr.split(',').map(s=>s.trim()).filter(Boolean) : [];
+            const idx = tags.indexOf(tag);
+            if (idx === -1) tags.push(tag);
+            else tags.splice(idx, 1);
+            rule.tagsStr = tags.join(', ');
+        };
+
+        // 路由规则拖拽排序逻辑
+        const draggedRuleIndex = ref(null);
+        const dragOverRuleIndex = ref(null);
+        const onRuleDragStart = (idx, e) => {
+            draggedRuleIndex.value = idx;
+            e.dataTransfer.effectAllowed = 'move';
+        };
+        const onRuleDragEnter = (idx) => {
+            if (draggedRuleIndex.value !== null) {
+                dragOverRuleIndex.value = idx;
+            }
+        };
+        const onRuleDragEnd = () => {
+            draggedRuleIndex.value = null;
+            dragOverRuleIndex.value = null;
+            routeRules.value.forEach(r => r.draggable = false);
+        };
+        const onRuleDrop = (idx) => {
+            const from = draggedRuleIndex.value;
+            if (from !== null && from !== idx) {
+                const arr = routeRules.value;
+                const item = arr.splice(from, 1)[0];
+                arr.splice(idx, 0, item);
+            }
+            onRuleDragEnd();
+        };
+
+        const b64dec = (s) => {
+            try {
+                let b = s.replace(/[\r\n\s]/g,'').replace(/-/g,'+').replace(/_/g,'/');
+                while(b.length%4) b+='=';
+                const bin=atob(b), bytes=new Uint8Array(bin.length);
+                for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+                return new TextDecoder('utf-8').decode(bytes);
+            } catch(e){ return s; }
+        };
+
+        const parseVless = (l) => {
+            try {
+                const u=new URL(l);
+                const p=u.searchParams;
+                const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`VLESS-${nodes.value.length+1}`;
+                const net=p.get('type')||'';
+                const sec=p.get('security')||'';
+                nodes.value.push(makeNode({
+                    tag, type:'vless', server:u.hostname, port:parseInt(u.port)||443,
+                    secret:u.username, sni:p.get('sni')||p.get('host')||'',
+                    transport:['ws','grpc','http','httpupgrade','quic'].includes(net)?net:'',
+                    path:p.get('path')||p.get('serviceName')||'/',
+                    ws_host:p.get('host')||'',
+                    flow:p.get('flow')||'',
+                    tls:sec==='tls'||sec==='reality', insecure:p.get('allowInsecure')==='1',
+                    reality:sec==='reality', reality_pubkey:p.get('pbk')||'', reality_sid:p.get('sid')||'',
+                    utls_fingerprint:p.get('fp')||'',
+                    alpn:p.get('alpn')||''
+                }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const parseTrojan = (l) => {
+            try {
+                const u=new URL(l);
+                const p=u.searchParams;
+                const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`Trojan-${nodes.value.length+1}`;
+                const net=p.get('type')||'';
+                const sec=p.get('security')||'tls';
+                nodes.value.push(makeNode({
+                    tag, type:'trojan', server:u.hostname, port:parseInt(u.port)||443,
+                    secret:u.username||decodeURIComponent(u.password||''),
+                    sni:p.get('sni')||p.get('host')||'',
+                    transport:['ws','grpc','http','httpupgrade'].includes(net)?net:'',
+                    path:p.get('path')||p.get('serviceName')||'/',
+                    ws_host:p.get('host')||'',
+                    tls:sec==='tls'||sec==='reality', insecure:p.get('allowInsecure')==='1',
+                    reality:sec==='reality', reality_pubkey:p.get('pbk')||'', reality_sid:p.get('sid')||'',
+                    utls_fingerprint:p.get('fp')||'',
+                    alpn:p.get('alpn')||''
+                }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const parseVmess = (l) => {
+            try {
+                const p=JSON.parse(b64dec(l.slice(8)));
+                if(!p.add) return false;
+                const net=p.net||'';
+                nodes.value.push(makeNode({
+                    tag:p.ps||`VMess-${nodes.value.length+1}`, type:'vmess',
+                    server:p.add, port:parseInt(p.port)||443,
+                    secret:p.id, sni:p.sni||p.host||'',
+                    transport:['ws','grpc','http','httpupgrade'].includes(net)?net:'',
+                    path:p.path||p.serviceName||'/',
+                    ws_host:p.host||'',
+                    tls:p.tls==='tls',
+                    alpn:p.alpn||''
+                }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const parseSS = (l) => {
+            try {
+                const hi=l.indexOf('#');
+                const name=hi!==-1?decodeURIComponent(l.slice(hi+1)):`SS-${nodes.value.length+1}`;
+                const body=l.slice(5,hi!==-1?hi:undefined);
+                let method='chacha20-ietf-poly1305', password='', host='', port=443;
+                if(body.includes('@')){
+                    const ai=body.lastIndexOf('@');
+                    let cred=body.slice(0,ai);
+                    if(!cred.includes(':')) cred=b64dec(cred);
+                    const ci=cred.indexOf(':');
+                    method=cred.slice(0,ci); password=cred.slice(ci+1);
+                    const m=body.slice(ai+1).match(/^(.+):(\d+)$/);
+                    if(m){host=m[1];port=parseInt(m[2]);}
+                } else {
+                    const d=b64dec(body), ci=d.indexOf(':'), ai=d.lastIndexOf('@');
+                    if(ai!==-1){
+                        method=d.slice(0,ci); password=d.slice(ci+1,ai);
+                        const m=d.slice(ai+1).match(/^(.+):(\d+)$/);
+                        if(m){host=m[1];port=parseInt(m[2]);}
+                    }
+                }
+                nodes.value.push(makeNode({ tag:name, type:'shadowsocks', server:host, port, secret:password, ss_method:method, tls:false }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const parseHy2 = (l) => {
+            try {
+                const u=new URL(l.replace(/^hy2:\/\//,'hysteria2://'));
+                const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`Hy2-${nodes.value.length+1}`;
+                nodes.value.push(makeNode({
+                    tag, type:'hysteria2', server:u.hostname, port:parseInt(u.port)||443,
+                    secret:u.password||u.username, sni:u.searchParams.get('sni')||'',
+                    insecure:u.searchParams.get('insecure')==='1',
+                    hy2_obfs_type:u.searchParams.get('obfs')||'',
+                    hy2_obfs_password:u.searchParams.get('obfs-password')||'',
+                    tls:true
+                }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const parseTuic = (l) => {
+            try {
+                const u=new URL(l);
+                const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`TUIC-${nodes.value.length+1}`;
+                nodes.value.push(makeNode({
+                    tag, type:'tuic', server:u.hostname, port:parseInt(u.port)||443,
+                    secret:u.username, tuic_password:u.password,
+                    sni:u.searchParams.get('sni')||'',
+                    tuic_congestion:u.searchParams.get('congestion_control')||'cubic',
+                    tuic_udp_relay_mode:u.searchParams.get('udp_relay_mode')||'native',
+                    insecure:u.searchParams.get('allow_insecure')==='1',
+                    alpn:u.searchParams.get('alpn')||'h3',
+                    tls:true
+                }));
+                return true;
+            } catch(e){ return false; }
+        };
+
+        const coreParser = (text) => {
+            text = text.trim();
+            const hasProtocol = ['vless://','vmess://','trojan://','ss://','hysteria2://','hy2://','tuic://','socks://','http://'].some(p=>text.includes(p));
+            if(!hasProtocol) {
+                try { text = b64dec(text); } catch(e){}
+            }
+            let count=0;
+            text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>5).forEach(l=>{
+                let ok=false;
+                if(l.startsWith('vless://'))          ok=parseVless(l);
+                else if(l.startsWith('trojan://'))     ok=parseTrojan(l);
+                else if(l.startsWith('vmess://'))      ok=parseVmess(l);
+                else if(l.startsWith('ss://'))         ok=parseSS(l);
+                else if(l.startsWith('hysteria2://')||l.startsWith('hy2://')) ok=parseHy2(l);
+                else if(l.startsWith('tuic://'))       ok=parseTuic(l);
+                if(ok) count++;
+            });
+            return count;
+        };
+
+        const PROXIES = [
+            u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+            u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+            u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+            u => `https://thingproxy.freeboard.io/fetch/${u}`,
+        ];
+
+        const tryFetch = async (url, timeout=10000) => {
+            const ctrl=new AbortController();
+            const tid=setTimeout(()=>ctrl.abort(), timeout);
+            try {
+                const res=await fetch(url,{signal:ctrl.signal,mode:'cors',credentials:'omit'});
+                clearTimeout(tid);
+                if(!res.ok) return null;
+                let t=await res.text();
+                try { const j=JSON.parse(t); if(j&&j.contents) t=j.contents; } catch(e){}
+                return t&&t.length>10 ? t : null;
+            } catch(e){ clearTimeout(tid); return null; }
+        };
+
+        const fetchAndParse = async (idx) => {
+            const prov=providers.value[idx];
+            if(!prov.url) return showToast('请先填写订阅链接！','warn');
+            isFetching.value=true; fetchStatus.value=null;
+
+            fetchStatus.value={ type:'loading', msg:'尝试直接拉取...' };
+            let text = await tryFetch(prov.url, 8000);
+            if(text) {
+                const c=coreParser(text);
+                if(c>0){ fetchStatus.value={type:'ok',msg:`直接拉取成功，导入 ${c} 个节点`}; setTimeout(()=>fetchStatus.value=null,4000); isFetching.value=false; return; }
+            }
+
+            if (!corsProxyEnabled.value) {
+                isFetching.value=false;
+                fetchStatus.value={ type:'warn', msg:'直接拉取失败。CORS 代理已关闭，请手动复制订阅内容到上方解析框。或在订阅区开启代理拉取（存在隐私风险）。' };
+                return;
+            }
+
+            for(let i=0;i<PROXIES.length;i++){
+                fetchStatus.value={ type:'loading', msg:`尝试 CORS 代理 ${i+1}/${PROXIES.length}...` };
+                text = await tryFetch(PROXIES[i](prov.url), 12000);
+                if(text){
+                    const c=coreParser(text);
+                    if(c>0){ fetchStatus.value={type:'ok',msg:`代理拉取成功，导入 ${c} 个节点`}; setTimeout(()=>fetchStatus.value=null,4000); isFetching.value=false; return; }
+                }
+            }
+
+            isFetching.value=false;
+            fetchStatus.value={ type:'err', msg:'所有代理拉取均失败。请手动复制订阅内容到上方解析框后点击「提取节点」。' };
+        };
+
+        const parseManualText = () => {
+            if(!rawPastedText.value.trim()) return showToast('请先粘贴内容！','warn');
+            const c=coreParser(rawPastedText.value);
+            if(c===0) showToast('未能识别任何节点，请确认格式正确或 Base64 内容完整','err');
+            else { showToast(`本地解析成功，导入 ${c} 个节点`,'ok'); rawPastedText.value=''; }
+        };
+
+
+        // NFTables 规则生成
+        const generatedNft = computed(() => {
+            if (!tproxy.value.enabled) return '';
+            const { listen_port, bypass_private, nft_table, mark, uid, ipv6, dns_port, iface } = tproxy.value;
+            const markHex = mark || '0x01';
+            const table = nft_table || 'singbox';
+            const tport = listen_port || 7893;
+            const dnsPort = dns_port || 1053;
+
+            // ── 动态计算 bypass 列表：所有私有/保留段，但排除当前 Fake-IP 段 ──────
+            // Fake-IP 段（默认 198.18.0.0/15）必须进入 tproxy，不能被 bypass
+            const ALL_PRIVATE_RANGES4 = [
+                '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10',
+                '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
+                '192.0.0.0/24', '192.168.0.0/16',
+                '198.18.0.0/15',   // 可能被 Fake-IP 占用，动态判断是否排除
+                '198.51.100.0/24', '203.0.113.0/24',
+                '224.0.0.0/4', '240.0.0.0/4', '255.255.255.255/32'
+            ];
+            // 从 fakeip 配置中读取当前 Fake-IP IPv4 段（支持自定义修改）
+            const fakeip4Range = (fakeip.value.enabled && fakeip.value.inet4_range)
+                ? fakeip.value.inet4_range.trim()
+                : '198.18.0.0/15';  // fakeip 未启用时也保守排除默认段，避免误 bypass
+            const fakeip6Range = (fakeip.value.enabled && fakeip.value.inet6_range)
+                ? fakeip.value.inet6_range.trim()
+                : '';
+
+            const privateRanges4 = ALL_PRIVATE_RANGES4.filter(r => r !== fakeip4Range);
+
+            const ALL_PRIVATE_RANGES6 = ['::1/128', 'fc00::/7', 'fe80::/10', 'ff00::/8', '100::/64'];
+            const privateRanges6 = fakeip6Range
+                ? ALL_PRIVATE_RANGES6.filter(r => r !== fakeip6Range)
+                : ALL_PRIVATE_RANGES6;
+
+            // 跳过 sing-box 自身：output 链用 skuid（精确），无 uid 时降级用 mark
+            const skipSelfOutput = uid
+                ? `meta skuid "${uid}" return`
+                : `meta mark ${markHex} return`;
+            // DNS output nat 链跳过自身（写法相同）
+            const skipSelfDnsOutput = uid
+                ? `meta skuid "${uid}" return`
+                : `meta mark ${markHex} return`;
+
+            const bypassPrivate4 = bypass_private
+                ? `ip daddr { ${privateRanges4.join(', ')} } return`
+                : '';
+            const bypassPrivate6 = (bypass_private && ipv6)
+                ? `ip6 daddr { ${privateRanges6.join(', ')} } return`
+                : '';
+
+            const ifaceName = iface || 'eth0';
+
+            // 构建各链内容，注释统一放规则上方，不使用行尾注释和反斜杠续行
+            const ipv6Block = ipv6 ? `
+
+    # ════════════════════════════════════════════════════════════════
+    # IPv6 出站：本机流量打标，触发策略路由
+    # ════════════════════════════════════════════════════════════════
+    chain output_v6 {
+        type route hook output priority mangle - 1; policy accept;
+        # 跳过 sing-box 自身，防止代理回环
+        ${skipSelfOutput}
+        # 跳过 IPv6 私有/保留地址
+        ${bypassPrivate6}
+        # 仅代理 TCP/UDP，打标后触发策略路由
+        meta l4proto { tcp, udp } mark set ${markHex}
+    }
+
+    # ════════════════════════════════════════════════════════════════
+    # IPv6 TProxy 入口：lo 本机回环 + LAN 局域网
+    # ════════════════════════════════════════════════════════════════
+    chain prerouting_v6 {
+        type filter hook prerouting priority mangle - 1; policy accept;
+        # lo 本机回环：已建立连接快速放行
+        iifname "lo" meta mark ${markHex} socket transparent 1 accept
+        # lo 本机回环：新连接执行 tproxy
+        iifname "lo" meta mark ${markHex} meta l4proto { tcp, udp } tproxy ip6 to [::1]:${tport} accept
+        # 非 LAN 接口直接放行，不代理
+        iifname != "${ifaceName}" return
+        # LAN：已建立连接快速放行
+        socket transparent 1 accept
+        # LAN：跳过私有目标
+        ${bypassPrivate6}
+        # LAN：其余流量执行 tproxy
+        meta l4proto { tcp, udp } tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
+    }` : '';
+
+            return `#!/usr/sbin/nft -f
+# ═══════════════════════════════════════════════════════════════════
+# sing-box TProxy 透明代理 NFTables 规则
+# 自动生成 · 适用于 sing-box v1.12
+# TProxy 端口: ${tport}  |  DNS 入站端口: ${dnsPort}
+# LAN 接口: ${ifaceName}  |  fwmark: ${markHex}
+# ═══════════════════════════════════════════════════════════════════
+#
+# 数据流：
+#
+#   [LAN 设备] → prerouting(mangle) → 跳过私有目标 → tproxy:${tport} → sing-box
+#
+#   [本机进程] → output(mangle) → 跳过自身/私有 → mark=${markHex}
+#             → 策略路由表100 → lo
+#             → prerouting(mangle, iifname=lo, mark=${markHex}) → tproxy:${tport} → sing-box
+#
+#   [DNS 劫持] → prerouting/output(nat) → dport=53 → DNAT:${dnsPort} → sing-box dns-in
+#               (不过滤目标 IP，无论客户端 DNS 设为任何地址均劫持)
+#
+#   [Fake-IP]  → ${fakeip4Range} 不在 bypass 列表，Fake-IP 连接正常进入 tproxy${fakeip6Range ? '\n#              ' + fakeip6Range + ' (IPv6 Fake-IP) 同样不在 bypass 列表' : ''}
+#
+# ═══════════════════════════════════════════════════════════════════
+# 前置要求（每次重启后执行）：
+#   ip rule add fwmark ${markHex} lookup 100
+#   ip route add local default dev lo table 100${ipv6 ? '\n#   ip -6 rule add fwmark ' + markHex + ' lookup 100\n#   ip -6 route add local default dev lo table 100' : ''}
+# sing-box 需以 "${uid || 'sing-box'}" 用户运行，或具备 CAP_NET_ADMIN + CAP_NET_RAW
+# ═══════════════════════════════════════════════════════════════════
+
+flush ruleset
+
+table inet ${table} {
+
+    # ════════════════════════════════════════════════════════════════
+    # DNS 劫持 - LAN 设备
+    # 劫持来自 LAN 接口的所有 DNS 请求，不过滤目标 IP
+    # 覆盖场景：客户端 DNS 设为 8.8.8.8、192.168.1.1 等任意地址均生效
+    # ════════════════════════════════════════════════════════════════
+    chain prerouting_dns {
+        type nat hook prerouting priority dstnat; policy accept;
+        iifname "${ifaceName}" udp dport 53 dnat to 127.0.0.1:${dnsPort}
+        iifname "${ifaceName}" tcp dport 53 dnat to 127.0.0.1:${dnsPort}
+    }
+
+    # ════════════════════════════════════════════════════════════════
+    # DNS 劫持 - 本机进程
+    # 劫持本机所有进程的 DNS 请求，sing-box 自身除外（防止 dns-out 成环）
+    # ════════════════════════════════════════════════════════════════
+    chain output_dns {
+        type nat hook output priority dstnat; policy accept;
+        # 跳过 sing-box 自身，防止 dns-out → 系统解析 → 再次劫持成环
+        ${skipSelfDnsOutput}
+        udp dport 53 dnat to 127.0.0.1:${dnsPort}
+        tcp dport 53 dnat to 127.0.0.1:${dnsPort}
+    }
+
+    # ════════════════════════════════════════════════════════════════
+    # 本机出站：打标触发策略路由，使流量经 lo 重新进入 prerouting
+    # ════════════════════════════════════════════════════════════════
+    chain output {
+        type route hook output priority mangle - 1; policy accept;${!ipv6 ? `
+        # IPv6 未启用，直接放行，防止 inet 表漏匹配导致内核警告
+        meta nfproto ipv6 return` : ''}
+        # 跳过 sing-box 自身，防止代理回环
+        ${skipSelfOutput}
+        # 跳过私有/保留地址${fakeip4Range ? '（已排除 Fake-IP 段 ' + fakeip4Range + '）' : ''}
+        ${bypassPrivate4}
+        # 非 TCP/UDP 直接放行
+        meta l4proto != { tcp, udp } return
+        # 打标，触发策略路由表100 → 路由到 lo → 重新进入 prerouting
+        mark set ${markHex}
+    }
+
+    # ════════════════════════════════════════════════════════════════
+    # TProxy 入口：处理本机回环（lo + mark）和 LAN 两路流量
+    #
+    #   lo + mark=${markHex}  → 本机经策略路由绕回，执行 tproxy
+    #   ${ifaceName}          → LAN 流量，跳过私有目标后执行 tproxy
+    #   其他接口              → 直接放行，不代理
+    # ════════════════════════════════════════════════════════════════
+    chain prerouting {
+        type filter hook prerouting priority mangle - 1; policy accept;${!ipv6 ? `
+        # IPv6 未启用，直接放行，避免 ip daddr 漏匹配
+        meta nfproto ipv6 return` : ''}
+
+        # 本机回环 - 已建立连接，socket 快速放行
+        iifname "lo" meta mark ${markHex} socket transparent 1 accept
+        # 本机回环 - 新连接执行 tproxy
+        iifname "lo" meta mark ${markHex} meta l4proto { tcp, udp } tproxy ip to 127.0.0.1:${tport} accept
+
+        # 非 LAN 接口（非 lo、非 ${ifaceName}）直接放行
+        iifname != "${ifaceName}" return
+
+        # LAN - 已建立连接，socket 快速放行
+        socket transparent 1 accept
+        # LAN - 跳过私有目标
+        ${bypassPrivate4}
+        # LAN - 非 TCP/UDP 直接放行
+        meta l4proto != { tcp, udp } return
+        # LAN - 其余流量执行 tproxy
+        tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
+    }
+${ipv6Block}
+}
+
+# ════════════════════════════════════════════════════════════════════
+# 策略路由（每次重启后在 shell 执行，或写入 /etc/network/interfaces）
+# ════════════════════════════════════════════════════════════════════
+# ip rule add fwmark ${markHex} lookup 100
+# ip route add local default dev lo table 100${ipv6 ? '\n# ip -6 rule add fwmark ' + markHex + ' lookup 100\n# ip -6 route add local default dev lo table 100' : ''}
+
+# ════════════════════════════════════════════════════════════════════
+# 常用操作
+# ════════════════════════════════════════════════════════════════════
+# 加载：  nft -f /etc/nftables.d/${table}.nft
+# 查看：  nft list ruleset
+# 清除：  nft delete table inet ${table}
+# 验证：  ss -tlnp | grep ${tport}  &&  ss -ulnp | grep ${dnsPort}
+`;
+        });
+        const generatedJson = computed(() => {
+            // 出站 tag 重名校验
+            const allTags = [...groups.value.map(g=>g.tag), ...nodes.value.map(n=>n.tag)];
+            const tagCount = {};
+            allTags.forEach(t => tagCount[t] = (tagCount[t]||0)+1);
+            const dupTags = Object.keys(tagCount).filter(t => tagCount[t] > 1);
+            if (dupTags.length > 0) {
+                // 仅 console.warn，不阻断生成
+                console.warn('[sing-box] 出站 tag 重名，sing-box 将拒绝启动:', dupTags);
+            }
+            let outbounds=[];
+            const validOutboundTags = new Set([...groups.value.map(g=>g.tag),...nodes.value.map(n=>n.tag),'direct']);
+
+            groups.value.forEach(g=>{ 
+                const o={type:g.type,tag:g.tag}; 
+                const validMembers = g.members.filter(m => validOutboundTags.has(m));
+                if (validMembers.length === 0) validMembers.push('direct');
+                o.outbounds = [...validMembers];
+                if(g.type==='urltest'){ o.url=g.url||'https://www.gstatic.com/generate_204'; o.interval=g.interval||'3m'; if(g.tolerance)o.tolerance=g.tolerance; } 
+                outbounds.push(o); 
+            });
+
+            nodes.value.forEach(n=>{
+                const o={type:n.type,tag:n.tag};
+
+                if(n.type==='wireguard'){
+                    o.private_key=n.wg_private_key;
+                    o.peers=[{public_key:n.wg_peer_pubkey,server:n.server,server_port:n.port}];
+                    if(n.wg_psk) o.peers[0].pre_shared_key=n.wg_psk;
+                    o.local_address=[n.wg_local_address].filter(Boolean);
+                    if(n.wg_mtu) o.mtu=n.wg_mtu;
+                    if(n.wg_reserved){ const r=n.wg_reserved.split(',').map(Number).filter(v=>!isNaN(v)); if(r.length) o.reserved=r; }
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='ssh'){
+                    o.server=n.server; o.server_port=n.port; o.user=n.username;
+                    if(n.ssh_auth_type==='key') o.private_key=n.secret;
+                    else o.password=n.secret;
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='socks'){
+                    o.server=n.server; o.server_port=n.port; o.version=n.socks_version||'5';
+                    if(n.username) o.username=n.username;
+                    if(n.secret) o.password=n.secret;
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='http'){
+                    o.server=n.server; o.server_port=n.port;
+                    if(n.username) o.username=n.username;
+                    if(n.secret) o.password=n.secret;
+                    if(n.tls) o.tls={enabled:true};
+                    outbounds.push(o); return;
+                }
+
+                o.server=n.server; o.server_port=n.port;
+
+                if(n.type==='vless') o.uuid=n.secret;
+                else if(n.type==='vmess'){ o.uuid=n.secret; o.security='auto'; o.alter_id=0; }
+                else if(n.type==='trojan') o.password=n.secret;
+                else if(n.type==='shadowsocks'){ o.method=n.ss_method||'chacha20-ietf-poly1305'; o.password=n.secret; if(n.ss_plugin){ o.plugin=n.ss_plugin; if(n.ss_plugin_opts) o.plugin_opts=n.ss_plugin_opts; } }
+                else if(n.type==='hysteria2'){
+                    o.password=n.secret;
+                    if(n.hy2_up||n.hy2_down){ o.up_mbps=n.hy2_up; o.down_mbps=n.hy2_down; }
+                    if(n.hy2_obfs_type){ o.obfs={type:n.hy2_obfs_type,password:n.hy2_obfs_password}; }
+                }
+                else if(n.type==='hysteria'){
+                    o.up_mbps=n.hy_up_mbps||100; o.down_mbps=n.hy_down_mbps||100;
+                    if(n.secret){ if(n.hy_auth_type==='base64') o.auth=n.secret; else o.auth_str=n.secret; }
+                    if(n.hy_obfs) o.obfs=n.hy_obfs;
+                }
+                else if(n.type==='tuic'){
+                    o.uuid=n.secret; o.password=n.tuic_password;
+                    o.congestion_control=n.tuic_congestion||'cubic';
+                    o.udp_relay_mode=n.tuic_udp_relay_mode||'native';
+                }
+
+                if(n.type==='vless'&&n.flow) o.flow=n.flow;
+
+                const needTls=['vless','vmess','trojan','hysteria2','hysteria','tuic'].includes(n.type)
+                    ? (n.tls!==false) : n.tls;
+                if(needTls){
+                    o.tls={enabled:true};
+                    if(n.insecure) o.tls.insecure=true;
+                    if(n.sni) o.tls.server_name=n.sni;
+                    if(n.alpn){ const a=n.alpn.split(',').map(s=>s.trim()).filter(Boolean); if(a.length) o.tls.alpn=a; }
+                    if(n.utls_fingerprint) o.tls.utls={enabled:true,fingerprint:n.utls_fingerprint};
+                    if(n.reality&&['vless','trojan'].includes(n.type)){
+                        o.tls.reality={enabled:true,public_key:n.reality_pubkey,short_id:n.reality_sid};
+                        if(!o.tls.utls) o.tls.utls={enabled:true,fingerprint:'chrome'};
+                    }
+                }
+
+                if(n.transport&&['vless','vmess','trojan'].includes(n.type)){
+                    if(n.transport==='ws') o.transport={type:'ws',path:n.path||'/',headers:n.ws_host?{Host:n.ws_host}:undefined};
+                    else if(n.transport==='grpc') o.transport={type:'grpc',service_name:n.path||''};
+                    else if(n.transport==='http') o.transport={type:'http',path:n.path||'/',host:n.ws_host?[n.ws_host]:undefined};
+                    else if(n.transport==='httpupgrade') o.transport={type:'httpupgrade',path:n.path||'/',host:n.ws_host||undefined};
+                    else if(n.transport==='quic') o.transport={type:'quic'};
+                }
+
+                if(n.mux_enabled&&['vless','vmess','trojan'].includes(n.type)){
+                    o.multiplex={enabled:true,protocol:n.mux_protocol||'smux',max_connections:n.mux_max_connections||4,min_streams:n.mux_min_streams||4};
+                }
+
+                outbounds.push(o);
+            });
+
+            outbounds.push({type:'direct',tag:'direct'});
+            // tproxy 模式下，DNS 出站需要单独处理以防止 DNS 请求回环
+            if(tproxy.value.enabled){
+                outbounds.push({type:'dns',tag:'dns-out'});
+            }
+
+            const dnsServers=dnsList.value.map(d=>{
+                if(d.type==='fakeip'){const s={type:'fakeip',tag:d.tag};if(d.inet4_range)s.inet4_range=d.inet4_range;if(d.inet6_range)s.inet6_range=d.inet6_range;return s;}
+                if(d.type==='local') return{type:'local',tag:d.tag};
+                const s={type:d.type,tag:d.tag};if(d.server)s.server=d.server;if(d.detour&&d.detour!=='direct')s.detour=d.detour;if(d.domain_resolver)s.domain_resolver=d.domain_resolver;return s;
+            }).filter(s=>s.type==='fakeip'||s.type==='local'||s.server);
+
+            if(fakeip.value.enabled&&!dnsServers.find(s=>s.type==='fakeip')){
+                const fi={type:'fakeip',tag:fakeip.value.tag};
+                if(fakeip.value.queryA && fakeip.value.inet4_range) fi.inet4_range=fakeip.value.inet4_range;
+                if(fakeip.value.queryAAAA && fakeip.value.inet6_range) fi.inet6_range=fakeip.value.inet6_range;
+                dnsServers.push(fi);
+            }
+
+            const dnsRules=[];
+            const localTag=dnsServers.find(d=>d.tag==='local-dns')?'local-dns':(dnsServers.find(d=>d.type==='udp'||d.type==='tcp'||d.type==='local')?.tag);
+            if(fakeip.value.enabled){
+                if(localTag) dnsRules.push({rule_set:['geosite-cn'],server:localTag});
+                const excl=fakeip.value.excludeText.split('\n').map(s=>s.replace(/^[-*\s]+/, '').replace(/['"]/g, '').replace(/^\+\./, '').trim()).filter(s=>s);
+                if(excl.length>0&&localTag) dnsRules.push({domain_suffix:excl,server:localTag});
+                const qt=[]; if(fakeip.value.queryA)qt.push(1); if(fakeip.value.queryAAAA)qt.push(28);
+                if(qt.length>0) dnsRules.push({query_type:qt,server:fakeip.value.tag});
+            } else {
+                if(localTag){ dnsRules.push({rule_set:['geosite-cn'],server:localTag}); dnsRules.push({outbound:'any',server:localTag}); }
+            }
+
+            const routeArr=[];
+            // tproxy 模式：dns-in 的流量必须路由到 dns-out，避免 DNS 请求被当成普通流量处理
+            if(tproxy.value.enabled){
+                routeArr.push({inbound:['dns-in'],outbound:'dns-out'});
+            }
+            
+            const rsArr = ruleSets.value.filter(rs => rs.tag && rs.url).map(rs => ({
+                tag: rs.tag,
+                type: 'remote',
+                format: rs.format || 'binary',
+                url: rs.url,
+                download_detour: rs.detour || 'direct'
+            }));
+
+            // hijack-dns 必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
+            if(settings.value.hijack_dns)     routeArr.push({protocol:'dns',action:'hijack-dns'});
+            if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
+            if(settings.value.sniff_enabled){
+                const sniffRule={action:'sniff'};
+                if(settings.value.sniff_timeout) sniffRule.timeout=settings.value.sniff_timeout;
+                routeArr.push(sniffRule);
+            }
+
+            // clash_mode 规则：放在系统规则之后、用户分流规则之前
+            // 面板切换 Global/Direct 时命中此规则，跳过后续所有分流直接出站
+            if(clashApi.value.enabled){
+                const globalOutbound = settings.value.final_outbound || 'direct';
+                routeArr.push(
+                    {clash_mode:'global', outbound:globalOutbound},
+                    {clash_mode:'direct', outbound:'direct'}
+                );
+            }
+
+            routeRules.value.filter(r=>r.enabled).forEach(r=>{
+                const tags=(r.tagsStr||'').split(',').map(s=>s.trim()).filter(s=>s);
+                if(!tags.length)return;
+                const o={}, mt=r.matchType||'rule_set';
+                if(mt==='rule_set'){
+                    o.rule_set=tags;
+                }
+                else if(mt==='domain')         o.domain=tags;
+                else if(mt==='domain_suffix')  o.domain_suffix=tags;
+                else if(mt==='domain_keyword') o.domain_keyword=tags;
+                else if(mt==='domain_regex')   o.domain_regex=tags;
+                else if(mt==='ip_cidr')        o.ip_cidr=tags;
+                else if(mt==='source_ip_cidr') o.source_ip_cidr=tags;
+                else if(mt==='port')           o.port=tags.map(Number).filter(n=>!isNaN(n));
+                else if(mt==='port_range')     o.port_range=tags;
+                else if(mt==='protocol')       o.protocol=tags;
+                else if(mt==='network')        o.network=tags[0];
+                else if(mt==='process_name')   o.process_name=tags;
+                else if(mt==='geoip')          o.geoip=tags;
+                if(r.outbound==='__reject__') o.action='reject'; else o.outbound=r.outbound;
+                routeArr.push(o);
+            });
+
+            const inbounds=[];
+            const mixedIn={type:'mixed',tag:'mixed-in',listen:'127.0.0.1',listen_port:settings.value.listen_port};
+            // tproxy inbound - 单个 inbound 同时处理 TCP+UDP（sing-box v1.10+ 支持 network 数组或不填则同时处理两者）
+            if(tproxy.value.enabled){
+                const tp={
+                    type:'tproxy',
+                    tag:'tproxy-in',
+                    listen:'::',
+                    listen_port:tproxy.value.listen_port,
+                    // 不指定 network 则同时接受 tcp 和 udp
+                };
+                if(tproxy.value.udp_fragment) tp.udp_fragment = true;  // 允许 UDP 分片，QUIC/Hysteria2 必需
+                if(settings.value.sniff_enabled){ tp.sniff=true; if(settings.value.sniff_override_destination) tp.sniff_override_destination=true; if(settings.value.sniff_timeout) tp.sniff_timeout=settings.value.sniff_timeout; }
+                inbounds.push(tp);
+                // DNS 入站：监听 tproxy.dns_port，接受被 nftables redirect 过来的 DNS 请求
+                inbounds.push({
+                    type:'direct',
+                    tag:'dns-in',
+                    listen:'127.0.0.1',
+                    listen_port: tproxy.value.dns_port || 1053,
+                    override_port: 53,  // 将请求重写为 53 端口以正常解析
+                });
+            }
+            if(settings.value.sniff_enabled){ mixedIn.sniff=true; if(settings.value.sniff_override_destination) mixedIn.sniff_override_destination=true; if(settings.value.sniff_timeout) mixedIn.sniff_timeout=settings.value.sniff_timeout; }
+            inbounds.push(mixedIn);
+            
+            if(tun.value.enabled){ 
+                const addr=[tun.value.address_v4].filter(Boolean); 
+                if(tun.value.address_v6) addr.push(tun.value.address_v6); 
+                const t={type:'tun',tag:'tun-in',interface_name:tun.value.interface_name,address:addr,mtu:tun.value.mtu,stack:tun.value.stack,auto_route:tun.value.auto_route,strict_route:tun.value.strict_route,endpoint_independent_nat:tun.value.endpoint_independent_nat}; 
+                if(tun.value.auto_redirect) t.auto_redirect=true; 
+                if(settings.value.sniff_enabled){ t.sniff=true; if(settings.value.sniff_override_destination) t.sniff_override_destination=true; if(settings.value.sniff_timeout) t.sniff_timeout=settings.value.sniff_timeout; }
+                inbounds.push(t); 
+            }
+
+            const route={rules:routeArr,final:settings.value.final_outbound,auto_detect_interface:settings.value.auto_detect_interface};
+            if(settings.value.default_domain_resolver) route.default_domain_resolver=settings.value.default_domain_resolver;
+            if(settings.value.default_interface) route.default_interface=settings.value.default_interface;
+            if(settings.value.default_mark) route.default_mark=settings.value.default_mark;
+            if(rsArr.length>0) route.rule_set=rsArr;
+
+            let experimental;
+            if(clashApi.value.enabled){ 
+                const ca={external_controller:clashApi.value.external_controller,default_mode:clashApi.value.default_mode||'rule'}; 
+                if(clashApi.value.secret) ca.secret=clashApi.value.secret; 
+                if(clashApi.value.external_ui) ca.external_ui=clashApi.value.external_ui; 
+                if(clashApi.value.download_url) ca.external_ui_download_url=clashApi.value.download_url; 
+                if(clashApi.value.allow_lan) ca.access_control_allow_private_network=true; 
+                const cf={enabled:true}; 
+                if(clashApi.value.store_fakeip) cf.store_fakeip=true; 
+                experimental={clash_api:ca,cache_file:cf};
+            }
+
+            const cfg={
+                log:{level:settings.value.log_level,timestamp:true},
+                ntp:ntp.value.enabled?{enabled:true,server:ntp.value.server,server_port:ntp.value.server_port,interval:ntp.value.interval,detour:ntp.value.detour}:undefined,
+                dns:{servers:dnsServers,rules:dnsRules.length>0?dnsRules:undefined,strategy:settings.value.dns_strategy,final:settings.value.dns_final||undefined,independent_cache:(settings.value.independent_cache||fakeip.value.enabled)||undefined,reverse_mapping:settings.value.reverse_mapping||undefined},
+                inbounds, outbounds, route, experimental
+            };
+
+            return JSON.stringify(cfg,(k,v)=>{ if(v===undefined||v===null||v===''||(Array.isArray(v)&&v.length===0))return undefined; return v; },2);
+        });
+
+        let diffScrollTimer = null;
+        watch(generatedJson, (newStr, oldStr) => {
+            if (!oldStr || !jsonContainer.value) return;
+            clearTimeout(diffScrollTimer);
+            diffScrollTimer = setTimeout(() => {
+                const newLines = newStr.split('\n');
+                const oldLines = oldStr.split('\n');
+                let diffLine = -1;
+                for(let i = 0; i < newLines.length; i++){
+                    if(newLines[i] !== oldLines[i]) { diffLine = i; break; }
+                }
+                if (diffLine === -1 && newLines.length < oldLines.length) diffLine = newLines.length - 1;
+                if (diffLine !== -1) {
+                    const lineHeight = 21;
+                    const targetY = diffLine * lineHeight + 24;
+                    const el = jsonContainer.value;
+                    const currentTop = el.scrollTop;
+                    const viewHeight = el.clientHeight;
+                    if (targetY < currentTop + 60 || targetY > currentTop + viewHeight - 60) {
+                        el.scrollTo({ top: Math.max(0, targetY - viewHeight / 2), behavior: 'smooth' });
+                    }
+                }
+            }, 120);
+        });
+
+        watch(currentTab, (newTab) => {
+            if(!jsonContainer.value) return;
+            const tabMap = {
+                'dns': '"dns": {',
+                'nodes': '"outbounds": [',
+                'groups': '"outbounds": [',
+                'rules': '"route": {',
+                'advanced': '"inbounds": ['
+            };
+            const keyword = tabMap[newTab];
+            if (keyword) {
+                setTimeout(() => {
+                    const text = generatedJson.value;
+                    const idx = text.indexOf(keyword);
+                    if(idx !== -1) {
+                        const lines = text.substring(0, idx).split('\n');
+                        const targetY = lines.length * 21 + 24;
+                        jsonContainer.value.scrollTo({ top: Math.max(0, targetY - 60), behavior: 'smooth' });
+                    }
+                }, 50);
+            }
+        });
+
+        const getFullState = () => {
+            const defaultNode = makeNode();
+            
+            const cleanNodes = nodes.value.map(n => {
+                const c = { ...n };
+                
+                if (c.type !== 'shadowsocks') { delete c.ss_method; delete c.ss_plugin; delete c.ss_plugin_opts; }
+                if (c.type !== 'tuic') { delete c.tuic_password; delete c.tuic_congestion; delete c.tuic_udp_relay_mode; }
+                if (c.type !== 'hysteria') { delete c.hy_up_mbps; delete c.hy_down_mbps; delete c.hy_obfs; delete c.hy_auth_type; }
+                if (c.type !== 'hysteria2') { delete c.hy2_up; delete c.hy2_down; delete c.hy2_obfs_type; delete c.hy2_obfs_password; }
+                if (c.type !== 'wireguard') { delete c.wg_private_key; delete c.wg_peer_pubkey; delete c.wg_local_address; delete c.wg_psk; delete c.wg_mtu; delete c.wg_reserved; }
+                if (c.type !== 'socks') { delete c.socks_version; }
+                if (c.type !== 'ssh') { delete c.ssh_auth_type; }
+                if (!['socks','http','ssh'].includes(c.type)) { delete c.username; }
+                if (!['vless','vmess','trojan'].includes(c.type)) { delete c.transport; delete c.path; delete c.ws_host; delete c.mux_enabled; delete c.mux_protocol; delete c.mux_max_connections; delete c.mux_min_streams; }
+                if (c.type !== 'vless') { delete c.flow; }
+                
+                if (!c.reality) { delete c.reality_pubkey; delete c.reality_sid; }
+                if (!c.mux_enabled) { delete c.mux_protocol; delete c.mux_max_connections; delete c.mux_min_streams; }
+                
+                Object.keys(c).forEach(key => {
+                    if (['tag','type','server','port','insecure'].includes(key)) return; 
+                    
+                    if (c[key] === '' || c[key] === null) {
+                        delete c[key];
+                    } else if (c[key] === false && defaultNode[key] === false) {
+                        delete c[key]; 
+                    }
+                });
+                
+                const usesTls = ['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks'].includes(c.type);
+                if (!usesTls) { delete c.tls; delete c.insecure; delete c.reality; delete c.alpn; delete c.utls_fingerprint; delete c.sni; }
+
+                return c;
+            });
+
+            return {
+                _version: '1.12',
+                _exported: new Date().toISOString(),
+                settings: settings.value,
+                fakeip: fakeip.value,
+                tun: tun.value,
+                clashApi: clashApi.value,
+                ntp: ntp.value,
+                tproxy: tproxy.value,
+                dnsList: dnsList.value,
+                providers: providers.value,
+                nodes: cleanNodes,
+                groups: groups.value.map(g => {
+                    const c = { ...g };
+                    delete c.draggable;
+                    return c;
+                }),
+                ruleSets: ruleSets.value,
+                routeRules: routeRules.value.map(r => {
+                    const c = { ...r };
+                    delete c.isEditing;
+                    delete c.draggable;
+                    return c;
+                }),
+            };
+        };
+
+        const exportPreviewJson = computed(() => {
+            return JSON.stringify(getFullState(), (key, value) => {
+                if (value === '') return undefined;
+                if (value === null) return undefined;
+                return value;
+            }, 2);
+        });
+
+        const openImportExport = (tab) => {
+            importExportTab.value = tab;
+            importJsonText.value = '';
+            importError.value = '';
+            showImportExport.value = true;
+        };
+
+        const doExportDownload = () => {
+            const blob = new Blob([exportPreviewJson.value], {type:'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `singbox-panel-config-${Date.now()}.json`;
+            a.click();
+        };
+
+        const validateConfig = () => {
+            const warnings = [];
+            if (nodes.value.length === 0 && groups.value.length === 0) warnings.push('没有任何出站节点或策略组');
+            const finalTag = settings.value.final_outbound;
+            const allOut = new Set([...groups.value.map(g=>g.tag),...nodes.value.map(n=>n.tag),'direct']);
+            if (finalTag && !allOut.has(finalTag)) warnings.push(`默认路由出站 "${finalTag}" 不存在`);
+            const dnsTagSet = new Set(); let dnsDup = false;
+            dnsList.value.forEach(d => { if(d.tag){ if(dnsTagSet.has(d.tag)) dnsDup=true; dnsTagSet.add(d.tag); } });
+            if (dnsDup) warnings.push('DNS 服务器存在重复 tag');
+            if (duplicateOutboundTags.value.length > 0) warnings.push(`出站 tag 重名: ${duplicateOutboundTags.value.join(', ')}`);
+            const emptyRS = ruleSets.value.filter(rs=>rs.tag&&!rs.url);
+            if (emptyRS.length > 0) warnings.push(`${emptyRS.length} 个规则集 URL 为空（已自动忽略）`);
+            return warnings;
+        };
+        const doExportRuntimeDownload = () => {
+            const warns = validateConfig();
+            const doDownload = () => {
+                const blob = new Blob([generatedJson.value], {type:'application/json'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'config.json';
+                a.click();
+                showToast('运行配置已下载','ok');
+            };
+            if (warns.length > 0) {
+                showConfirm(`检测到以下问题，确认仍要下载吗？<br><br>${warns.map(w=>`• ${w}`).join('<br>')}`, doDownload, {title:'配置校验警告', okText:'仍然下载', safe:true});
+            } else {
+                doDownload();
+            }
+        };
+
+        const doExportCopy = async () => {
+            const ok = await copyToClipboard(exportPreviewJson.value);
+            showToast(ok?'面板配置已复制到剪贴板！':'复制失败，请手动复制', ok?'ok':'err');
+        };
+
+        const doExportRuntimeCopy = async () => {
+            const ok = await copyToClipboard(generatedJson.value);
+            showToast(ok?'运行配置已复制到剪贴板！':'复制失败，请手动复制', ok?'ok':'err');
+        };
+
+        const applyImport = (data) => {
+            if(!data || typeof data !== 'object') throw new Error('无效的 JSON 格式');
+            if(data.settings)    Object.assign(settings.value, data.settings);
+            if(data.fakeip)      Object.assign(fakeip.value, data.fakeip);
+            if(data.tun)         Object.assign(tun.value, data.tun);
+            if(data.clashApi)    Object.assign(clashApi.value, data.clashApi);
+            if(data.ntp)         Object.assign(ntp.value, data.ntp);
+            if(data.tproxy)      Object.assign(tproxy.value, data.tproxy);
+            if(data.dnsList)     dnsList.value = data.dnsList;
+            if(data.providers)   providers.value = data.providers;
+            if(data.nodes)       nodes.value = data.nodes.map(n=>makeNode(n));
+            if(data.groups)      groups.value = data.groups.map(g => ({...g, id: g.id || generateId('g')}));
+            if(data.ruleSets)    ruleSets.value = data.ruleSets.map(rs=>({...rs, id: rs.id || generateId('rs')}));
+            if(data.routeRules)  routeRules.value = data.routeRules.map((r,i)=>({...r, isEditing:false, draggable:false, id: r.id || generateId('r')}));
+            showImportExport.value = false;
+        };
+
+        const doImportFile = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    applyImport(data);
+                    showToast('配置导入成功！','ok');
+                } catch(err) {
+                    importError.value = '文件解析失败：' + err.message;
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        const doImportText = () => {
+            importError.value = '';
+            try {
+                const data = JSON.parse(importJsonText.value);
+                applyImport(data);
+                showToast('配置导入成功！','ok');
+            } catch(err) {
+                importError.value = '解析失败：' + err.message;
+            }
+        };
+
+        const STORAGE_KEY = 'singbox_backup_v1_12';
+        const STORAGE_TTL_DAYS = 7; // 本地缓存有效期（天）
+        const lastSavedAt = ref(null);
+
+        const resetConfig = () => {
+            showConfirm('此操作将清空所有节点、策略和规则，恢复至最原始状态，确认继续吗？', () => {
+                localStorage.removeItem(STORAGE_KEY);
+                location.reload();
+            }, {title:'重置配置', okText:'确认重置'});
+        };
+
+        const loadFromStorage = () => {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+                const parsed = JSON.parse(raw);
+                // 兼容旧格式（无 savedAt 包装）
+                const isWrapped = parsed && parsed.savedAt && parsed.data;
+                const data = isWrapped ? parsed.data : parsed;
+                const savedAt = isWrapped ? parsed.savedAt : null;
+                // TTL 检查
+                if (savedAt) {
+                    const ageDays = (Date.now() - savedAt) / 86400000;
+                    if (ageDays > STORAGE_TTL_DAYS) {
+                        localStorage.removeItem(STORAGE_KEY);
+                        console.info('[sing-box] 本地缓存已超过', STORAGE_TTL_DAYS, '天，已自动清除');
+                        return;
+                    }
+                }
+                applyImport(data);
+            } catch(e) { console.error('读取缓存失败', e); }
+        };
+
+        loadFromStorage();
+        const clearLocalStorage = () => {
+            showConfirm(
+                '确定要清除本地缓存吗？页面刷新后将恢复默认状态，所有未导出的配置将丢失。',
+                () => { localStorage.removeItem(STORAGE_KEY); lastSavedAt.value = null; showToast('本地缓存已清除','ok'); },
+                { title:'清除本地缓存', okText:'确认清除' }
+            );
+        };
+        const storageSavedAgo = computed(() => {
+            if (!lastSavedAt.value) return null;
+            const sec = Math.round((Date.now() - lastSavedAt.value) / 1000);
+            if (sec < 60) return `${sec} 秒前`;
+            const min = Math.floor(sec / 60);
+            if (min < 60) return `${min} 分钟前`;
+            return `${Math.floor(min/60)} 小时前`;
+        });
+
+
+        let saveTimer = null;
+        watch(generatedJson, () => {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => {
+                try {
+                    const payload = { data: getFullState(), savedAt: Date.now() };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+                    lastSavedAt.value = Date.now();
+                } catch(e) {}
+            }, 500); 
+        });
+
+        const copyConfig = async () => { const ok = await copyToClipboard(generatedJson.value); if(ok){ copyText.value='复制成功!';copyIcon.value='fas fa-check';setTimeout(()=>{copyText.value='复制配置';copyIcon.value='fas fa-copy';},2000); } else showToast('复制失败，请手动复制','err'); };
+
+        const nftCopyText = ref('复制'), nftCopyIcon = ref('fas fa-copy');
+        const copyNft = async () => {
+            const ok = await copyToClipboard(generatedNft.value);
+            if(ok){ nftCopyText.value='已复制'; nftCopyIcon.value='fas fa-check'; setTimeout(()=>{ nftCopyText.value='复制'; nftCopyIcon.value='fas fa-copy'; }, 2000); }
+            else showToast('复制失败','err');
+        };
+        const downloadNft = () => {
+            const blob = new Blob([generatedNft.value], {type:'text/plain'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${tproxy.value.nft_table || 'singbox'}.nft`;
+            a.click();
+            showToast('NFT 规则文件已下载','ok');
+        };
+
+        return { 
+            tabs, currentTab, isFetching, fetchStatus, rawPastedText, 
+            jsonContainer, ruleSetContainer, tabContentContainer,
+            settings, fakeip, cleanExcludeText, handlePasteCleanup, tun, tunOpts, panels, clashApi, pickPanel, panelLinks, ntp, 
+            dnsList, addDns, addBootstrapDns, removeDns, 
+            providers, addProvider, removeProvider, corsProxyEnabled, 
+            nodes, addNode, removeNode, clearNodes, onNodeTypeChange,
+            groups, addGroup, removeGroup, updateGroupTag, generateCountryGroups, getAllPossibleMembers, availableOutboundTags, duplicateOutboundTags, 
+            draggedGroupIndex, dragOverGroupIndex, onGroupDragStart, onGroupDragEnter, onGroupDrop, onGroupDragEnd,
+            ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, 
+            routeRules, addCustomRule, removeRule, toggleRuleSet,
+            draggedRuleIndex, dragOverRuleIndex, onRuleDragStart, onRuleDragEnter, onRuleDrop, onRuleDragEnd,
+            fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
+            generatedJson, copyText, copyIcon, copyConfig,
+            tproxy, tproxyConflicts, generatedNft, nftCopyText, nftCopyIcon, copyNft, downloadNft,
+            showImportExport, importExportTab, importJsonText, importError,
+            exportPreviewJson, exportPreviewTab, openImportExport, doExportDownload, doExportRuntimeDownload, doExportCopy, doExportRuntimeCopy, doImportFile, doImportText,
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
