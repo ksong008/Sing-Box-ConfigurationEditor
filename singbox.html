@@ -1980,10 +1980,25 @@ ${ipv6Block}
 }
 
 # ════════════════════════════════════════════════════════════════════
-# 策略路由（每次重启后在 shell 执行，或写入 /etc/network/interfaces）
+# 策略路由（每次重启后在 shell 执行，或使用 Systemd-Network方式）
 # ════════════════════════════════════════════════════════════════════
+# 手动执行
 # ip rule add fwmark ${markHex} lookup 100
 # ip route add local default dev lo table 100${ipv6 ? '\n# ip -6 rule add fwmark ' + markHex + ' lookup 100\n# ip -6 route add local default dev lo table 100' : ''}
+# ════════════════════════════════════════════════════════════════════
+# Systemd-Network方式，以下仅以 Ip4 为例，Ipv6 请自行修改。
+# cat > /etc/systemd/system/tproxy-route.service << 'EOF'
+# [Unit]
+# Description=tproxy routing rules
+# After=network.target
+# [Service]
+# Type=oneshot
+# RemainAfterExit=yes
+# ExecStart=/bin/bash -c 'ip rule add fwmark 1 table 100; ip route add local default dev lo table 100'
+# ExecStop=/bin/bash -c 'ip rule del fwmark 1 table 100; ip route del local default dev lo table 100'
+# [Install]
+# WantedBy=multi-user.target
+# EOF
 
 # ════════════════════════════════════════════════════════════════════
 # 常用操作
