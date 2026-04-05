@@ -2542,8 +2542,17 @@ ${ipv6Block}
             if(ok){ nftCopyText.value='已复制'; nftCopyIcon.value='fas fa-check'; setTimeout(()=>{ nftCopyText.value='复制'; nftCopyIcon.value='fas fa-copy'; }, 2000); }
             else showToast('复制失败','err');
         };
+        const stripNftComments = (src) => {
+            return src
+                .split('\n')
+                .map(line => line.replace(/#.*$/, '').trimEnd())
+                .filter(line => line.trim() !== '')
+                .join('\n') + '\n';
+        };
+
+
         const downloadNft = () => {
-            const blob = new Blob([generatedNft.value], {type:'text/plain'});
+            const blob = new Blob([stripNftComments(generatedNft.value)], {type:'text/plain'});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `${tproxy.value.nft_table || 'singbox'}.nft`;
