@@ -2538,7 +2538,7 @@ ${ipv6Block}
 
         const nftCopyText = ref('复制'), nftCopyIcon = ref('fas fa-copy');
         const copyNft = async () => {
-            const ok = await copyToClipboard(generatedNft.value);
+            const ok = await copyToClipboard(stripNftComments(generatedNft.value));
             if(ok){ nftCopyText.value='已复制'; nftCopyIcon.value='fas fa-check'; setTimeout(()=>{ nftCopyText.value='复制'; nftCopyIcon.value='fas fa-copy'; }, 2000); }
             else showToast('复制失败','err');
         };
