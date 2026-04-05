@@ -2129,7 +2129,7 @@ ${ipv6Block}
                 const qt=[]; if(fakeip.value.queryA)qt.push(1); if(fakeip.value.queryAAAA)qt.push(28);
                 if(qt.length>0) dnsRules.push({query_type:qt,server:fakeip.value.tag});
             } else {
-                if(localTag){ dnsRules.push({rule_set:['geosite-cn'],server:localTag}); dnsRules.push({outbound:'any',server:localTag}); }
+                if(localTag){ dnsRules.push({rule_set:['geosite-cn'],server:localTag}); }
             }
 
             const routeArr=[];
