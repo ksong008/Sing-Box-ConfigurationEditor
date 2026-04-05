@@ -20,7 +20,7 @@ NOTE：sing-box v1.12 only
    cd Sing-Box-ConfigurationEditor
    ```
 
-2. Open `index.html` in your browser
+2. Open `singbox.html` in your browser
 
 ## Development
 
