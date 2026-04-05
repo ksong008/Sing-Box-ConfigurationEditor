@@ -1871,7 +1871,8 @@ createApp({
         # LAN：跳过私有目标
         ${bypassPrivate6}
         # LAN：其余流量执行 tproxy
-        meta l4proto { tcp, udp } tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
+        meta l4proto tcp tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
+        meta l4proto udp tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
     }` : '';
 
             return `#!/usr/sbin/nft -f
@@ -1914,8 +1915,8 @@ table inet ${table} {
     # ════════════════════════════════════════════════════════════════
     chain prerouting_dns {
         type nat hook prerouting priority dstnat; policy accept;
-        iifname "${ifaceName}" udp dport 53 dnat to 127.0.0.1:${dnsPort}
-        iifname "${ifaceName}" tcp dport 53 dnat to 127.0.0.1:${dnsPort}
+        iifname "${ifaceName}" udp dport 53 dnat ip to 127.0.0.1:${dnsPort}
+        iifname "${ifaceName}" tcp dport 53 dnat ip to 127.0.0.1:${dnsPort}
     }
 
     # ════════════════════════════════════════════════════════════════
@@ -1926,8 +1927,8 @@ table inet ${table} {
         type nat hook output priority dstnat; policy accept;
         # 跳过 sing-box 自身，防止 sing-box → 系统解析 → 再次劫持成环
         ${skipSelfDnsOutput}
-        udp dport 53 dnat to 127.0.0.1:${dnsPort}
-        tcp dport 53 dnat to 127.0.0.1:${dnsPort}
+        udp dport 53 dnat ip to 127.0.0.1:${dnsPort}
+        tcp dport 53 dnat ip to 127.0.0.1:${dnsPort}
     }
 
     # ════════════════════════════════════════════════════════════════
@@ -1971,34 +1972,18 @@ table inet ${table} {
         socket transparent 1 accept
         # LAN - 跳过私有目标
         ${bypassPrivate4}
-        # LAN - 非 TCP/UDP 直接放行
-        meta l4proto != { tcp, udp } return
-        # LAN - 其余流量执行 tproxy
-        tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
+        # LAN - 仅代理 TCP/UDP（tproxy 前需明确 l4proto）
+        meta l4proto tcp tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
+        meta l4proto udp tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
     }
 ${ipv6Block}
 }
 
 # ════════════════════════════════════════════════════════════════════
-# 策略路由（每次重启后在 shell 执行，或使用 Systemd-Network方式）
+# 策略路由（每次重启后在 shell 执行，或写入 /etc/network/interfaces）
 # ════════════════════════════════════════════════════════════════════
-# 手动执行
 # ip rule add fwmark ${markHex} lookup 100
 # ip route add local default dev lo table 100${ipv6 ? '\n# ip -6 rule add fwmark ' + markHex + ' lookup 100\n# ip -6 route add local default dev lo table 100' : ''}
-# ════════════════════════════════════════════════════════════════════
-# Systemd-Network方式,以下为ip4 only，如果是 ipv6，请自行添加对应规则
-# cat > /etc/systemd/system/tproxy-route.service << 'EOF'
-# [Unit]
-# Description=tproxy routing rules
-# After=network.target
-# [Service]
-# Type=oneshot
-# RemainAfterExit=yes
-# ExecStart=/bin/bash -c 'ip rule add fwmark 1 table 100; ip route add local default dev lo table 100'
-# ExecStop=/bin/bash -c 'ip rule del fwmark 1 table 100; ip route del local default dev lo table 100'
-# [Install]
-# WantedBy=multi-user.target
-# EOF
 
 # ════════════════════════════════════════════════════════════════════
 # 常用操作
