@@ -16,7 +16,7 @@ NOTE：sing-box v1.12 only
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/<your-org>/Sing-Box-ConfigurationEditor.git
+   git clone https://github.com/ksong008/Sing-Box-ConfigurationEditor.git
    cd Sing-Box-ConfigurationEditor
    ```
 
