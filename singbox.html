@@ -622,7 +622,7 @@
                         <div class="space-y-3 max-h-[360px] overflow-y-auto pr-2" ref="ruleSetContainer">
                             <div v-for="(rs, idx) in ruleSets" :key="rs.id" class="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
                                 <input type="text" v-model="rs.tag" placeholder="标签(如 geosite-cn)" @change="onRuleSetTagChange(rs)" class="col-span-3 px-3 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-indigo-700 focus:bg-white focus:ring-1">
-                                <select v-model="rs.format" class="col-span-2 px-2 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
+                                <select v-model="rs.format" @change="onRuleSetFormatChange(rs)" class="col-span-2 px-2 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
                                     <option value="binary">binary</option>
                                     <option value="source">source</option>
                                 </select>
@@ -1290,7 +1290,7 @@ createApp({
         });
 
         const dnsList = ref([
-            { tag:'remote-dns', type:'tls',  server:'8.8.8.8',   detour:'节点选择', domain_resolver:'local-dns', inet4_range:'', inet6_range:'' },
+            { tag:'remote-dns', type:'https',  server:'dns.google',   detour:'节点选择', domain_resolver:'local-dns', inet4_range:'', inet6_range:'' },
             { tag:'local-dns',  type:'udp',  server:'223.5.5.5', detour:'',            domain_resolver:'', inet4_range:'', inet6_range:'' },
         ]);
         const addDns = () => dnsList.value.push({ tag:`dns-${dnsList.value.length+1}`, type:'udp', server:'', detour:'', domain_resolver:'', inet4_range:'', inet6_range:'' });
@@ -1472,15 +1472,39 @@ createApp({
         const getAllPossibleMembers  = (cur) => availableOutboundTags.value.filter(t=>t!==cur);
 
         const ruleSets = ref([
-            { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/google.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/netflix.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/telegram.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs', detour: 'direct' }
+            // ── 广告拦截 ──────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs', detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-ad',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/ad.srs',                 detour: 'direct' },
+            // ── YouTube（含于 geosite-google，单独加以便独立指定出站） ──
+            { id: generateId('rs'), tag: 'geosite-youtube',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs',          detour: 'direct' },
+            // ── AI 服务（合集，已含 OpenAI / Claude / Gemini 等） ────
+            { id: generateId('rs'), tag: 'geosite-category-ai-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ai-!cn.srs',  detour: 'direct' },
+            // ── Google（已含 YouTube / GooglePlay，不再单独加） ──────
+            { id: generateId('rs'), tag: 'geosite-google',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/google.srs',           detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-google',             format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/google.srs',             detour: 'direct' },
+            // ── 社交 ──────────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-telegram',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/telegram.srs',         detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-telegram',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/telegram.srs',           detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-twitter',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/twitter.srs',          detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-twitter',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/twitter.srs',            detour: 'direct' },
+            // ── 流媒体 ────────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-netflix',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/netflix.srs',          detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-netflix',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/netflix.srs',            detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-spotify',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/spotify.srs',          detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-proxymedia',       format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/proxymedia.srs',       detour: 'direct' },
+            // ── 开发 / 工具 ───────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-github',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/github.srs',           detour: 'direct' },
+            // ── Microsoft ────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-microsoft@cn',     format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft@cn.srs',     detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-microsoft',        format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs',        detour: 'direct' },
+            // ── Apple ─────────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-apple-cn',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple-cn.srs',         detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-apple',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple.srs',            detour: 'direct' },
+            // ── 中国直连 ─────────────────────────────────────────────
+            { id: generateId('rs'), tag: 'geosite-cn',               format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs',               detour: 'direct' },
+            { id: generateId('rs'), tag: 'geoip-cn',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs',                 detour: 'direct' },
+            // ── 兜底代理（非中国域名大合集） ─────────────────────────
+            { id: generateId('rs'), tag: 'geosite-geolocation-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs',  detour: 'direct' },
         ]);
 
         const addRuleSet = async () => {
@@ -1502,21 +1526,34 @@ createApp({
             
             if (type) {
                 let name = rs.tag.replace(/^(geosite|geoip|geostie|geosiet|geopi)-/i, '');
+                // 根据当前 format 决定文件后缀：source → .json，binary → .srs
+                const ext = rs.format === 'source' ? 'json' : 'srs';
                 rs.url = settings.value.rule_set_cdn
-                    ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${type}/${name}.srs`
-                    : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${type}/${name}.srs`;
-                rs.format = 'binary';
+                    ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${type}/${name}.${ext}`
+                    : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${type}/${name}.${ext}`;
+                // 不强制覆盖 format，尊重用户已选择的格式
             }
+        };
+
+        // 切换 format 时，自动将 URL 中已知 MetaCubeX 规则集的后缀同步更新
+        const onRuleSetFormatChange = (rs) => {
+            if (!rs.url.includes('MetaCubeX/meta-rules-dat')) return;
+            const match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.(srs|json)/);
+            if (!match) return;
+            const ext = rs.format === 'source' ? 'json' : 'srs';
+            rs.url = rs.url.replace(/\.(srs|json)$/, `.${ext}`);
         };
 
         watch(() => settings.value.rule_set_cdn, (useCdn) => {
             ruleSets.value.forEach(rs => {
                 if (rs.url.includes('MetaCubeX/meta-rules-dat')) {
-                    let match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.srs/);
+                    // 同时兼容 .srs（binary）和 .json（source）后缀
+                    let match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.(srs|json)/);
                     if (match) {
+                        const ext = rs.format === 'source' ? 'json' : 'srs';
                         rs.url = useCdn 
-                            ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${match[1]}/${match[2]}.srs`
-                            : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${match[1]}/${match[2]}.srs`;
+                            ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${match[1]}/${match[2]}.${ext}`
+                            : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${match[1]}/${match[2]}.${ext}`;
                     }
                 }
             });
@@ -1526,11 +1563,33 @@ createApp({
         });
 
         const routeRules = ref([
-            { id: generateId('r'), enabled:true,  name:'拦截广告',  tagsStr:'geosite-category-ads-all',          matchType:'rule_set', outbound:'__reject__', isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Google',    tagsStr:'geosite-google, geoip-google',      matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Netflix',   tagsStr:'geosite-netflix, geoip-netflix',    matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Telegram',  tagsStr:'geosite-telegram, geoip-telegram',  matchType:'rule_set', outbound:'节点选择', isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'中国直连',  tagsStr:'geosite-cn, geoip-cn',              matchType:'rule_set', outbound:'direct', isEditing: false, draggable: false }
+            // 1. 广告拦截：最高优先，拦截后不再匹配后续规则
+            { id: generateId('r'), enabled:true,  name:'拦截广告',      tagsStr:'geosite-category-ads-all,geoip-ad',             matchType:'rule_set', outbound:'__reject__', isEditing: false, draggable: false },
+            // 2. YouTube：单独分组便于指定特定节点（如解锁节点）
+            { id: generateId('r'), enabled:true,  name:'YouTube',       tagsStr:'geosite-youtube',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 3. AI 服务：需代理，早于 Google/geolocation-!cn 避免被兜底规则先命中
+            { id: generateId('r'), enabled:true,  name:'AI 服务',       tagsStr:'geosite-category-ai-!cn',                       matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 4. Google（含 YouTube / Play）+ IP
+            { id: generateId('r'), enabled:true,  name:'Google',        tagsStr:'geosite-google,geoip-google',                   matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 4. 社交媒体：Telegram 必须同时匹配域名+IP
+            { id: generateId('r'), enabled:true,  name:'Telegram',      tagsStr:'geosite-telegram,geoip-telegram',               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Twitter / X',   tagsStr:'geosite-twitter,geoip-twitter',                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 5. 流媒体
+            { id: generateId('r'), enabled:true,  name:'Netflix',       tagsStr:'geosite-netflix,geoip-netflix',                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Spotify',       tagsStr:'geosite-spotify',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'海外流媒体',    tagsStr:'geosite-proxymedia',                            matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 6. 开发工具
+            { id: generateId('r'), enabled:true,  name:'GitHub',        tagsStr:'geosite-github',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 7. Microsoft：@cn 直连须先于 microsoft 全集匹配
+            { id: generateId('r'), enabled:true,  name:'微软(国内)',    tagsStr:'geosite-microsoft@cn',                          matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'微软',          tagsStr:'geosite-microsoft',                             matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 8. Apple：apple-cn 直连须先于 apple 全集匹配
+            { id: generateId('r'), enabled:true,  name:'Apple(国内)',   tagsStr:'geosite-apple-cn',                              matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Apple',         tagsStr:'geosite-apple',                                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
+            // 9. 中国直连：在兜底代理之前，确保国内流量不走代理
+            { id: generateId('r'), enabled:true,  name:'中国直连',      tagsStr:'geosite-cn,geoip-cn',                           matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
+            // 10. 兜底代理：非中国域名大合集，最后匹配
+            { id: generateId('r'), enabled:true,  name:'境外兜底代理',  tagsStr:'geosite-geolocation-!cn',                       matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
         ]);
         
         const addCustomRule = () => routeRules.value.unshift({ id: generateId('r'), enabled:true, name:'自定义规则', tagsStr:'', isEditing:true, matchType:'rule_set', outbound:'direct', draggable: false });
@@ -2164,18 +2223,27 @@ ${ipv6Block}
                 routeArr.push(sniffRule);
             }
 
-            // 2. tproxy 模式：dns-in 收到的流量始终 hijack-dns（v1.11+ 新写法）
-            if(tproxy.value.enabled){
+            // 2. hijack-dns：必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
+            // tproxy 开启时，将 inbound:[dns-in] 与 protocol:dns 合并为一条 logical or 规则，避免冗余
+            if(tproxy.value.enabled && settings.value.hijack_dns){
+                routeArr.push({
+                    type:'logical', mode:'or',
+                    rules:[
+                        {inbound:['dns-in']},
+                        {protocol:'dns'}
+                    ],
+                    action:'hijack-dns'
+                });
+            } else if(tproxy.value.enabled){
                 routeArr.push({inbound:['dns-in'],action:'hijack-dns'});
+            } else if(settings.value.hijack_dns){
+                routeArr.push({protocol:'dns',action:'hijack-dns'});
             }
 
-            // 3. hijack-dns 必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
-            if(settings.value.hijack_dns)     routeArr.push({protocol:'dns',action:'hijack-dns'});
-
-            // 4. 私有 IP 直连
+            // 3. 私有 IP 直连
             if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
 
-            // 5. clash_mode 规则：放在系统规则之后、用户分流规则之前
+            // 4. clash_mode 规则：放在系统规则之后、用户分流规则之前
             // 面板切换 Global/Direct 时命中此规则，跳过后续所有分流直接出站
             if(clashApi.value.enabled){
                 const globalOutbound = settings.value.final_outbound || 'direct';
@@ -2589,7 +2657,7 @@ ${ipv6Block}
             nodes, addNode, removeNode, clearNodes, onNodeTypeChange,
             groups, addGroup, removeGroup, updateGroupTag, generateCountryGroups, getAllPossibleMembers, availableOutboundTags, duplicateOutboundTags, 
             draggedGroupIndex, dragOverGroupIndex, onGroupDragStart, onGroupDragEnter, onGroupDrop, onGroupDragEnd,
-            ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, 
+            ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, onRuleSetFormatChange,
             routeRules, addCustomRule, removeRule, toggleRuleSet,
             draggedRuleIndex, dragOverRuleIndex, onRuleDragStart, onRuleDragEnter, onRuleDrop, onRuleDragEnd,
             fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
