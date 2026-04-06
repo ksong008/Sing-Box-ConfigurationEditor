@@ -2148,11 +2148,7 @@ ${ipv6Block}
             }
 
             const routeArr=[];
-            // tproxy 模式：dns-in 收到的流量始终 hijack-dns（v1.11+ 新写法）
-            if(tproxy.value.enabled){
-                routeArr.push({inbound:['dns-in'],action:'hijack-dns'});
-            }
-            
+
             const rsArr = ruleSets.value.filter(rs => rs.tag && rs.url).map(rs => ({
                 tag: rs.tag,
                 type: 'remote',
@@ -2161,16 +2157,25 @@ ${ipv6Block}
                 download_detour: rs.detour || 'direct'
             }));
 
-            // hijack-dns 必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
-            if(settings.value.hijack_dns)     routeArr.push({protocol:'dns',action:'hijack-dns'});
-            if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
+            // 1. sniff 必须最先：action 型规则，为后续所有匹配规则提供协议/域名信息
             if(settings.value.sniff_enabled){
                 const sniffRule={action:'sniff'};
                 if(settings.value.sniff_timeout) sniffRule.timeout=settings.value.sniff_timeout;
                 routeArr.push(sniffRule);
             }
 
-            // clash_mode 规则：放在系统规则之后、用户分流规则之前
+            // 2. tproxy 模式：dns-in 收到的流量始终 hijack-dns（v1.11+ 新写法）
+            if(tproxy.value.enabled){
+                routeArr.push({inbound:['dns-in'],action:'hijack-dns'});
+            }
+
+            // 3. hijack-dns 必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
+            if(settings.value.hijack_dns)     routeArr.push({protocol:'dns',action:'hijack-dns'});
+
+            // 4. 私有 IP 直连
+            if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
+
+            // 5. clash_mode 规则：放在系统规则之后、用户分流规则之前
             // 面板切换 Global/Direct 时命中此规则，跳过后续所有分流直接出站
             if(clashApi.value.enabled){
                 const globalOutbound = settings.value.final_outbound || 'direct';
