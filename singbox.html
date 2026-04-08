@@ -2721,7 +2721,7 @@ ${ipv6Block}
         };
 
         const STORAGE_KEY = 'singbox_backup_v1_12';
-        const STORAGE_TTL_DAYS = 7; 
+        const STORAGE_TTL_DAYS = 1; // 本地缓存有效期（天）
         const lastSavedAt = ref(null);
 
         const resetConfig = () => {
