@@ -60,9 +60,9 @@
             box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
             outline: none !important;
         }
-        [type='checkbox'] { border-color: #d1d5db !important; transition: background-color 0.2s, border-color 0.2s; }
-        [type='checkbox']:focus { box-shadow: none !important; outline: none !important; }
-        [type='checkbox']:checked { background-color: #4f46e5 !important; border-color: #4f46e5 !important; }
+        [type='checkbox'], [type='radio'] { border-color: #d1d5db !important; transition: background-color 0.2s, border-color 0.2s; }
+        [type='checkbox']:focus, [type='radio']:focus { box-shadow: none !important; outline: none !important; }
+        [type='checkbox']:checked, [type='radio']:checked { background-color: #4f46e5 !important; border-color: #4f46e5 !important; }
 
         /* Toast 通知 */
         #toast-container { position:fixed; top:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
@@ -734,35 +734,111 @@
                                     </div>
                                 </div>
                                 
-                                <div v-if="rule.enabled" class="mt-4 pl-[2.75rem] flex items-center gap-3">
-                                    <select v-model="rule.matchType" :disabled="!rule.isEditing" class="px-3 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none bg-white disabled:bg-gray-100 disabled:text-gray-500 disabled:opacity-80 w-[130px] shadow-sm">
-                                        <option value="rule_set">rule_set</option><option value="domain">domain</option><option value="domain_suffix">domain_suffix</option>
-                                        <option value="domain_keyword">domain_keyword</option><option value="domain_regex">domain_regex</option>
-                                        <option value="ip_cidr">ip_cidr</option><option value="port">port</option>
-                                        <option value="port_range">port_range</option><option value="protocol">protocol</option>
-                                        <option value="network">network (tcp/udp)</option><option value="process_name">process_name</option>
-                                        <option value="geoip">geoip (旧版)</option><option value="source_ip_cidr">source_ip_cidr</option>
-                                    </select>
+                                <div v-if="rule.enabled" class="mt-4 pl-[2.75rem] flex items-start gap-3">
                                     <template v-if="rule.isEditing">
-                                        <div class="flex-1 flex flex-col gap-2">
-                                            <input type="text" v-model="rule.tagsStr" :placeholder="rule.matchType==='rule_set'?'可直接编辑，或点击下方规则集快速添加/移除':'值1, 值2'" class="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-100 shadow-sm text-gray-700">
-                                            <div v-if="rule.matchType==='rule_set'" class="flex flex-wrap gap-1.5">
-                                                <button v-for="rs in ruleSets" :key="rs.id"
-                                                    @click="toggleRuleSet(rule, rs.tag)"
-                                                    :class="rule.tagsStr.split(',').map(s=>s.trim()).includes(rs.tag)
-                                                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
-                                                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'"
-                                                    class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-all cursor-pointer select-none">
-                                                    <i :class="rule.tagsStr.split(',').map(s=>s.trim()).includes(rs.tag) ? 'fas fa-check-circle' : 'far fa-circle'" class="text-[10px]"></i>
-                                                    {{ rs.tag }}
+                                        <div class="flex-1 flex flex-col gap-3">
+                                            <div class="flex flex-col gap-1.5">
+                                                <div class="flex items-center gap-4 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100" :class="{'opacity-60 grayscale': rule.conditions.length < 2}">
+                                                    <span class="text-xs font-bold text-indigo-800"><i class="fas fa-code-branch mr-1.5"></i>规则逻辑:</span>
+                                                    <label class="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                        <input type="radio" v-model="rule.mode" value="and" :disabled="rule.conditions.length < 2" class="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                        全部满足 (AND)
+                                                    </label>
+                                                    <label class="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                        <input type="radio" v-model="rule.mode" value="or" :disabled="rule.conditions.length < 2" class="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                                                        满足任一 (OR)
+                                                    </label>
+                                                    <div class="w-px h-3.5 bg-gray-300 mx-1"></div>
+                                                    <label class="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 hover:text-red-500 transition-colors">
+                                                        <input type="checkbox" v-model="rule.invert" class="w-3.5 h-3.5 rounded text-red-500 focus:ring-red-500">
+                                                        <span :class="rule.invert ? 'text-red-600 font-bold' : ''">取反 (NOT)</span>
+                                                    </label>
+                                                </div>
+                                                <div v-if="rule.conditions.length < 2" class="text-[10px] text-gray-400 font-medium pl-1">
+                                                    * 提示：当前仅 1 行条件（框内逗号分隔天然为"或"关系，性能更优）。需点击下方"添加条件"增加到 2 行以上方可组合。
+                                                </div>
+                                            </div>
+                                    
+                                            <div class="space-y-2">
+                                                <div v-for="(cond, cIdx) in rule.conditions" :key="cIdx" class="flex flex-col gap-1.5 p-2 bg-white border border-gray-200 rounded-lg shadow-sm relative pr-10">
+                                                    <button @click="rule.conditions.splice(cIdx, 1)" class="absolute top-2 right-2 w-7 h-7 flex items-center justify-center text-red-400 hover:text-white hover:bg-red-500 rounded-md transition-colors"><i class="fas fa-times text-xs"></i></button>
+                                                    <div class="flex items-center gap-2">
+                                                        <select v-model="cond.type" class="px-3 py-1.5 text-xs font-bold border border-gray-300 rounded-md outline-none bg-gray-50 text-gray-700 shadow-sm w-[130px]">
+                                                            <optgroup label="域名与规则集">
+                                                                <option value="rule_set">rule_set</option>
+                                                                <option value="domain_suffix">domain_suffix</option>
+                                                                <option value="domain_keyword">domain_keyword</option>
+                                                                <option value="domain">domain</option>
+                                                                <option value="domain_regex">domain_regex</option>
+                                                            </optgroup>
+                                                            <optgroup label="IP 与网络">
+                                                                <option value="network">network (tcp/udp)</option>
+                                                                <option value="port">port</option>
+                                                                <option value="port_range">port_range</option>
+                                                                <option value="ip_cidr">ip_cidr</option>
+                                                                <option value="source_ip_cidr">source_ip_cidr</option>
+                                                            </optgroup>
+                                                            <optgroup label="协议与应用">
+                                                                <option value="protocol">protocol</option>
+                                                                <option value="process_name">process_name</option>
+                                                                <option value="geoip">geoip (旧版)</option>
+                                                                <option value="inbound">inbound</option>
+                                                            </optgroup>
+                                                        </select>
+                                        
+                                                        <div v-if="cond.type === 'network'" class="flex-1 flex items-center gap-5 px-3 py-1.5 bg-white border border-indigo-300 rounded-md shadow-sm min-h-[34px]">
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('tcp')" @change="toggleRuleSetCond(cond, 'tcp')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                TCP
+                                                            </label>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('udp')" @change="toggleRuleSetCond(cond, 'udp')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                UDP
+                                                            </label>
+                                                        </div>
+                                                        <input v-else type="text" v-model="cond.value" placeholder="值 (多个用逗号分隔)" class="flex-1 px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
+                                                    </div>
+                                                    
+                                                    <div v-if="cond.type === 'rule_set'" class="flex flex-wrap gap-1.5 mt-1">
+                                                        <button v-for="rs in ruleSets" :key="rs.id"
+                                                            @click="toggleRuleSetCond(cond, rs.tag)"
+                                                            :class="cond.value.split(',').map(s=>s.trim()).includes(rs.tag)
+                                                                ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                                                                : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'"
+                                                            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer select-none">
+                                                            <i :class="cond.value.split(',').map(s=>s.trim()).includes(rs.tag) ? 'fas fa-check-circle' : 'far fa-circle'"></i>
+                                                            {{ rs.tag }}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                    
+                                            <div class="flex items-center mt-1">
+                                                <button @click="rule.conditions.push({type: 'domain_suffix', value: ''})" class="text-xs font-bold bg-white text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-lg hover:bg-indigo-50 shadow-sm transition-colors">
+                                                    <i class="fas fa-plus mr-1"></i>添加条件
+                                                </button>
+                                                <button @click="rule.isEditing=false" class="text-xs font-bold bg-emerald-500 text-white px-5 py-1.5 rounded-lg hover:bg-emerald-600 shadow-sm transition-colors ml-auto">
+                                                    <i class="fas fa-check mr-1.5"></i>完成编辑
                                                 </button>
                                             </div>
                                         </div>
-                                        <button @click="rule.isEditing=false" class="text-sm font-bold bg-emerald-500 text-white px-5 py-2 rounded-lg hover:bg-emerald-600 shrink-0 shadow-md transition-colors self-start"><i class="fas fa-check mr-1.5"></i>保存</button>
                                     </template>
                                     <template v-else>
-                                        <div class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono text-gray-500 truncate shadow-inner" :title="rule.tagsStr">{{ rule.tagsStr||'（未填写匹配条件）' }}</div>
-                                        <button @click="rule.isEditing=true" class="text-sm font-bold bg-white text-indigo-600 border border-indigo-200 px-5 py-2 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 shrink-0 shadow-sm transition-colors"><i class="fas fa-edit mr-1.5"></i>编辑匹配项</button>
+                                        <div class="flex-1 flex flex-wrap gap-2 items-center px-3 py-2 bg-white border border-gray-200 rounded-lg shadow-inner min-h-[36px]">
+                                            <span v-if="rule.invert" class="text-[10px] font-black text-red-500 border border-red-200 bg-red-50 px-1.5 py-0.5 rounded shadow-sm">NOT</span>
+                                            <span v-if="rule.mode === 'or' && rule.conditions.length > 1" class="text-[10px] font-black text-amber-600 border border-amber-200 bg-amber-50 px-1.5 py-0.5 rounded shadow-sm">OR</span>
+                                            <span v-if="rule.mode === 'and' && rule.conditions.length > 1" class="text-[10px] font-black text-blue-600 border border-blue-200 bg-blue-50 px-1.5 py-0.5 rounded shadow-sm">AND</span>
+                                            
+                                            <template v-for="(cond, cIdx) in rule.conditions" :key="cIdx">
+                                                <span v-if="cIdx > 0" class="text-[10px] font-bold text-gray-400">{{ rule.mode === 'or' ? '或' : '且' }}</span>
+                                                <div class="flex items-center text-xs font-mono text-gray-600 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 max-w-[200px] shadow-sm">
+                                                    <span class="font-bold text-gray-500 mr-1.5">{{ cond.type }}:</span>
+                                                    <span class="truncate" :title="cond.value">{{ cond.value || '...' }}</span>
+                                                </div>
+                                            </template>
+                                            <span v-if="!rule.conditions.length" class="text-xs text-gray-400 italic">（未配置任何条件）</span>
+                                        </div>
+                                        <button @click="rule.isEditing=true" class="text-sm font-bold bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 shrink-0 shadow-sm transition-colors"><i class="fas fa-edit"></i></button>
                                     </template>
                                 </div>
                             </div>
@@ -791,7 +867,6 @@
                                 <i class="fas fa-exclamation-triangle mr-1.5"></i>注意 v1.12 格式使用 <code>address</code> 数组，旧版的 <code>inet4_address</code> 参数已废弃。
                             </p>
 
-                            <!-- 基础参数 -->
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">接口名称</label>
@@ -821,7 +896,6 @@
                                 </div>
                             </div>
 
-                            <!-- 选项开关 -->
                             <div class="grid grid-cols-2 gap-3">
                                 <label v-for="opt in tunOpts" :key="opt.key"
                                     class="flex items-center gap-3 p-3 rounded-lg border transition-colors bg-gray-50 border-gray-200 hover:border-purple-300 cursor-pointer">
@@ -833,7 +907,6 @@
                                 </label>
                             </div>
 
-                            <!-- auto_detect_interface 可手动勾选 -->
                             <label class="flex items-center gap-3 cursor-pointer px-4 py-3 rounded-xl border transition-colors"
                                    :class="settings.auto_detect_interface ? 'bg-teal-50 border-teal-200 hover:border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-teal-300'">
                                 <input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-teal-600 rounded shrink-0">
@@ -846,7 +919,6 @@
                                 </div>
                             </label>
 
-                            <!-- 非默认网关模式 -->
                             <div class="border-t border-dashed border-amber-200 pt-4">
                                 <label class="flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 transition-all"
                                        :class="tun.non_gateway_mode ? 'border-amber-400 bg-amber-50' : 'border-gray-200 bg-gray-50 hover:border-amber-300'">
@@ -893,7 +965,6 @@
 
                 <div v-show="currentTab==='advanced'" class="space-y-5">
 
-                    <!-- ══ Clash API ══ -->
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                             <div class="flex items-center gap-2">
@@ -952,7 +1023,6 @@
                         </div>
                     </div>
 
-                    <!-- ══ NTP ══ -->
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                             <div class="stitle mb-0">NTP 时间同步</div>
@@ -997,7 +1067,6 @@
                                 内核需支持 <code class="bg-blue-100 px-1 rounded">CONFIG_NETFILTER_XT_TARGET_TPROXY</code>。
                             </div>
 
-                            <!-- 冲突警告实时显示 -->
                             <div v-if="tproxyConflicts.length > 0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
                                 <p class="text-xs font-extrabold text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>检测到 {{ tproxyConflicts.length }} 个配置冲突</p>
                                 <div v-for="c in tproxyConflicts" :key="c.key" class="flex items-center justify-between py-1.5 border-b border-red-200 last:border-0">
@@ -1236,14 +1305,13 @@ createApp({
             bypass_private: true,
             nft_table: 'singbox',
             mark: '0x01',
-            uid: 'sing-box',                    // sing-box 运行用户，用于跳过自身流量
+            uid: 'sing-box',
             ipv6: false,
-            udp_fragment: true,                 // 是否允许 UDP 分片（QUIC/Hysteria2 必需）
-            dns_port: 1053,                     // sing-box dns-in 监听端口（接收 nft DNAT 过来的 DNS 请求）
-            iface: 'eth0',                      // 局域网网卡（用于局域网透明代理）
+            udp_fragment: true,
+            dns_port: 1053,
+            iface: 'eth0',
         });
 
-        // TProxy 与 TUN/DNS 冲突检测：开启 tproxy 时检测并提示处理冲突项
         const tproxyConflicts = computed(() => {
             if (!tproxy.value.enabled) return [];
             const conflicts = [];
@@ -1286,13 +1354,11 @@ createApp({
             return conflicts;
         });
 
-        // 显示冲突弹窗的函数
         const showTproxyConflictModal = (conflicts) => {
             const overlay = document.createElement('div');
             overlay.className = 'modal-overlay';
             overlay.style.zIndex = '2000';
 
-            // 追踪已修复数量，全部修复后按钮自动变为"完成"
             let fixedCount = 0;
             const total = conflicts.length;
 
@@ -1355,13 +1421,11 @@ createApp({
                 if (doneBtn) doneBtn.onclick = () => overlay.remove();
             };
 
-            // 绑定各个修复按钮
             overlay.querySelectorAll('.fix-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.fix);
                     conflicts[idx].fix();
                     fixedCount++;
-                    // 将该冲突项变为"已修复"样式
                     const item = document.getElementById(`conflict-item-${idx}`);
                     if (item) {
                         item.style.background = '#f0fdf4';
@@ -1376,12 +1440,10 @@ createApp({
             });
 
             bindFooterButtons();
-            // 点击蒙层外部不关闭（防止误触取消）
         };
 
         watch(() => tproxy.value.enabled, (newVal) => {
             if (newVal) {
-                // 使用 nextTick 确保响应式数据已更新
                 Vue.nextTick(() => {
                     const conflicts = tproxyConflicts.value;
                     if (conflicts.length > 0) {
@@ -1433,15 +1495,10 @@ createApp({
             const el = document.getElementById(`node-card-${newIdx}`);
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // 短暂高亮新节点卡片，引导用户视线
                 el.style.transition = 'box-shadow 0.2s, border-color 0.2s';
                 el.style.borderColor = '#6366f1';
                 el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.25)';
-                setTimeout(() => {
-                    el.style.borderColor = '';
-                    el.style.boxShadow = '';
-                }, 1800);
-                // 聚焦节点名称输入框，可立即键入
+                setTimeout(() => { el.style.borderColor = ''; el.style.boxShadow = ''; }, 1800);
                 const nameInput = el.querySelector('input[type="text"]');
                 if (nameInput) setTimeout(() => nameInput.focus(), 300);
             }
@@ -1574,38 +1631,27 @@ createApp({
         const getAllPossibleMembers  = (cur) => availableOutboundTags.value.filter(t=>t!==cur);
 
         const ruleSets = ref([
-            // ── 广告拦截 ──────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs', detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-ad',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/ad.srs',                 detour: 'direct' },
-            // ── YouTube（含于 geosite-google，单独加以便独立指定出站） ──
             { id: generateId('rs'), tag: 'geosite-youtube',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs',          detour: 'direct' },
-            // ── AI 服务（合集，已含 OpenAI / Claude / Gemini 等） ────
             { id: generateId('rs'), tag: 'geosite-category-ai-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ai-!cn.srs',  detour: 'direct' },
-            // ── Google（已含 YouTube / GooglePlay，不再单独加） ──────
             { id: generateId('rs'), tag: 'geosite-google',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/google.srs',           detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-google',             format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/google.srs',             detour: 'direct' },
-            // ── 社交 ──────────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-telegram',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/telegram.srs',         detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-telegram',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/telegram.srs',           detour: 'direct' },
             { id: generateId('rs'), tag: 'geosite-twitter',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/twitter.srs',          detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-twitter',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/twitter.srs',            detour: 'direct' },
-            // ── 流媒体 ────────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-netflix',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/netflix.srs',          detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-netflix',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/netflix.srs',            detour: 'direct' },
             { id: generateId('rs'), tag: 'geosite-spotify',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/spotify.srs',          detour: 'direct' },
             { id: generateId('rs'), tag: 'geosite-proxymedia',       format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo-lite/geosite/proxymedia.srs',       detour: 'direct' },
-            // ── 开发 / 工具 ───────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-github',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/github.srs',           detour: 'direct' },
-            // ── Microsoft ────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-microsoft@cn',     format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft@cn.srs',     detour: 'direct' },
             { id: generateId('rs'), tag: 'geosite-microsoft',        format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs',        detour: 'direct' },
-            // ── Apple ─────────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-apple-cn',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple-cn.srs',         detour: 'direct' },
             { id: generateId('rs'), tag: 'geosite-apple',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple.srs',            detour: 'direct' },
-            // ── 中国直连 ─────────────────────────────────────────────
             { id: generateId('rs'), tag: 'geosite-cn',               format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs',               detour: 'direct' },
             { id: generateId('rs'), tag: 'geoip-cn',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs',                 detour: 'direct' },
-            // ── 兜底代理（非中国域名大合集） ─────────────────────────
             { id: generateId('rs'), tag: 'geosite-geolocation-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs',  detour: 'direct' },
         ]);
 
@@ -1628,16 +1674,13 @@ createApp({
             
             if (type) {
                 let name = rs.tag.replace(/^(geosite|geoip|geostie|geosiet|geopi)-/i, '');
-                // 根据当前 format 决定文件后缀：source → .json，binary → .srs
                 const ext = rs.format === 'source' ? 'json' : 'srs';
                 rs.url = settings.value.rule_set_cdn
                     ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${type}/${name}.${ext}`
                     : `https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/${type}/${name}.${ext}`;
-                // 不强制覆盖 format，尊重用户已选择的格式
             }
         };
 
-        // 切换 format 时，自动将 URL 中已知 MetaCubeX 规则集的后缀同步更新
         const onRuleSetFormatChange = (rs) => {
             if (!rs.url.includes('MetaCubeX/meta-rules-dat')) return;
             const match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.(srs|json)/);
@@ -1649,7 +1692,6 @@ createApp({
         watch(() => settings.value.rule_set_cdn, (useCdn) => {
             ruleSets.value.forEach(rs => {
                 if (rs.url.includes('MetaCubeX/meta-rules-dat')) {
-                    // 同时兼容 .srs（binary）和 .json（source）后缀
                     let match = rs.url.match(/geo\/(geoip|geosite)\/(.+)\.(srs|json)/);
                     if (match) {
                         const ext = rs.format === 'source' ? 'json' : 'srs';
@@ -1664,65 +1706,60 @@ createApp({
             ruleSets.value.forEach(rs => rs.detour = newDetour);
         });
 
-        const routeRules = ref([
-            // 1. 广告拦截：最高优先，拦截后不再匹配后续规则
-            { id: generateId('r'), enabled:true,  name:'拦截广告',      tagsStr:'geosite-category-ads-all,geoip-ad',             matchType:'rule_set', outbound:'__reject__', isEditing: false, draggable: false },
-            // 2. YouTube：单独分组便于指定特定节点（如解锁节点）
-            { id: generateId('r'), enabled:true,  name:'YouTube',       tagsStr:'geosite-youtube',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 3. AI 服务：需代理，早于 Google/geolocation-!cn 避免被兜底规则先命中
-            { id: generateId('r'), enabled:true,  name:'AI 服务',       tagsStr:'geosite-category-ai-!cn',                       matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 4. Google（含 YouTube / Play）+ IP
-            { id: generateId('r'), enabled:true,  name:'Google',        tagsStr:'geosite-google,geoip-google',                   matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 4. 社交媒体：Telegram 必须同时匹配域名+IP
-            { id: generateId('r'), enabled:true,  name:'Telegram',      tagsStr:'geosite-telegram,geoip-telegram',               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Twitter / X',   tagsStr:'geosite-twitter,geoip-twitter',                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 5. 流媒体
-            { id: generateId('r'), enabled:true,  name:'Netflix',       tagsStr:'geosite-netflix,geoip-netflix',                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Spotify',       tagsStr:'geosite-spotify',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'海外流媒体',    tagsStr:'geosite-proxymedia',                            matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 6. 开发工具
-            { id: generateId('r'), enabled:true,  name:'GitHub',        tagsStr:'geosite-github',                               matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 7. Microsoft：@cn 直连须先于 microsoft 全集匹配
-            { id: generateId('r'), enabled:true,  name:'微软(国内)',    tagsStr:'geosite-microsoft@cn',                          matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'微软',          tagsStr:'geosite-microsoft',                             matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 8. Apple：apple-cn 直连须先于 apple 全集匹配
-            { id: generateId('r'), enabled:true,  name:'Apple(国内)',   tagsStr:'geosite-apple-cn',                              matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
-            { id: generateId('r'), enabled:true,  name:'Apple',         tagsStr:'geosite-apple',                                 matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-            // 9. 中国直连：在兜底代理之前，确保国内流量不走代理
-            { id: generateId('r'), enabled:true,  name:'中国直连',      tagsStr:'geosite-cn,geoip-cn',                           matchType:'rule_set', outbound:'direct',     isEditing: false, draggable: false },
-            // 10. 兜底代理：非中国域名大合集，最后匹配
-            { id: generateId('r'), enabled:true,  name:'境外兜底代理',  tagsStr:'geosite-geolocation-!cn',                       matchType:'rule_set', outbound:'节点选择',   isEditing: false, draggable: false },
-        ]);
+        // ================= 路由规则逻辑重构 =================
+        const migrateRule = (r) => {
+            if (r.conditions) return r; // 已经是新格式
+            const conds = [];
+            if (r.tagsStr) {
+                conds.push({ type: r.matchType || 'rule_set', value: r.tagsStr });
+            }
+            return {
+                ...r,
+                mode: 'and',
+                invert: false,
+                conditions: conds.length ? conds : [{ type: 'rule_set', value: '' }]
+            };
+        };
+
+        const defaultRouteRules = [
+            { id: generateId('r'), enabled:true,  name:'拦截广告',      conditions:[{type:'rule_set', value:'geosite-category-ads-all,geoip-ad'}], mode:'or', invert:false, outbound:'__reject__', isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'YouTube',       conditions:[{type:'rule_set', value:'geosite-youtube'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'AI 服务',       conditions:[{type:'rule_set', value:'geosite-category-ai-!cn'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Google',        conditions:[{type:'rule_set', value:'geosite-google,geoip-google'}], mode:'or', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Telegram',      conditions:[{type:'rule_set', value:'geosite-telegram,geoip-telegram'}], mode:'or', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Twitter / X',   conditions:[{type:'rule_set', value:'geosite-twitter,geoip-twitter'}], mode:'or', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Netflix',       conditions:[{type:'rule_set', value:'geosite-netflix,geoip-netflix'}], mode:'or', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Spotify',       conditions:[{type:'rule_set', value:'geosite-spotify'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'海外流媒体',    conditions:[{type:'rule_set', value:'geosite-proxymedia'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'GitHub',        conditions:[{type:'rule_set', value:'geosite-github'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'微软(国内)',    conditions:[{type:'rule_set', value:'geosite-microsoft@cn'}], mode:'and', invert:false, outbound:'direct',     isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'微软',          conditions:[{type:'rule_set', value:'geosite-microsoft'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Apple(国内)',   conditions:[{type:'rule_set', value:'geosite-apple-cn'}], mode:'and', invert:false, outbound:'direct',     isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'Apple',         conditions:[{type:'rule_set', value:'geosite-apple'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'中国直连',      conditions:[{type:'rule_set', value:'geosite-cn,geoip-cn'}], mode:'or', invert:false, outbound:'direct',     isEditing: false, draggable: false },
+            { id: generateId('r'), enabled:true,  name:'境外兜底代理',  conditions:[{type:'rule_set', value:'geosite-geolocation-!cn'}], mode:'and', invert:false, outbound:'节点选择',   isEditing: false, draggable: false },
+        ];
+        const routeRules = ref(defaultRouteRules.map(migrateRule));
         
-        const addCustomRule = () => routeRules.value.unshift({ id: generateId('r'), enabled:true, name:'自定义规则', tagsStr:'', isEditing:true, matchType:'rule_set', outbound:'direct', draggable: false });
+        const addCustomRule = () => routeRules.value.unshift({ 
+            id: generateId('r'), enabled:true, name:'自定义规则', mode: 'and', invert: false,
+            conditions: [{type: 'domain_suffix', value: ''}], isEditing:true, outbound:'direct', draggable: false 
+        });
         const removeRule    = (i) => { showConfirm('确定要删除此路由规则吗？', ()=>routeRules.value.splice(i,1), {title:'删除路由规则', okText:'删除'}); };
 
-        // 点击规则集 tag 切换选中/取消状态
-        const toggleRuleSet = (rule, tag) => {
-            let tags = rule.tagsStr ? rule.tagsStr.split(',').map(s=>s.trim()).filter(Boolean) : [];
+        const toggleRuleSetCond = (cond, tag) => {
+            let tags = cond.value ? cond.value.split(',').map(s=>s.trim()).filter(Boolean) : [];
             const idx = tags.indexOf(tag);
             if (idx === -1) tags.push(tag);
             else tags.splice(idx, 1);
-            rule.tagsStr = tags.join(', ');
+            cond.value = tags.join(', ');
         };
 
-        // 路由规则拖拽排序逻辑
         const draggedRuleIndex = ref(null);
         const dragOverRuleIndex = ref(null);
-        const onRuleDragStart = (idx, e) => {
-            draggedRuleIndex.value = idx;
-            e.dataTransfer.effectAllowed = 'move';
-        };
-        const onRuleDragEnter = (idx) => {
-            if (draggedRuleIndex.value !== null) {
-                dragOverRuleIndex.value = idx;
-            }
-        };
-        const onRuleDragEnd = () => {
-            draggedRuleIndex.value = null;
-            dragOverRuleIndex.value = null;
-            routeRules.value.forEach(r => r.draggable = false);
-        };
+        const onRuleDragStart = (idx, e) => { draggedRuleIndex.value = idx; e.dataTransfer.effectAllowed = 'move'; };
+        const onRuleDragEnter = (idx) => { if (draggedRuleIndex.value !== null) dragOverRuleIndex.value = idx; };
+        const onRuleDragEnd = () => { draggedRuleIndex.value = null; dragOverRuleIndex.value = null; routeRules.value.forEach(r => r.draggable = false); };
         const onRuleDrop = (idx) => {
             const from = draggedRuleIndex.value;
             if (from !== null && from !== idx) {
@@ -1947,7 +1984,6 @@ createApp({
             else { showToast(`本地解析成功，导入 ${c} 个节点`,'ok'); rawPastedText.value=''; }
         };
 
-
         // NFTables 规则生成
         const generatedNft = computed(() => {
             if (!tproxy.value.enabled) return '';
@@ -1957,50 +1993,29 @@ createApp({
             const tport = listen_port || 7893;
             const dnsPort = dns_port || 1053;
 
-            // ── 动态计算 bypass 列表：所有私有/保留段，但排除当前 Fake-IP 段 ──────
-            // Fake-IP 段（默认 198.18.0.0/15）必须进入 tproxy，不能被 bypass
             const ALL_PRIVATE_RANGES4 = [
                 '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10',
                 '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
                 '192.0.0.0/24', '192.168.0.0/16',
-                '198.18.0.0/15',   // 可能被 Fake-IP 占用，动态判断是否排除
+                '198.18.0.0/15',
                 '198.51.100.0/24', '203.0.113.0/24',
                 '224.0.0.0/4', '240.0.0.0/4', '255.255.255.255/32'
             ];
-            // 从 fakeip 配置中读取当前 Fake-IP IPv4 段（支持自定义修改）
-            const fakeip4Range = (fakeip.value.enabled && fakeip.value.inet4_range)
-                ? fakeip.value.inet4_range.trim()
-                : '198.18.0.0/15';  // fakeip 未启用时也保守排除默认段，避免误 bypass
-            const fakeip6Range = (fakeip.value.enabled && fakeip.value.inet6_range)
-                ? fakeip.value.inet6_range.trim()
-                : '';
+            const fakeip4Range = (fakeip.value.enabled && fakeip.value.inet4_range) ? fakeip.value.inet4_range.trim() : '198.18.0.0/15';
+            const fakeip6Range = (fakeip.value.enabled && fakeip.value.inet6_range) ? fakeip.value.inet6_range.trim() : '';
 
             const privateRanges4 = ALL_PRIVATE_RANGES4.filter(r => r !== fakeip4Range);
-
             const ALL_PRIVATE_RANGES6 = ['::1/128', 'fc00::/7', 'fe80::/10', 'ff00::/8', '100::/64'];
-            const privateRanges6 = fakeip6Range
-                ? ALL_PRIVATE_RANGES6.filter(r => r !== fakeip6Range)
-                : ALL_PRIVATE_RANGES6;
+            const privateRanges6 = fakeip6Range ? ALL_PRIVATE_RANGES6.filter(r => r !== fakeip6Range) : ALL_PRIVATE_RANGES6;
 
-            // 跳过 sing-box 自身：output 链用 skuid（精确），无 uid 时降级用 mark
-            const skipSelfOutput = uid
-                ? `meta skuid "${uid}" return`
-                : `meta mark ${markHex} return`;
-            // DNS output nat 链跳过自身（写法相同）
-            const skipSelfDnsOutput = uid
-                ? `meta skuid "${uid}" return`
-                : `meta mark ${markHex} return`;
+            const skipSelfOutput = uid ? `meta skuid "${uid}" return` : `meta mark ${markHex} return`;
+            const skipSelfDnsOutput = uid ? `meta skuid "${uid}" return` : `meta mark ${markHex} return`;
 
-            const bypassPrivate4 = bypass_private
-                ? `ip daddr { ${privateRanges4.join(', ')} } return`
-                : '';
-            const bypassPrivate6 = (bypass_private && ipv6)
-                ? `ip6 daddr { ${privateRanges6.join(', ')} } return`
-                : '';
+            const bypassPrivate4 = bypass_private ? `ip daddr { ${privateRanges4.join(', ')} } return` : '';
+            const bypassPrivate6 = (bypass_private && ipv6) ? `ip6 daddr { ${privateRanges6.join(', ')} } return` : '';
 
             const ifaceName = iface || 'eth0';
 
-            // 构建各链内容，注释统一放规则上方，不使用行尾注释和反斜杠续行
             const ipv6Block = ipv6 ? `
 
     # ════════════════════════════════════════════════════════════════
@@ -2170,14 +2185,13 @@ ${ipv6Block}
 # 验证：  ss -tlnp | grep ${tport}  &&  ss -ulnp | grep ${dnsPort}
 `;
         });
+        
         const generatedJson = computed(() => {
-            // 出站 tag 重名校验
             const allTags = [...groups.value.map(g=>g.tag), ...nodes.value.map(n=>n.tag)];
             const tagCount = {};
             allTags.forEach(t => tagCount[t] = (tagCount[t]||0)+1);
             const dupTags = Object.keys(tagCount).filter(t => tagCount[t] > 1);
             if (dupTags.length > 0) {
-                // 仅 console.warn，不阻断生成
                 console.warn('[sing-box] 出站 tag 重名，sing-box 将拒绝启动:', dupTags);
             }
             let outbounds=[];
@@ -2318,35 +2332,22 @@ ${ipv6Block}
                 download_detour: rs.detour || 'direct'
             }));
 
-            // 1. sniff 必须最先：action 型规则，为后续所有匹配规则提供协议/域名信息
             if(settings.value.sniff_enabled){
                 const sniffRule={action:'sniff'};
                 if(settings.value.sniff_timeout) sniffRule.timeout=settings.value.sniff_timeout;
                 routeArr.push(sniffRule);
             }
 
-            // 2. hijack-dns：必须在 ip_is_private 之前，否则私有IP的DNS查询会被直连而非劫持
-            // tproxy 开启时，将 inbound:[dns-in] 与 protocol:dns 合并为一条 logical or 规则，避免冗余
             if(tproxy.value.enabled && settings.value.hijack_dns){
-                routeArr.push({
-                    type:'logical', mode:'or',
-                    rules:[
-                        {inbound:['dns-in']},
-                        {protocol:'dns'}
-                    ],
-                    action:'hijack-dns'
-                });
+                routeArr.push({ type:'logical', mode:'or', rules:[ {inbound:['dns-in']}, {protocol:'dns'} ], action:'hijack-dns' });
             } else if(tproxy.value.enabled){
                 routeArr.push({inbound:['dns-in'],action:'hijack-dns'});
             } else if(settings.value.hijack_dns){
                 routeArr.push({protocol:'dns',action:'hijack-dns'});
             }
 
-            // 3. 私有 IP 直连
             if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
 
-            // 4. clash_mode 规则：放在系统规则之后、用户分流规则之前
-            // 面板切换 Global/Direct 时命中此规则，跳过后续所有分流直接出站
             if(clashApi.value.enabled){
                 const globalOutbound = settings.value.final_outbound || 'direct';
                 routeArr.push(
@@ -2355,50 +2356,85 @@ ${ipv6Block}
                 );
             }
 
-            routeRules.value.filter(r=>r.enabled).forEach(r=>{
-                const tags=(r.tagsStr||'').split(',').map(s=>s.trim()).filter(s=>s);
-                if(!tags.length)return;
-                const o={}, mt=r.matchType||'rule_set';
-                if(mt==='rule_set'){
-                    o.rule_set=tags;
+            // ======== 新版多条件组合 & Logical 处理 ========
+            routeRules.value.filter(r=>r.enabled).forEach(r => {
+                const migratedR = migrateRule(r); 
+                const validConds = migratedR.conditions.map(cond => {
+                    if (!cond.value) return null;
+                    const tags = cond.value.split(',').map(s => s.trim()).filter(Boolean);
+                    if (!tags.length) return null;
+                    
+                    const obj = {};
+                    const mt = cond.type;
+                    if (mt === 'rule_set')         obj.rule_set = tags;
+                    else if (mt === 'domain')      obj.domain = tags;
+                    else if (mt === 'domain_suffix') obj.domain_suffix = tags;
+                    else if (mt === 'domain_keyword') obj.domain_keyword = tags;
+                    else if (mt === 'domain_regex')  obj.domain_regex = tags;
+                    else if (mt === 'ip_cidr')     obj.ip_cidr = tags;
+                    else if (mt === 'source_ip_cidr') obj.source_ip_cidr = tags;
+                    else if (mt === 'port')        obj.port = tags.map(Number).filter(n => !isNaN(n));
+                    else if (mt === 'port_range')  obj.port_range = tags;
+                    else if (mt === 'protocol')    obj.protocol = tags;
+                    else if (mt === 'network')     obj.network = tags; // network 现在会自动生成数组 ["tcp", "udp"]
+                    else if (mt === 'process_name') obj.process_name = tags;
+                    else if (mt === 'geoip')       obj.geoip = tags;
+                    else if (mt === 'inbound')     obj.inbound = tags;
+                    return obj;
+                }).filter(Boolean);
+
+                if (validConds.length === 0) return;
+
+                let ruleObj = {};
+
+                let hasCollision = false;
+                const testKeys = new Set();
+                for (const c of validConds) {
+                    const key = Object.keys(c)[0]; 
+                    if (testKeys.has(key)) hasCollision = true;
+                    testKeys.add(key);
                 }
-                else if(mt==='domain')         o.domain=tags;
-                else if(mt==='domain_suffix')  o.domain_suffix=tags;
-                else if(mt==='domain_keyword') o.domain_keyword=tags;
-                else if(mt==='domain_regex')   o.domain_regex=tags;
-                else if(mt==='ip_cidr')        o.ip_cidr=tags;
-                else if(mt==='source_ip_cidr') o.source_ip_cidr=tags;
-                else if(mt==='port')           o.port=tags.map(Number).filter(n=>!isNaN(n));
-                else if(mt==='port_range')     o.port_range=tags;
-                else if(mt==='protocol')       o.protocol=tags;
-                else if(mt==='network')        o.network=tags[0];
-                else if(mt==='process_name')   o.process_name=tags;
-                else if(mt==='geoip')          o.geoip=tags;
-                if(r.outbound==='__reject__') o.action='reject'; else o.outbound=r.outbound;
-                routeArr.push(o);
+
+                if (migratedR.mode === 'or' || (migratedR.mode === 'and' && hasCollision)) {
+                    if (validConds.length > 1) {
+                        ruleObj.type = 'logical';
+                        ruleObj.mode = migratedR.mode;
+                        ruleObj.rules = validConds;
+                    } else {
+                        Object.assign(ruleObj, validConds[0]);
+                    }
+                } else {
+                    validConds.forEach(c => Object.assign(ruleObj, c));
+                }
+
+                if (migratedR.invert) {
+                    ruleObj.invert = true;
+                }
+
+                if (migratedR.outbound === '__reject__') ruleObj.action = 'reject'; 
+                else ruleObj.outbound = migratedR.outbound;
+                
+                routeArr.push(ruleObj);
             });
 
             const inbounds=[];
             const mixedIn={type:'mixed',tag:'mixed-in',listen:'127.0.0.1',listen_port:settings.value.listen_port};
-            // tproxy inbound - 单个 inbound 同时处理 TCP+UDP（sing-box v1.10+ 支持 network 数组或不填则同时处理两者）
             if(tproxy.value.enabled){
                 const tp={
                     type:'tproxy',
                     tag:'tproxy-in',
                     listen:'::',
                     listen_port:tproxy.value.listen_port,
-                    // 不指定 network 则同时接受 tcp 和 udp
                 };
-                if(tproxy.value.udp_fragment) tp.udp_fragment = true;  // 允许 UDP 分片，QUIC/Hysteria2 必需
+                if(tproxy.value.udp_fragment) tp.udp_fragment = true;
                 if(settings.value.sniff_enabled){ tp.sniff=true; if(settings.value.sniff_override_destination) tp.sniff_override_destination=true; if(settings.value.sniff_timeout) tp.sniff_timeout=settings.value.sniff_timeout; }
                 inbounds.push(tp);
-                // DNS 入站：监听 tproxy.dns_port，接受被 nftables redirect 过来的 DNS 请求
                 inbounds.push({
                     type:'direct',
                     tag:'dns-in',
                     listen:'127.0.0.1',
                     listen_port: tproxy.value.dns_port || 1053,
-                    override_port: 53,  // 将请求重写为 53 端口以正常解析
+                    override_port: 53,
                 });
             }
             if(settings.value.sniff_enabled){ mixedIn.sniff=true; if(settings.value.sniff_override_destination) mixedIn.sniff_override_destination=true; if(settings.value.sniff_timeout) mixedIn.sniff_timeout=settings.value.sniff_timeout; }
@@ -2572,12 +2608,10 @@ ${ipv6Block}
             importExportTab.value = tab;
             importJsonText.value = '';
             importError.value = '';
-            modalContentReady.value = false;   // 先显示空壳
+            modalContentReady.value = false;   
             showImportExport.value = true;
-            // 下一帧填充内容，让弹窗动画先跑起来
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    // 生成快照（只算一次，不实时绑定 computed）
                     exportSnapshotPanel.value = exportPreviewJson.value;
                     exportSnapshotRuntime.value = generatedJson.value;
                     modalContentReady.value = true;
@@ -2585,7 +2619,6 @@ ${ipv6Block}
             });
         };
 
-        // 切换预览 tab 时补充另一份快照（按需）
         watch(exportPreviewTab, (newTab) => {
             if (!showImportExport.value || !modalContentReady.value) return;
             if (newTab === 'panel' && !exportSnapshotPanel.value)
@@ -2656,7 +2689,7 @@ ${ipv6Block}
             if(data.nodes)       nodes.value = data.nodes.map(n=>makeNode(n));
             if(data.groups)      groups.value = data.groups.map(g => ({...g, id: g.id || generateId('g')}));
             if(data.ruleSets)    ruleSets.value = data.ruleSets.map(rs=>({...rs, id: rs.id || generateId('rs')}));
-            if(data.routeRules)  routeRules.value = data.routeRules.map((r,i)=>({...r, isEditing:false, draggable:false, id: r.id || generateId('r')}));
+            if(data.routeRules)  routeRules.value = data.routeRules.map(migrateRule).map((r,i)=>({...r, isEditing:false, draggable:false, id: r.id || generateId('r')}));
             showImportExport.value = false;
         };
 
@@ -2688,7 +2721,7 @@ ${ipv6Block}
         };
 
         const STORAGE_KEY = 'singbox_backup_v1_12';
-        const STORAGE_TTL_DAYS = 7; // 本地缓存有效期（天）
+        const STORAGE_TTL_DAYS = 7; 
         const lastSavedAt = ref(null);
 
         const resetConfig = () => {
@@ -2703,11 +2736,9 @@ ${ipv6Block}
                 const raw = localStorage.getItem(STORAGE_KEY);
                 if (!raw) return;
                 const parsed = JSON.parse(raw);
-                // 兼容旧格式（无 savedAt 包装）
                 const isWrapped = parsed && parsed.savedAt && parsed.data;
                 const data = isWrapped ? parsed.data : parsed;
                 const savedAt = isWrapped ? parsed.savedAt : null;
-                // TTL 检查
                 if (savedAt) {
                     const ageDays = (Date.now() - savedAt) / 86400000;
                     if (ageDays > STORAGE_TTL_DAYS) {
@@ -2766,7 +2797,6 @@ ${ipv6Block}
                 .join('\n') + '\n';
         };
 
-
         const downloadNft = () => {
             const blob = new Blob([stripNftComments(generatedNft.value)], {type:'text/plain'});
             const a = document.createElement('a');
@@ -2786,7 +2816,7 @@ ${ipv6Block}
             groups, addGroup, removeGroup, updateGroupTag, generateCountryGroups, getAllPossibleMembers, availableOutboundTags, duplicateOutboundTags, 
             draggedGroupIndex, dragOverGroupIndex, onGroupDragStart, onGroupDragEnter, onGroupDrop, onGroupDragEnd,
             ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, onRuleSetFormatChange,
-            routeRules, addCustomRule, removeRule, toggleRuleSet,
+            routeRules, addCustomRule, removeRule, toggleRuleSetCond,
             draggedRuleIndex, dragOverRuleIndex, onRuleDragStart, onRuleDragEnter, onRuleDrop, onRuleDragEnd,
             fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
             generatedJson, copyText, copyIcon, copyConfig,
