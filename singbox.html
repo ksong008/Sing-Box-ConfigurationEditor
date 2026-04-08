@@ -915,7 +915,7 @@
                                           :class="settings.auto_detect_interface ? 'text-teal-800' : 'text-gray-700'">
                                         auto_detect_interface
                                     </span>
-                                    <span class="block text-xs mt-0.5 text-gray-400">自动检测出口接口，默认网关模式建议开启</span>
+                                    <span class="block text-xs mt-0.5 text-gray-400">自动检测出口接口，Tun模式建议开启</span>
                                 </div>
                             </label>
 
@@ -1098,7 +1098,19 @@
                                     <p class="text-[10px] text-gray-400 mt-1">仅处理此接口入站流量，留空则处理所有接口</p>
                                 </div>
                             </div>
-
+							<label class="flex items-center gap-3 cursor-pointer px-4 py-3 mt-4 rounded-xl border transition-colors"
+								   :class="settings.auto_detect_interface ? 'bg-teal-50 border-teal-200 hover:border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-teal-300'">
+								<input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-teal-600 rounded shrink-0">
+								<div class="flex-1">
+									<span class="block text-sm font-extrabold"
+										  :class="settings.auto_detect_interface ? 'text-teal-800' : 'text-gray-700'">
+										自动检测出口接口 (auto_detect_interface)
+									</span>
+									<span class="block text-xs mt-0.5 text-gray-400">
+										全局路由参数。开启后自动绑定物理网卡，强烈建议开启以防止 TProxy 产生严重的流量回环。
+									</span>
+								</div>
+							</label>
                             <div class="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
                                 <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
                                     <input type="checkbox" v-model="tproxy.bypass_private" class="w-4 h-4 text-blue-600 rounded">
