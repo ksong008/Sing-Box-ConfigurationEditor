@@ -1275,7 +1275,15 @@ createApp({
             { key:'auto_redirect',            label:'auto_redirect',            desc:'Linux 高性能重定向' },
             { key:'endpoint_independent_nat', label:'endpoint_independent_nat', desc:'Full Cone NAT (UDP)' },
         ];
-
+        watch(() => tun.value.enabled, (newVal) => {
+           if (newVal && tproxy.value.enabled) {
+           // 使用 nextTick 确保 DOM 和状态同步拨回
+           nextTick(() => {
+           tun.value.enabled = false;
+           showToast('拦截成功：TProxy 已在运行！为防止网络回环，请先关闭 TProxy 再启用 TUN。', 'err', 4000);
+        });
+        }
+        });
         const panels = [
             { id:'zashboard', name:'Zashboard',    icon:'fas fa-tachometer-alt', desc:'现代化界面，支持 sing-box',   url:'https://github.com/Zephyruso/zashboard/releases/latest/download/dist-cdn-fonts.zip' },
             { id:'metacubexd',name:'MetaCubeX-D',  icon:'fas fa-cube',           desc:'MetaCubeX 官方面板',          url:'https://github.com/MetaCubeX/metacubexd/archive/gh-pages.zip' },
@@ -2721,7 +2729,7 @@ ${ipv6Block}
         };
 
         const STORAGE_KEY = 'singbox_backup_v1_12';
-        const STORAGE_TTL_DAYS = 1; // 本地缓存有效期（天）
+        const STORAGE_TTL_DAYS = 1; // 本地缓存有效期（天） 
         const lastSavedAt = ref(null);
 
         const resetConfig = () => {
