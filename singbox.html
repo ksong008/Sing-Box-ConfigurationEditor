@@ -124,6 +124,13 @@
                         <div class="bg-indigo-600 group-hover:bg-indigo-500 text-white py-4 rounded-xl text-sm font-bold text-center shadow-sm" style="transition:background-color .2s"><i class="fas fa-folder-open mr-2"></i>选择本地 JSON 文件</div>
                         <input type="file" accept=".json" @change="doImportFile" class="hidden">
                     </label>
+                    <div class="flex items-center gap-3">
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                        <span class="text-xs text-gray-400 font-bold">或粘贴 JSON 文本</span>
+                        <div class="flex-1 h-px bg-gray-200"></div>
+                    </div>
+                    <textarea v-model="importJsonText" rows="5" placeholder='粘贴面板配置 JSON 内容...' class="w-full px-4 py-3 text-xs border border-gray-300 rounded-xl outline-none font-mono bg-gray-50 focus:bg-white resize-none"></textarea>
+                    <button @click="doImportText" :disabled="!importJsonText.trim()" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white py-3 rounded-xl text-sm font-bold shadow-sm" style="transition:background-color .2s"><i class="fas fa-file-import mr-2"></i>从文本导入</button>
                     <div v-if="importError" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 font-semibold">{{ importError }}</div>
                 </div>
             </template>
@@ -144,7 +151,7 @@
         <div class="flex gap-3 flex-wrap">
             <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2 shadow-sm text-xs text-gray-500">
                 <i class="fas fa-database text-gray-400"></i>
-                <span v-if="lastSavedAt" class="font-medium">缓存：{{ storageSavedAgo }} · 1天自动清除或者点重置配置清除</span>
+                <span v-if="lastSavedAt" class="font-medium" title="每次修改自动保存，超过 24 小时未操作将自动清除；也可点击「重置配置」手动清除">缓存：{{ storageSavedAgo }}</span>
                 <span v-else class="text-gray-400">无本地缓存</span>
                 <button v-if="lastSavedAt" @click="clearLocalStorage" class="ml-1 text-red-500 hover:text-red-700 font-bold transition" title="手动清除本地缓存"><i class="fas fa-times-circle"></i></button>
             </div>
@@ -194,13 +201,13 @@
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认域名解析 <span class="text-indigo-400 normal-case font-normal">(route)</span></label>
                                 <select v-model="settings.default_domain_resolver" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-indigo-700">
                                     <option value="">不指定</option>
-                                    <option v-for="d in dnsList" :value="d.tag">{{ d.tag }}</option>
+                                    <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
                                 </select>
                             </div>
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 最终解析器 <span class="text-violet-400 normal-case font-normal">(dns.final)</span></label>
                                 <select v-model="settings.dns_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-violet-700">
                                     <option value="">不指定</option>
-                                    <option v-for="d in dnsList" :value="d.tag">{{ d.tag }}</option>
+                                    <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
                                 </select>
                             </div>
                         </div>
@@ -625,17 +632,18 @@
                             <button @click="addRuleSet" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>添加规则集</button>
                         </div>
                         <div class="space-y-3 max-h-[360px] overflow-y-auto pr-2" ref="ruleSetContainer">
-                            <div v-for="(rs, idx) in ruleSets" :key="rs.id" class="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
-                                <input type="text" v-model="rs.tag" placeholder="标签(如 geosite-cn)" @change="onRuleSetTagChange(rs)" class="col-span-3 px-3 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-indigo-700 focus:bg-white focus:ring-1">
+                            <div v-for="(rs, idx) in ruleSets" :key="rs.id" class="grid grid-cols-12 gap-2 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
+                                <input type="text" v-model="rs.tag" placeholder="标签(如 geosite-cn)" @change="onRuleSetTagChange(rs)" class="col-span-2 px-2 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-indigo-700 focus:bg-white focus:ring-1">
                                 <select v-model="rs.format" @change="onRuleSetFormatChange(rs)" class="col-span-2 px-2 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
                                     <option value="binary">binary</option>
                                     <option value="source">source</option>
                                 </select>
-                                <input type="text" v-model="rs.url" placeholder="https://..." class="col-span-4 px-3 py-2 text-[11px] font-mono border border-gray-300 rounded-lg outline-none text-gray-600 focus:bg-white focus:ring-1">
+                                <input type="text" v-model="rs.url" placeholder="https://..." class="col-span-3 px-2 py-2 text-[11px] font-mono border border-gray-300 rounded-lg outline-none text-gray-600 focus:bg-white focus:ring-1">
                                 <select v-model="rs.detour" class="col-span-2 px-2 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
                                     <option value="direct">direct</option>
                                     <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
                                 </select>
+                                <input type="text" v-model="rs.update_interval" placeholder="更新(1d)" class="col-span-2 px-2 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-gray-700 focus:bg-white focus:ring-1">
                                 <button @click="removeRuleSet(idx)" class="col-span-1 mx-auto w-8 h-8 flex justify-center items-center text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors shadow-sm"><i class="fas fa-trash-alt text-sm"></i></button>
                             </div>
                             <div v-if="ruleSets.length === 0" class="text-center text-sm font-bold text-gray-400 py-6 border-2 border-dashed border-gray-200 rounded-xl">暂无规则集配置，请点击右上方添加。</div>
@@ -1009,7 +1017,6 @@
                                 </div>
                             </div>
                             <div class="flex flex-wrap gap-5 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.store_fakeip" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">持久化保存 FakeIP 缓存</span></label>
                                 <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.allow_lan" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">允许局域网设备访问 API</span></label>
                             </div>
                             <div v-if="clashApi.panel" class="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 shadow-sm">
@@ -1023,7 +1030,28 @@
                         </div>
                     </div>
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
+                        <div class="stitle mb-4">缓存配置 (Cache File) <span class="badge bg-orange-100 text-orange-700 border border-orange-200 ml-2">Experimental</span></div>
+                        <p class="text-xs text-gray-500 mb-3">用于持久化保存 FakeIP 等运行时缓存数据。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">缓存文件路径 (path)</label>
+                                <input v-model="settings.cache_file_path" placeholder="/var/lib/sing-box/cache.db" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                            </div>
+                            <div class="flex flex-col justify-center gap-3 mt-1 md:mt-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="clashApi.store_fakeip" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm font-bold text-gray-700">保存 FakeIP 缓存 (store_fakeip)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.store_rdrc" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm font-bold text-gray-700">保存 Reject 缓存 (store_rdrc)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                             <div class="stitle mb-0">NTP 时间同步</div>
                             <label class="toggle-switch"><input type="checkbox" v-model="ntp.enabled"><span class="toggle-slider"></span></label>
@@ -1170,10 +1198,17 @@ ip route add local default dev lo table 100{{ tproxy.ipv6 ? '\nip -6 rule add fw
 </div>
 
 <script>
-const { createApp, ref, computed, watch, nextTick } = Vue;
+const { createApp, ref, computed, watch, nextTick, onUnmounted } = Vue;
 createApp({
     setup() {
-        const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+
+        // ── 协议分类常量（集中定义，避免散落各处重复） ──────────────
+        const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
+        const PROTO_SUPPORT_TLS       = ['vless', 'vmess', 'trojan', 'http', 'socks'];
+        const PROTO_ALWAYS_TLS        = ['hysteria2', 'hysteria', 'tuic'];
+        const PROTO_SUPPORT_SECRET    = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria'];
+        const PROTO_SUPPORT_USER      = ['socks', 'http', 'ssh'];
         // ── 工具函数 ──────────────────────────────────
         const showToast = (msg, type='ok', duration=2800) => {
             const icons = { ok:'fas fa-check-circle', err:'fas fa-exclamation-circle', info:'fas fa-info-circle', warn:'fas fa-exclamation-triangle' };
@@ -1223,7 +1258,6 @@ createApp({
         };
         // ─────────────────────────────────────────────
 
-
         const copyText = ref('复制配置'), copyIcon = ref('fas fa-copy');
         const tabs = [
             { id:'dns',      name:'基础/DNS',  icon:'fas fa-network-wired' },
@@ -1259,7 +1293,8 @@ createApp({
             hijack_dns:true, private_direct:true, 
             independent_cache:false, reverse_mapping:false, 
             auto_detect_interface:true, default_interface:'', default_mark:null,
-            rule_set_cdn:true, rule_set_detour:'direct' 
+            rule_set_cdn:true, rule_set_detour:'direct',
+            store_rdrc: true, cache_file_path: '/var/lib/sing-box/cache.db'
         });
 
         const fakeip = ref({ enabled:false, tag:'fakeip', inet4_range:'198.18.0.0/15', inet6_range:'fc00::/18', queryA:true, queryAAAA:true, excludeText:'lan\nlocal' });
@@ -1477,6 +1512,11 @@ createApp({
             { tag:'remote-dns', type:'https',  server:'dns.google',   detour:'节点选择', domain_resolver:'local-dns', inet4_range:'', inet6_range:'' },
             { tag:'local-dns',  type:'udp',  server:'223.5.5.5', detour:'',            domain_resolver:'', inet4_range:'', inet6_range:'' },
         ]);
+    
+        const allDnsTags = computed(() => {
+            return dnsList.value.map(d => d.tag).filter(Boolean);
+        });
+
         const addDns = () => dnsList.value.push({ tag:`dns-${dnsList.value.length+1}`, type:'udp', server:'', detour:'', domain_resolver:'', inet4_range:'', inet6_range:'' });
         const addBootstrapDns = () => {
             const existing = dnsList.value.find(d => d.tag === 'bootstrap-dns');
@@ -1525,7 +1565,7 @@ createApp({
         };
 
         const onNodeTypeChange = (node) => {
-            if(!['vless','vmess','trojan'].includes(node.type)) node.transport = '';
+            if(!PROTO_SUPPORT_TRANSPORT.includes(node.type)) node.transport = '';
         };
 
         const removeNode = (i) => {
@@ -1651,32 +1691,36 @@ createApp({
         const getAllPossibleMembers  = (cur) => availableOutboundTags.value.filter(t=>t!==cur);
 
         const ruleSets = ref([
-            { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs', detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-ad',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/ad.srs',                 detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-youtube',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs',          detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-category-ai-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ai-!cn.srs',  detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-google',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/google.srs',           detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-google',             format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/google.srs',             detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-telegram',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/telegram.srs',         detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-telegram',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/telegram.srs',           detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-twitter',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/twitter.srs',          detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-twitter',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/twitter.srs',            detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-netflix',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/netflix.srs',          detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-netflix',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/netflix.srs',            detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-spotify',          format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/spotify.srs',          detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-proxymedia',       format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo-lite/geosite/proxymedia.srs',       detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-github',           format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/github.srs',           detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-microsoft@cn',     format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft@cn.srs',     detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-microsoft',        format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/microsoft.srs',        detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-apple-cn',         format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple-cn.srs',         detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-apple',            format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/apple.srs',            detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-cn',               format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/cn.srs',               detour: 'direct' },
-            { id: generateId('rs'), tag: 'geoip-cn',                 format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs',                 detour: 'direct' },
-            { id: generateId('rs'), tag: 'geosite-geolocation-!cn',  format: 'binary', url: 'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-!cn.srs',  detour: 'direct' },
+            { id: generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs', detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-ad',                 format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/ad.srs',                 detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-youtube',          format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/youtube.srs',          detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-category-ai-!cn',  format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ai-!cn.srs',  detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-google',           format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/google.srs',           detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-google',             format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs',             detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-telegram',         format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/telegram.srs',         detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-telegram',           format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs',           detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-twitter',          format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/twitter.srs',          detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-twitter',            format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/twitter.srs',            detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-netflix',          format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/netflix.srs',          detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-netflix',            format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs',            detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-spotify',          format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/spotify.srs',          detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-proxymedia',       format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo-lite/geosite/proxymedia.srs',   detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-github',           format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/github.srs',           detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-microsoft@cn',     format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/microsoft@cn.srs',     detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-microsoft',        format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/microsoft.srs',        detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-apple-cn',         format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple-cn.srs',         detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-apple',            format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple.srs',            detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-cn',               format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs',               detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geoip-cn',                 format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs',                 detour: 'direct', update_interval: '1d' },
+            { id: generateId('rs'), tag: 'geosite-geolocation-!cn',  format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs',  detour: 'direct', update_interval: '1d' },
         ]);
 
+        watch(() => ruleSets.value.length, (newLen, oldLen) => {
+            if (newLen > 0 && oldLen === 0) settings.value.store_rdrc = true;
+        });
+
         const addRuleSet = async () => {
-            ruleSets.value.push({ id: generateId('rs'), tag: '', format: 'binary', url: '', detour: settings.value.rule_set_detour || 'direct' });
+            ruleSets.value.push({ id: generateId('rs'), tag: '', format: 'binary', url: '', detour: settings.value.rule_set_detour || 'direct', update_interval: '1d' });
             await nextTick();
             if (ruleSetContainer.value) {
                 ruleSetContainer.value.scrollTo({ top: ruleSetContainer.value.scrollHeight, behavior: 'smooth' });
@@ -1693,7 +1737,7 @@ createApp({
             else if (rs.tag.match(/^(domain|site)-/i)) type = 'geosite';
             
             if (type) {
-                let name = rs.tag.replace(/^(geosite|geoip|geostie|geosiet|geopi)-/i, '');
+                let name = rs.tag.replace(/^(geosite|geoip)-/i, '');
                 const ext = rs.format === 'source' ? 'json' : 'srs';
                 rs.url = settings.value.rule_set_cdn
                     ? `https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/${type}/${name}.${ext}`
@@ -1728,7 +1772,7 @@ createApp({
 
         // ================= 路由规则逻辑重构 =================
         const migrateRule = (r) => {
-            if (r.conditions) return r; // 已经是新格式
+            if (r.conditions) return r; 
             const conds = [];
             if (r.tagsStr) {
                 conds.push({ type: r.matchType || 'rule_set', value: r.tagsStr });
@@ -1807,7 +1851,7 @@ createApp({
                 const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`VLESS-${nodes.value.length+1}`;
                 const net=p.get('type')||'';
                 const sec=p.get('security')||'';
-                nodes.value.push(makeNode({
+                return makeNode({
                     tag, type:'vless', server:u.hostname, port:parseInt(u.port)||443,
                     secret:u.username, sni:p.get('sni')||p.get('host')||'',
                     transport:['ws','grpc','http','httpupgrade','quic'].includes(net)?net:'',
@@ -1818,9 +1862,8 @@ createApp({
                     reality:sec==='reality', reality_pubkey:p.get('pbk')||'', reality_sid:p.get('sid')||'',
                     utls_fingerprint:p.get('fp')||'',
                     alpn:p.get('alpn')||''
-                }));
-                return true;
-            } catch(e){ return false; }
+                });
+            } catch(e){ return null; }
         };
 
         const parseTrojan = (l) => {
@@ -1830,7 +1873,7 @@ createApp({
                 const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`Trojan-${nodes.value.length+1}`;
                 const net=p.get('type')||'';
                 const sec=p.get('security')||'tls';
-                nodes.value.push(makeNode({
+                return makeNode({
                     tag, type:'trojan', server:u.hostname, port:parseInt(u.port)||443,
                     secret:u.username||decodeURIComponent(u.password||''),
                     sni:p.get('sni')||p.get('host')||'',
@@ -1841,17 +1884,16 @@ createApp({
                     reality:sec==='reality', reality_pubkey:p.get('pbk')||'', reality_sid:p.get('sid')||'',
                     utls_fingerprint:p.get('fp')||'',
                     alpn:p.get('alpn')||''
-                }));
-                return true;
-            } catch(e){ return false; }
+                });
+            } catch(e){ return null; }
         };
 
         const parseVmess = (l) => {
             try {
                 const p=JSON.parse(b64dec(l.slice(8)));
-                if(!p.add) return false;
+                if(!p.add) return null;
                 const net=p.net||'';
-                nodes.value.push(makeNode({
+                return makeNode({
                     tag:p.ps||`VMess-${nodes.value.length+1}`, type:'vmess',
                     server:p.add, port:parseInt(p.port)||443,
                     secret:p.id, sni:p.sni||p.host||'',
@@ -1860,9 +1902,8 @@ createApp({
                     ws_host:p.host||'',
                     tls:p.tls==='tls',
                     alpn:p.alpn||''
-                }));
-                return true;
-            } catch(e){ return false; }
+                });
+            } catch(e){ return null; }
         };
 
         const parseSS = (l) => {
@@ -1887,32 +1928,30 @@ createApp({
                         if(m){host=m[1];port=parseInt(m[2]);}
                     }
                 }
-                nodes.value.push(makeNode({ tag:name, type:'shadowsocks', server:host, port, secret:password, ss_method:method, tls:false }));
-                return true;
-            } catch(e){ return false; }
+                return makeNode({ tag:name, type:'shadowsocks', server:host, port, secret:password, ss_method:method, tls:false });
+            } catch(e){ return null; }
         };
 
         const parseHy2 = (l) => {
             try {
                 const u=new URL(l.replace(/^hy2:\/\//,'hysteria2://'));
                 const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`Hy2-${nodes.value.length+1}`;
-                nodes.value.push(makeNode({
+                return makeNode({
                     tag, type:'hysteria2', server:u.hostname, port:parseInt(u.port)||443,
                     secret:u.password||u.username, sni:u.searchParams.get('sni')||'',
                     insecure:u.searchParams.get('insecure')==='1',
                     hy2_obfs_type:u.searchParams.get('obfs')||'',
                     hy2_obfs_password:u.searchParams.get('obfs-password')||'',
                     tls:true
-                }));
-                return true;
-            } catch(e){ return false; }
+                });
+            } catch(e){ return null; }
         };
 
         const parseTuic = (l) => {
             try {
                 const u=new URL(l);
                 const tag=u.hash?decodeURIComponent(u.hash.slice(1)):`TUIC-${nodes.value.length+1}`;
-                nodes.value.push(makeNode({
+                return makeNode({
                     tag, type:'tuic', server:u.hostname, port:parseInt(u.port)||443,
                     secret:u.username, tuic_password:u.password,
                     sni:u.searchParams.get('sni')||'',
@@ -1921,9 +1960,8 @@ createApp({
                     insecure:u.searchParams.get('allow_insecure')==='1',
                     alpn:u.searchParams.get('alpn')||'h3',
                     tls:true
-                }));
-                return true;
-            } catch(e){ return false; }
+                });
+            } catch(e){ return null; }
         };
 
         const coreParser = (text) => {
@@ -1934,14 +1972,14 @@ createApp({
             }
             let count=0;
             text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>5).forEach(l=>{
-                let ok=false;
-                if(l.startsWith('vless://'))          ok=parseVless(l);
-                else if(l.startsWith('trojan://'))     ok=parseTrojan(l);
-                else if(l.startsWith('vmess://'))      ok=parseVmess(l);
-                else if(l.startsWith('ss://'))         ok=parseSS(l);
-                else if(l.startsWith('hysteria2://')||l.startsWith('hy2://')) ok=parseHy2(l);
-                else if(l.startsWith('tuic://'))       ok=parseTuic(l);
-                if(ok) count++;
+                let node = null;
+                if(l.startsWith('vless://'))                              node = parseVless(l);
+                else if(l.startsWith('trojan://'))                        node = parseTrojan(l);
+                else if(l.startsWith('vmess://'))                         node = parseVmess(l);
+                else if(l.startsWith('ss://'))                            node = parseSS(l);
+                else if(l.startsWith('hysteria2://')||l.startsWith('hy2://')) node = parseHy2(l);
+                else if(l.startsWith('tuic://'))                          node = parseTuic(l);
+                if(node) { nodes.value.push(node); count++; }
             });
             return count;
         };
@@ -2029,7 +2067,7 @@ createApp({
             const privateRanges6 = fakeip6Range ? ALL_PRIVATE_RANGES6.filter(r => r !== fakeip6Range) : ALL_PRIVATE_RANGES6;
 
             const skipSelfOutput = uid ? `meta skuid "${uid}" return` : `meta mark ${markHex} return`;
-            const skipSelfDnsOutput = uid ? `meta skuid "${uid}" return` : `meta mark ${markHex} return`;
+            // skipSelfDnsOutput 逻辑与 skipSelfOutput 完全相同，直接复用
 
             const bypassPrivate4 = bypass_private ? `ip daddr { ${privateRanges4.join(', ')} } return` : '';
             const bypassPrivate6 = (bypass_private && ipv6) ? `ip6 daddr { ${privateRanges6.join(', ')} } return` : '';
@@ -2122,7 +2160,7 @@ table inet ${table} {
     chain output_dns {
         type nat hook output priority dstnat; policy accept;
         # 跳过 sing-box 自身，防止 sing-box → 系统解析 → 再次劫持成环
-        ${skipSelfDnsOutput}
+        ${skipSelfOutput}
         udp dport 53 dnat ip to 127.0.0.1:${dnsPort}
         tcp dport 53 dnat ip to 127.0.0.1:${dnsPort}
     }
@@ -2336,7 +2374,7 @@ ${ipv6Block}
                 if(localTag) dnsRules.push({rule_set:['geosite-cn'],server:localTag});
                 const excl=fakeip.value.excludeText.split('\n').map(s=>s.replace(/^[-*\s]+/, '').replace(/['"]/g, '').replace(/^\+\./, '').trim()).filter(s=>s);
                 if(excl.length>0&&localTag) dnsRules.push({domain_suffix:excl,server:localTag});
-                const qt=[]; if(fakeip.value.queryA)qt.push(1); if(fakeip.value.queryAAAA)qt.push(28);
+                const qt=[]; if(fakeip.value.queryA)qt.push('A'); if(fakeip.value.queryAAAA)qt.push('AAAA');
                 if(qt.length>0) dnsRules.push({query_type:qt,server:fakeip.value.tag});
             } else {
                 if(localTag){ dnsRules.push({rule_set:['geosite-cn'],server:localTag}); }
@@ -2349,7 +2387,8 @@ ${ipv6Block}
                 type: 'remote',
                 format: rs.format || 'binary',
                 url: rs.url,
-                download_detour: rs.detour || 'direct'
+                download_detour: rs.detour || 'direct',
+                update_interval: rs.update_interval || '1d'
             }));
 
             if(settings.value.sniff_enabled){
@@ -2396,7 +2435,7 @@ ${ipv6Block}
                     else if (mt === 'port')        obj.port = tags.map(Number).filter(n => !isNaN(n));
                     else if (mt === 'port_range')  obj.port_range = tags;
                     else if (mt === 'protocol')    obj.protocol = tags;
-                    else if (mt === 'network')     obj.network = tags; // network 现在会自动生成数组 ["tcp", "udp"]
+                    else if (mt === 'network')     obj.network = tags; 
                     else if (mt === 'process_name') obj.process_name = tags;
                     else if (mt === 'geoip')       obj.geoip = tags;
                     else if (mt === 'inbound')     obj.inbound = tags;
@@ -2483,16 +2522,28 @@ ${ipv6Block}
             if(settings.value.default_mark) route.default_mark=settings.value.default_mark;
             if(rsArr.length>0) route.rule_set=rsArr;
 
-            let experimental;
-            if(clashApi.value.enabled){ 
-                const ca={external_controller:clashApi.value.external_controller,default_mode:clashApi.value.default_mode||'rule'}; 
-                if(clashApi.value.secret) ca.secret=clashApi.value.secret; 
-                if(clashApi.value.external_ui) ca.external_ui=clashApi.value.external_ui; 
-                if(clashApi.value.download_url) ca.external_ui_download_url=clashApi.value.download_url; 
-                if(clashApi.value.allow_lan) ca.access_control_allow_private_network=true; 
-                const cf={enabled:true}; 
-                if(clashApi.value.store_fakeip) cf.store_fakeip=true; 
-                experimental={clash_api:ca,cache_file:cf};
+            // ======== Req 2 修复：独立缓存及自动开启 store_rdrc ========
+            let experimental = undefined;
+            const cache_file = {};
+            let hasCache = false;
+
+            if (settings.value.cache_file_path) { cache_file.path = settings.value.cache_file_path; hasCache = true; }
+            if (clashApi.value.store_fakeip) { cache_file.store_fakeip = true; hasCache = true; }
+            if (settings.value.store_rdrc) { cache_file.store_rdrc = true; hasCache = true; }
+
+            if (hasCache) cache_file.enabled = true;
+
+            if (clashApi.value.enabled) {
+                const ca = { external_controller: clashApi.value.external_controller, default_mode: clashApi.value.default_mode || 'rule' };
+                if (clashApi.value.secret) ca.secret = clashApi.value.secret;
+                if (clashApi.value.external_ui) ca.external_ui = clashApi.value.external_ui;
+                if (clashApi.value.download_url) ca.external_ui_download_url = clashApi.value.download_url;
+                if (clashApi.value.allow_lan) ca.access_control_allow_private_network = true;
+
+                experimental = { clash_api: ca };
+                if (hasCache) experimental.cache_file = cache_file;
+            } else if (hasCache) {
+                experimental = { cache_file: cache_file };
             }
 
             const cfg={
@@ -2518,9 +2569,10 @@ ${ipv6Block}
                 }
                 if (diffLine === -1 && newLines.length < oldLines.length) diffLine = newLines.length - 1;
                 if (diffLine !== -1) {
-                    const lineHeight = 21;
-                    const targetY = diffLine * lineHeight + 24;
                     const el = jsonContainer.value;
+                    // 动态计算行高，避免硬编码在不同缩放比例下不准确
+                    const lineHeight = el.scrollHeight / Math.max(newLines.length, 1);
+                    const targetY = diffLine * lineHeight + 24;
                     const currentTop = el.scrollTop;
                     const viewHeight = el.clientHeight;
                     if (targetY < currentTop + 60 || targetY > currentTop + viewHeight - 60) {
@@ -2542,12 +2594,15 @@ ${ipv6Block}
             const keyword = tabMap[newTab];
             if (keyword) {
                 setTimeout(() => {
+                    const el = jsonContainer.value;
                     const text = generatedJson.value;
                     const idx = text.indexOf(keyword);
                     if(idx !== -1) {
                         const lines = text.substring(0, idx).split('\n');
-                        const targetY = lines.length * 21 + 24;
-                        jsonContainer.value.scrollTo({ top: Math.max(0, targetY - 60), behavior: 'smooth' });
+                        // 动态计算行高
+                        const lineHeight = el.scrollHeight / Math.max(text.split('\n').length, 1);
+                        const targetY = lines.length * lineHeight + 24;
+                        el.scrollTo({ top: Math.max(0, targetY - 60), behavior: 'smooth' });
                     }
                 }, 50);
             }
@@ -2566,8 +2621,8 @@ ${ipv6Block}
                 if (c.type !== 'wireguard') { delete c.wg_private_key; delete c.wg_peer_pubkey; delete c.wg_local_address; delete c.wg_psk; delete c.wg_mtu; delete c.wg_reserved; }
                 if (c.type !== 'socks') { delete c.socks_version; }
                 if (c.type !== 'ssh') { delete c.ssh_auth_type; }
-                if (!['socks','http','ssh'].includes(c.type)) { delete c.username; }
-                if (!['vless','vmess','trojan'].includes(c.type)) { delete c.transport; delete c.path; delete c.ws_host; delete c.mux_enabled; delete c.mux_protocol; delete c.mux_max_connections; delete c.mux_min_streams; }
+                if (!PROTO_SUPPORT_USER.includes(c.type)) { delete c.username; }
+                if (!PROTO_SUPPORT_TRANSPORT.includes(c.type)) { delete c.transport; delete c.path; delete c.ws_host; delete c.mux_enabled; delete c.mux_protocol; delete c.mux_max_connections; delete c.mux_min_streams; }
                 if (c.type !== 'vless') { delete c.flow; }
                 
                 if (!c.reality) { delete c.reality_pubkey; delete c.reality_sid; }
@@ -2583,7 +2638,7 @@ ${ipv6Block}
                     }
                 });
                 
-                const usesTls = ['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks'].includes(c.type);
+                const usesTls = [...PROTO_SUPPORT_TLS, ...PROTO_ALWAYS_TLS].includes(c.type);
                 if (!usesTls) { delete c.tls; delete c.insecure; delete c.reality; delete c.alpn; delete c.utls_fingerprint; delete c.sni; }
 
                 return c;
@@ -2598,6 +2653,7 @@ ${ipv6Block}
                 clashApi: clashApi.value,
                 ntp: ntp.value,
                 tproxy: tproxy.value,
+                corsProxyEnabled: corsProxyEnabled.value,
                 dnsList: dnsList.value,
                 providers: providers.value,
                 nodes: cleanNodes,
@@ -2630,6 +2686,8 @@ ${ipv6Block}
             importError.value = '';
             modalContentReady.value = false;   
             showImportExport.value = true;
+            // 先渲染弹窗骨架（标题、Tab 按钮），待浏览器完成一帧绘制后再填入大体积 JSON 字符串，
+            // 避免大文本阻塞弹窗入场动画，让用户感知到弹窗"立刻弹出"
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     exportSnapshotPanel.value = exportPreviewJson.value;
@@ -2653,6 +2711,7 @@ ${ipv6Block}
             a.href = URL.createObjectURL(blob);
             a.download = `singbox-panel-config-${Date.now()}.json`;
             a.click();
+            URL.revokeObjectURL(a.href);
         };
 
         const validateConfig = () => {
@@ -2677,6 +2736,7 @@ ${ipv6Block}
                 a.href = URL.createObjectURL(blob);
                 a.download = 'config.json';
                 a.click();
+                URL.revokeObjectURL(a.href);
                 showToast('运行配置已下载','ok');
             };
             if (warns.length > 0) {
@@ -2698,12 +2758,17 @@ ${ipv6Block}
 
         const applyImport = (data) => {
             if(!data || typeof data !== 'object') throw new Error('无效的 JSON 格式');
+            if(data._version && data._version !== '1.12') {
+                // 版本不匹配时仍继续导入，但给出提示
+                showToast(`配置版本为 ${data._version}，当前面板适配 v1.12，部分字段可能不兼容`, 'warn', 5000);
+            }
             if(data.settings)    Object.assign(settings.value, data.settings);
             if(data.fakeip)      Object.assign(fakeip.value, data.fakeip);
             if(data.tun)         Object.assign(tun.value, data.tun);
             if(data.clashApi)    Object.assign(clashApi.value, data.clashApi);
             if(data.ntp)         Object.assign(ntp.value, data.ntp);
             if(data.tproxy)      Object.assign(tproxy.value, data.tproxy);
+            if(typeof data.corsProxyEnabled === 'boolean') corsProxyEnabled.value = data.corsProxyEnabled;
             if(data.dnsList)     dnsList.value = data.dnsList;
             if(data.providers)   providers.value = data.providers;
             if(data.nodes)       nodes.value = data.nodes.map(n=>makeNode(n));
@@ -2736,117 +2801,160 @@ ${ipv6Block}
                 applyImport(data);
                 showToast('配置导入成功！','ok');
             } catch(err) {
-                importError.value = '解析失败：' + err.message;
+                importError.value = '文本解析失败：' + err.message;
             }
         };
 
-        const STORAGE_KEY = 'singbox_backup_v1_12';
-        const STORAGE_TTL_DAYS = 1; // 本地缓存有效期（天） 
-        const lastSavedAt = ref(null);
+            // Cache Management
+            const lastSavedAt = ref('');
+            const storageSavedAgo = ref('');
+            const updateStorageAgo = () => {
+                if(!lastSavedAt.value) return;
+                const diff = Date.now() - new Date(lastSavedAt.value).getTime();
+                const m = Math.floor(diff/60000);
+                if(m < 1) storageSavedAgo.value = '刚刚';
+                else if(m < 60) storageSavedAgo.value = `${m}分钟前`;
+                else storageSavedAgo.value = `${Math.floor(m/60)}小时前`;
+            };
+            let agoTimer = null;
+            
+            // 防抖：用户连续输入时最多每 400ms 写一次 localStorage，避免高频 I/O
+            let saveTimer = null;
+            const saveLocalStorage = () => {
+                clearTimeout(saveTimer);
+                saveTimer = setTimeout(() => {
+                    try {
+                        const state = getFullState();
+                        localStorage.setItem('singbox_web_config', JSON.stringify(state));
+                        lastSavedAt.value = new Date().toISOString();
+                        updateStorageAgo();
+                    } catch(e){}
+                }, 400);
+            };
 
-        const resetConfig = () => {
-            showConfirm('此操作将清空所有节点、策略和规则，恢复至最原始状态，确认继续吗？', () => {
-                localStorage.removeItem(STORAGE_KEY);
-                location.reload();
-            }, {title:'重置配置', okText:'确认重置'});
-        };
-
-        const loadFromStorage = () => {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return;
-                const parsed = JSON.parse(raw);
-                const isWrapped = parsed && parsed.savedAt && parsed.data;
-                const data = isWrapped ? parsed.data : parsed;
-                const savedAt = isWrapped ? parsed.savedAt : null;
-                if (savedAt) {
-                    const ageDays = (Date.now() - savedAt) / 86400000;
-                    if (ageDays > STORAGE_TTL_DAYS) {
-                        localStorage.removeItem(STORAGE_KEY);
-                        console.info('[sing-box] 本地缓存已超过', STORAGE_TTL_DAYS, '天，已自动清除');
-                        return;
-                    }
-                }
-                applyImport(data);
-            } catch(e) { console.error('读取缓存失败', e); }
-        };
-
-        loadFromStorage();
-        const clearLocalStorage = () => {
-            showConfirm(
-                '确定要清除本地缓存吗？页面刷新后将恢复默认状态，所有未导出的配置将丢失。',
-                () => { localStorage.removeItem(STORAGE_KEY); lastSavedAt.value = null; showToast('本地缓存已清除','ok'); },
-                { title:'清除本地缓存', okText:'确认清除' }
-            );
-        };
-        const storageSavedAgo = computed(() => {
-            if (!lastSavedAt.value) return null;
-            const sec = Math.round((Date.now() - lastSavedAt.value) / 1000);
-            if (sec < 60) return `${sec} 秒前`;
-            const min = Math.floor(sec / 60);
-            if (min < 60) return `${min} 分钟前`;
-            return `${Math.floor(min/60)} 小时前`;
-        });
-
-
-        let saveTimer = null;
-        watch(generatedJson, () => {
-            clearTimeout(saveTimer);
-            saveTimer = setTimeout(() => {
+            const loadLocalStorage = () => {
                 try {
-                    const payload = { data: getFullState(), savedAt: Date.now() };
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-                    lastSavedAt.value = Date.now();
-                } catch(e) {}
-            }, 500); 
-        });
+                    const s = localStorage.getItem('singbox_web_config');
+                    if(!s) return false;
+                    const state = JSON.parse(s);
+                    // 检查是否超过 24 小时 (86400000 毫秒)，超过则自动丢弃
+                    if (state._exported) {
+                        const savedTime = new Date(state._exported).getTime();
+                        if (Date.now() - savedTime > 86400000) {
+                            localStorage.removeItem('singbox_web_config');
+                            return false;
+                        }
+                    }
+                    applyImport(state);
+                    if(state._exported) {
+                        lastSavedAt.value = state._exported;
+                        updateStorageAgo();
+                    }
+                    return true;
+                } catch(e){ return false; }
+            };
 
-        const copyConfig = async () => { const ok = await copyToClipboard(generatedJson.value); if(ok){ copyText.value='复制成功!';copyIcon.value='fas fa-check';setTimeout(()=>{copyText.value='复制配置';copyIcon.value='fas fa-copy';},2000); } else showToast('复制失败，请手动复制','err'); };
+            const clearLocalStorage = () => {
+                showConfirm('确定要清除本地缓存吗？刷新页面后将恢复默认配置。', () => {
+                    localStorage.removeItem('singbox_web_config');
+                    lastSavedAt.value = '';
+                    storageSavedAgo.value = '';
+                    showToast('本地缓存已清除', 'ok');
+                }, {title:'清除缓存', okText:'清除'});
+            };
 
-        const nftCopyText = ref('复制'), nftCopyIcon = ref('fas fa-copy');
-        const copyNft = async () => {
-            const ok = await copyToClipboard(stripNftComments(generatedNft.value));
-            if(ok){ nftCopyText.value='已复制'; nftCopyIcon.value='fas fa-check'; setTimeout(()=>{ nftCopyText.value='复制'; nftCopyIcon.value='fas fa-copy'; }, 2000); }
-            else showToast('复制失败','err');
-        };
-        const stripNftComments = (src) => {
-            return src
-                .split('\n')
-                .map(line => line.replace(/#.*$/, '').trimEnd())
-                .filter(line => line.trim() !== '')
-                .join('\n') + '\n';
-        };
+            const resetConfig = () => {
+                showConfirm('确定要重置所有配置吗？此操作将清空当前所有内容并清除本地缓存。', () => {
+                    localStorage.removeItem('singbox_web_config');
+                    location.reload();
+                }, {title:'重置配置', okText:'重置并刷新', safe:false});
+            };
 
-        const downloadNft = () => {
-            const blob = new Blob([stripNftComments(generatedNft.value)], {type:'text/plain'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `${tproxy.value.nft_table || 'singbox'}.nft`;
-            a.click();
-            showToast('NFT 规则文件已下载','ok');
-        };
+            const copyConfig = async () => {
+                copyIcon.value = 'fas fa-spinner fa-spin';
+                copyText.value = '复制中...';
+                const ok = await copyToClipboard(generatedJson.value);
+                setTimeout(() => {
+                    if(ok) {
+                        copyIcon.value = 'fas fa-check';
+                        copyText.value = '已复制';
+                        showToast('运行配置已复制到剪贴板！','ok');
+                    } else {
+                        copyIcon.value = 'fas fa-times';
+                        copyText.value = '复制失败';
+                        showToast('复制失败，请手动全选复制','err');
+                    }
+                    setTimeout(() => { copyIcon.value = 'fas fa-copy'; copyText.value = '复制配置'; }, 2000);
+                }, 300);
+            };
 
-        return { 
-            tabs, currentTab, isFetching, fetchStatus, rawPastedText, 
-            jsonContainer, ruleSetContainer, tabContentContainer,
-            settings, fakeip, cleanExcludeText, handlePasteCleanup, tun, tunOpts, panels, clashApi, pickPanel, panelLinks, ntp, 
-            dnsList, addDns, addBootstrapDns, removeDns, 
-            providers, addProvider, removeProvider, corsProxyEnabled, 
-            nodes, addNode, removeNode, clearNodes, onNodeTypeChange,
-            groups, addGroup, removeGroup, updateGroupTag, generateCountryGroups, getAllPossibleMembers, availableOutboundTags, duplicateOutboundTags, 
-            draggedGroupIndex, dragOverGroupIndex, onGroupDragStart, onGroupDragEnter, onGroupDrop, onGroupDragEnd,
-            ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, onRuleSetFormatChange,
-            routeRules, addCustomRule, removeRule, toggleRuleSetCond,
-            draggedRuleIndex, dragOverRuleIndex, onRuleDragStart, onRuleDragEnter, onRuleDrop, onRuleDragEnd,
-            fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
-            generatedJson, copyText, copyIcon, copyConfig,
-            tproxy, tproxyConflicts, generatedNft, nftCopyText, nftCopyIcon, copyNft, downloadNft,
-            showImportExport, importExportTab, importJsonText, importError,
-            modalContentReady, exportSnapshotPanel, exportSnapshotRuntime,
-            exportPreviewJson, exportPreviewTab, openImportExport, doExportDownload, doExportRuntimeDownload, doExportCopy, doExportRuntimeCopy, doImportFile, doImportText,
-        };
-    }
-}).mount('#app');
-</script>
+            const nftCopyText = ref('复制 .nft');
+            const nftCopyIcon = ref('fas fa-copy');
+            const copyNft = async () => {
+                nftCopyIcon.value = 'fas fa-spinner fa-spin';
+                const ok = await copyToClipboard(generatedNft.value);
+                setTimeout(() => {
+                    if(ok){
+                        nftCopyIcon.value = 'fas fa-check';
+                        nftCopyText.value = '已复制';
+                        showToast('NFTables 规则已复制','ok');
+                    } else {
+                        nftCopyIcon.value = 'fas fa-times';
+                        nftCopyText.value = '复制失败';
+                    }
+                    setTimeout(() => { nftCopyIcon.value = 'fas fa-copy'; nftCopyText.value = '复制 .nft'; }, 2000);
+                }, 300);
+            };
+
+            const downloadNft = () => {
+                const blob = new Blob([generatedNft.value], {type:'text/plain'});
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${tproxy.value.nft_table || 'singbox'}.nft`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            };
+
+            // Watch for changes to save to localStorage
+            watch([settings, fakeip, tun, clashApi, ntp, tproxy, dnsList, providers, nodes, groups, ruleSets, routeRules, corsProxyEnabled], () => {
+                saveLocalStorage();
+            }, { deep: true });
+
+            // Initialize
+            if (!loadLocalStorage()) {
+                // 如果没有本地缓存，使用默认初始化状态
+            }
+            
+            agoTimer = setInterval(updateStorageAgo, 60000);
+
+            // 组件卸载时清除所有定时器，防止内存泄漏
+            onUnmounted(() => {
+                clearInterval(agoTimer);
+                clearTimeout(saveTimer);
+                clearTimeout(diffScrollTimer);
+            });
+
+            return {
+                tabs, currentTab, jsonContainer, ruleSetContainer, tabContentContainer,
+                settings, fakeip, cleanExcludeText, handlePasteCleanup, tun, tunOpts, panels, clashApi, pickPanel, panelLinks, ntp, 
+                dnsList, allDnsTags, addDns, addBootstrapDns, removeDns, 
+                providers, addProvider, removeProvider, corsProxyEnabled, 
+                nodes, addNode, removeNode, clearNodes, onNodeTypeChange,
+                groups, addGroup, removeGroup, updateGroupTag, generateCountryGroups, getAllPossibleMembers, availableOutboundTags, duplicateOutboundTags, 
+                draggedGroupIndex, dragOverGroupIndex, onGroupDragStart, onGroupDragEnter, onGroupDrop, onGroupDragEnd,
+                ruleSets, addRuleSet, removeRuleSet, onRuleSetTagChange, onRuleSetFormatChange,
+                routeRules, addCustomRule, removeRule, toggleRuleSetCond,
+                draggedRuleIndex, dragOverRuleIndex, onRuleDragStart, onRuleDragEnter, onRuleDrop, onRuleDragEnd,
+				isFetching, fetchStatus, rawPastedText,
+                fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
+                generatedJson, copyText, copyIcon, copyConfig,
+                tproxy, tproxyConflicts, generatedNft, nftCopyText, nftCopyIcon, copyNft, downloadNft,
+                showImportExport, importExportTab, importJsonText, importError,
+                modalContentReady, exportSnapshotPanel, exportSnapshotRuntime,
+                exportPreviewJson, exportPreviewTab, openImportExport, doExportDownload, doExportRuntimeDownload, doExportCopy, doExportRuntimeCopy, doImportFile, doImportText,
+            };
+        }
+    }).mount('#app');
+    </script>
 </body>
 </html>
