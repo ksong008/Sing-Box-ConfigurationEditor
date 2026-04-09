@@ -229,7 +229,7 @@
                                 <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">标签</div>
                                 <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">类型</div>
                                 <div class="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">服务器地址</div>
-                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">出站 detour</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">出站 detour <span class="normal-case text-gray-400 font-normal">(留空=不写入)</span></div>
                                 <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-violet-500">域名解析器</div>
                                 <div class="col-span-1"></div>
                             </div>
@@ -374,12 +374,21 @@
                                         <option value="hysteria2">Hysteria2</option>
                                         <option value="hysteria">Hysteria</option>
                                         <option value="tuic">TUIC v5</option>
+                                        <option value="anytls">AnyTLS</option>
+                                    </optgroup>
+                                    <optgroup label="混淆/隐匿">
+                                        <option value="shadowtls">ShadowTLS</option>
+                                        <option value="naive">NaiveProxy</option>
                                     </optgroup>
                                     <optgroup label="基础">
                                         <option value="socks">SOCKS5</option>
                                         <option value="http">HTTP</option>
                                         <option value="wireguard">WireGuard</option>
                                         <option value="ssh">SSH</option>
+                                    </optgroup>
+                                    <optgroup label="特殊">
+                                        <option value="tor">Tor</option>
+                                        <option value="dns">DNS</option>
                                     </optgroup>
                                 </select>
                             </div>
@@ -496,7 +505,87 @@
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
+                        <!-- ShadowTLS -->
+                        <div v-if="node.type==='shadowtls'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                <input type="text" v-model="node.shadowtls_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本 (Version)</label>
+                                <select v-model="node.shadowtls_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="3">v3 (推荐)</option>
+                                    <option value="2">v2</option>
+                                    <option value="1">v1</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标服务器 (Handshake Server)</label>
+                                <input type="text" v-model="node.shadowtls_handshake_server" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标端口</label>
+                                <input type="number" v-model.number="node.shadowtls_handshake_port" placeholder="443" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div class="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1.5"></i><strong>ShadowTLS</strong> 是一个流量混淆协议，需套在其他代理协议（如 Shadowsocks）外层使用。<code class="bg-blue-100 px-1 rounded">server/port</code> 填写 ShadowTLS 服务器地址，<code class="bg-blue-100 px-1 rounded">handshake</code> 填写用于模仿握手的真实 TLS 站点。</p>
+                            </div>
+                        </div>
+
+                        <!-- AnyTLS -->
+                        <div v-if="node.type==='anytls'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                <input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label>
+                                <input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲连接检查间隔 <span class="normal-case font-normal text-gray-400">(idle_session_check_interval)</span></label>
+                                <input type="text" v-model="node.anytls_idle_session_check_interval" placeholder="30s (留空使用默认)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                        </div>
+
+                        <!-- NaiveProxy -->
+                        <div v-if="node.type==='naive'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (Username)</label>
+                                <input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                <input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label>
+                                <input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
+                            </div>
+                            <div class="flex items-center gap-2 pt-5">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
+                            </div>
+                            <div class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <p class="text-xs text-amber-700"><i class="fas fa-info-circle mr-1.5"></i><strong>NaiveProxy</strong> 强制使用 TLS（HTTPS），利用真实 Chrome 网络栈抗 TLS 指纹探测。<code class="bg-amber-100 px-1 rounded">ALPN</code> 通常设为 <code class="bg-amber-100 px-1 rounded">h2</code> 或 <code class="bg-amber-100 px-1 rounded">http/1.1</code>。</p>
+                            </div>
+                        </div>
+
+                        <!-- Tor -->
+                        <div v-if="node.type==='tor'" class="grid grid-cols-1 gap-3 mb-3">
+                            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                <p class="text-xs text-gray-600 mb-3"><i class="fas fa-info-circle mr-1.5 text-indigo-400"></i>Tor 出站通过本地 Tor 客户端程序发送流量，<strong>服务器/端口</strong>字段在此协议中无意义。需要系统中已安装 Tor 或指定可执行文件路径。</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Tor 可执行文件路径 <span class="normal-case font-normal">(留空使用系统 tor)</span></label>
+                                        <input type="text" v-model="node.tor_executable_path" placeholder="/usr/bin/tor" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                    </div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">数据目录 <span class="normal-case font-normal">(data_directory)</span></label>
+                                        <input type="text" v-model="node.tor_data_directory" placeholder="/var/lib/tor" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                    </div>
+                                    <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">附加参数 <span class="normal-case font-normal">(extra_args · 空格分隔)</span></label>
+                                        <input type="text" v-model="node.tor_extra_args" placeholder="--SOCKSPort 9050" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- DNS outbound -->
+                        <div v-if="node.type==='dns'" class="mb-3">
+                            <div class="bg-sky-50 border border-sky-200 rounded-lg p-3">
+                                <p class="text-xs text-sky-700"><i class="fas fa-info-circle mr-1.5"></i><strong>DNS 出站</strong>将连接作为 DNS 查询转发到 sing-box 内部 DNS 系统处理，通常用于路由规则中劫持并响应 DNS 请求。此出站无额外配置，<strong>服务器/端口</strong>字段无意义。</p>
+                            </div>
+                        </div>
+
+                        <div v-if="['vless','vmess','trojan','shadowsocks'].includes(node.type)" class="mb-3">
                             <div class="grid grid-cols-3 gap-3 mb-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
                                     <select v-model="node.transport" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
@@ -514,7 +603,7 @@
                                 <div v-if="node.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP Host</label><input type="text" v-model="node.ws_host" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label><input type="text" v-model="node.flow" placeholder="xtls-rprx-vision" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             </div>
-                            <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                 <label class="flex items-center gap-2 cursor-pointer mb-3">
                                     <input type="checkbox" v-model="node.mux_enabled" class="w-4 h-4 text-indigo-600 rounded">
                                     <span class="text-sm font-bold text-gray-700">启用多路复用 (Multiplex / Mux)</span>
@@ -531,10 +620,10 @@
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
-                            <label v-if="['vless','vmess','trojan','http','socks'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
-                            <template v-if="node.tls || ['hysteria2','hysteria','tuic'].includes(node.type)">
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
+                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks','anytls','naive'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
+                            <label v-if="['vless','vmess','trojan','http','socks','anytls'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
+                            <template v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)">
+                                <label v-if="!['naive'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
                                 <label v-if="['vless','trojan'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
                                 <div v-if="['vless','vmess','trojan'].includes(node.type)" class="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
                                     <span class="text-xs font-bold text-gray-500">uTLS:</span>
@@ -553,6 +642,100 @@
                         <div v-if="node.reality && ['vless','trojan'].includes(node.type) && node.tls" class="mt-4 grid grid-cols-2 gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
                             <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Public Key</label><input type="text" v-model="node.reality_pubkey" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
                             <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Short ID</label><input type="text" v-model="node.reality_sid" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
+                        </div>
+
+                        <!-- ── 高级 TLS 选项 ── -->
+                        <div v-if="node.tls || ['hysteria2','hysteria','tuic','naive','anytls'].includes(node.type)" class="mt-3">
+                            <details class="group">
+                                <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
+                                    <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                    <i class="fas fa-shield-alt text-indigo-400 mr-0.5"></i>高级 TLS 选项
+                                    <span v-if="node.disable_sni||node.tls_min_version||node.tls_max_version||node.cipher_suites||node.tls_fragment||node.tls_record_fragment||node.ech_enabled" class="ml-auto badge bg-indigo-100 text-indigo-600 border border-indigo-200">已配置</span>
+                                </summary>
+                                <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+
+                                    <!-- SNI 控制 -->
+                                    <div class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
+                                        <label class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" v-model="node.disable_sni" class="w-4 h-4 text-orange-600 rounded">
+                                            <span class="text-xs font-bold text-gray-700">禁用 SNI <span class="text-gray-400 font-normal">(disable_sni)</span></span>
+                                        </label>
+                                        <span class="text-[10px] text-gray-400">勾选后 ClientHello 中不发送 server_name，可用于防止 SNI 探测，但可能导致某些服务器拒绝连接</span>
+                                    </div>
+
+                                    <!-- TLS 版本 & 加密套件 -->
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低 TLS 版本 <span class="normal-case font-normal text-gray-300">(min_version)</span></label>
+                                            <select v-model="node.tls_min_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                                <option value="">默认 (TLS 1.2)</option>
+                                                <option value="1.0">TLS 1.0</option>
+                                                <option value="1.1">TLS 1.1</option>
+                                                <option value="1.2">TLS 1.2</option>
+                                                <option value="1.3">TLS 1.3</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最高 TLS 版本 <span class="normal-case font-normal text-gray-300">(max_version)</span></label>
+                                            <select v-model="node.tls_max_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                                <option value="">默认 (TLS 1.3)</option>
+                                                <option value="1.0">TLS 1.0</option>
+                                                <option value="1.1">TLS 1.1</option>
+                                                <option value="1.2">TLS 1.2</option>
+                                                <option value="1.3">TLS 1.3</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-span-2">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">
+                                                加密套件 <span class="normal-case font-normal text-gray-300">(cipher_suites · 逗号分隔 · 仅 TLS 1.0–1.2)</span>
+                                            </label>
+                                            <select v-model="node.cipher_suites" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
+                                                <option value="">默认（推荐留空）</option>
+                                                <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">AES-128-GCM (ECDHE)</option>
+                                                <option value="TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384">AES-256-GCM (ECDHE)</option>
+                                                <option value="TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">ChaCha20-Poly1305 (ECDHE)</option>
+                                                <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">AES-128-GCM + ChaCha20（均衡）</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- 握手分片 -->
+                                    <div class="pt-2 border-t border-gray-200">
+                                        <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">握手分片（绕过简单防火墙）</div>
+                                        <div class="flex flex-wrap gap-4 items-start">
+                                            <label class="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" v-model="node.tls_record_fragment" class="w-4 h-4 text-sky-600 rounded">
+                                                <span class="text-xs font-bold text-gray-700">TLS Record 分片 <span class="text-gray-400 font-normal">(record_fragment)</span></span>
+                                            </label>
+                                            <label class="flex items-center gap-2 cursor-pointer">
+                                                <input type="checkbox" v-model="node.tls_fragment" class="w-4 h-4 text-amber-600 rounded">
+                                                <span class="text-xs font-bold text-gray-700">TCP 层分片 <span class="text-gray-400 font-normal">(fragment · 性能差，慎用)</span></span>
+                                            </label>
+                                            <div v-if="node.tls_fragment" class="flex items-center gap-2">
+                                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap">回退延迟</label>
+                                                <input type="text" v-model="node.tls_fragment_fallback_delay" placeholder="500ms" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-xs outline-none font-mono bg-white focus:ring-1">
+                                            </div>
+                                        </div>
+                                        <p class="text-[10px] text-gray-400 mt-1.5">建议优先尝试 Record 分片，性能更好；两者均仅针对明文包匹配型防火墙有效，不用于绕过实质性审查</p>
+                                    </div>
+
+                                    <!-- ECH -->
+                                    <div class="pt-2 border-t border-gray-200">
+                                        <label class="flex items-center gap-2 cursor-pointer mb-2">
+                                            <input type="checkbox" v-model="node.ech_enabled" class="w-4 h-4 text-violet-600 rounded">
+                                            <span class="text-xs font-bold text-gray-700">
+                                                启用 ECH <span class="text-gray-400 font-normal">(Encrypted Client Hello · 加密 ClientHello 隐藏 SNI)</span>
+                                            </span>
+                                        </label>
+                                        <div v-if="node.ech_enabled" class="mt-2">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">ECH 配置 (PEM · 每行一条，留空则从 DNS 自动获取)</label>
+                                            <textarea v-model="node.ech_config" rows="3" placeholder="-----BEGIN ECH CONFIGS-----&#10;...&#10;-----END ECH CONFIGS-----" class="w-full px-3 py-2 border border-violet-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-violet-400 resize-none"></textarea>
+                                            <p class="text-[10px] text-gray-400 mt-1">留空时 sing-box 自动从 DNS HTTPS 记录中查询 ECH 配置（需 DNS 支持）</p>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </div>
@@ -1204,11 +1387,11 @@ createApp({
         const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
 
         // ── 协议分类常量（集中定义，避免散落各处重复） ──────────────
-        const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
-        const PROTO_SUPPORT_TLS       = ['vless', 'vmess', 'trojan', 'http', 'socks'];
-        const PROTO_ALWAYS_TLS        = ['hysteria2', 'hysteria', 'tuic'];
-        const PROTO_SUPPORT_SECRET    = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria'];
-        const PROTO_SUPPORT_USER      = ['socks', 'http', 'ssh'];
+        const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan', 'shadowsocks'];
+        const PROTO_SUPPORT_TLS       = ['vless', 'vmess', 'trojan', 'http', 'socks', 'anytls'];
+        const PROTO_ALWAYS_TLS        = ['hysteria2', 'hysteria', 'tuic', 'naive'];
+        const PROTO_SUPPORT_SECRET    = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria', 'shadowtls', 'anytls'];
+        const PROTO_SUPPORT_USER      = ['socks', 'http', 'ssh', 'naive'];
         // ── 工具函数 ──────────────────────────────────
         const showToast = (msg, type='ok', duration=2800) => {
             const icons = { ok:'fas fa-check-circle', err:'fas fa-exclamation-circle', info:'fas fa-info-circle', warn:'fas fa-exclamation-triangle' };
@@ -1537,13 +1720,38 @@ createApp({
             mux_enabled:false, mux_protocol:'smux', mux_max_connections:4, mux_min_streams:4,
             tls:true, insecure:false, reality:false, reality_pubkey:'', reality_sid:'',
             utls_fingerprint:'', alpn:'',
+            // TLS 高级参数
+            disable_sni:false,
+            tls_min_version:'', tls_max_version:'',
+            cipher_suites:'',
+            tls_fragment:false, tls_record_fragment:false,
+            tls_fragment_fallback_delay:'',
+            ech_enabled:false, ech_config:'',
+            // Shadowsocks
             ss_method:'chacha20-ietf-poly1305', ss_plugin:'', ss_plugin_opts:'',
+            // TUIC
             tuic_password:'', tuic_congestion:'cubic', tuic_udp_relay_mode:'native',
+            // Hysteria
             hy_up_mbps:100, hy_down_mbps:100, hy_obfs:'', hy_auth_type:'str',
+            // Hysteria2
             hy2_up:'', hy2_down:'', hy2_obfs_type:'', hy2_obfs_password:'',
-            username:'', socks_version:'5',
+            // ShadowTLS
+            shadowtls_version:'3', shadowtls_password:'',
+            shadowtls_handshake_server:'', shadowtls_handshake_port:443,
+            // AnyTLS
+            anytls_idle_session_check_interval:'',
+            // NaiveProxy
+            username:'',
+            // SOCKS / HTTP
+            socks_version:'5',
+            // WireGuard
             wg_private_key:'', wg_peer_pubkey:'', wg_local_address:'', wg_psk:'', wg_mtu:1280, wg_reserved:'',
+            // SSH
             ssh_auth_type:'password',
+            // Tor
+            tor_executable_path:'', tor_extra_args:'', tor_data_directory:'',
+            // DNS outbound
+            dns_tag:'',
             ...overrides
         });
 
@@ -2284,6 +2492,30 @@ ${ipv6Block}
                     outbounds.push(o); return;
                 }
 
+                if(n.type==='shadowtls'){
+                    o.server=n.server; o.server_port=n.port;
+                    o.password=n.shadowtls_password;
+                    o.version=parseInt(n.shadowtls_version)||3;
+                    if(n.shadowtls_handshake_server){
+                        o.handshake={ server:n.shadowtls_handshake_server, server_port:n.shadowtls_handshake_port||443 };
+                    }
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='tor'){
+                    if(n.tor_executable_path) o.executable_path=n.tor_executable_path;
+                    if(n.tor_data_directory) o.data_directory=n.tor_data_directory;
+                    if(n.tor_extra_args){
+                        const args=n.tor_extra_args.trim().split(/\s+/).filter(Boolean);
+                        if(args.length) o.extra_args=args;
+                    }
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='dns'){
+                    outbounds.push(o); return;
+                }
+
                 if(n.type==='socks'){
                     o.server=n.server; o.server_port=n.port; o.version=n.socks_version||'5';
                     if(n.username) o.username=n.username;
@@ -2320,24 +2552,51 @@ ${ipv6Block}
                     o.congestion_control=n.tuic_congestion||'cubic';
                     o.udp_relay_mode=n.tuic_udp_relay_mode||'native';
                 }
-
-                if(n.type==='vless'&&n.flow) o.flow=n.flow;
-
-                const needTls=['vless','vmess','trojan','hysteria2','hysteria','tuic'].includes(n.type)
-                    ? (n.tls!==false) : n.tls;
-                if(needTls){
+                else if(n.type==='anytls'){
+                    o.password=n.secret;
+                    if(n.anytls_idle_session_check_interval) o.idle_session_check_interval=n.anytls_idle_session_check_interval;
+                }
+                else if(n.type==='naive'){
+                    // naive: server/port 已在上方 o.server= 赋值，此处补充认证和 TLS
+                    o.username=n.username; o.password=n.secret;
                     o.tls={enabled:true};
                     if(n.insecure) o.tls.insecure=true;
                     if(n.sni) o.tls.server_name=n.sni;
                     if(n.alpn){ const a=n.alpn.split(',').map(s=>s.trim()).filter(Boolean); if(a.length) o.tls.alpn=a; }
+                    outbounds.push(o); return;
+                }
+
+                if(n.type==='vless'&&n.flow) o.flow=n.flow;
+
+                const needTls=['vless','vmess','trojan','hysteria2','hysteria','tuic','anytls'].includes(n.type)
+                    ? (n.tls!==false) : (['naive'].includes(n.type) ? true : n.tls);
+                if(needTls){
+                    o.tls={enabled:true};
+                    if(n.disable_sni) o.tls.disable_sni=true;
+                    if(n.insecure) o.tls.insecure=true;
+                    if(n.sni) o.tls.server_name=n.sni;
+                    if(n.alpn){ const a=n.alpn.split(',').map(s=>s.trim()).filter(Boolean); if(a.length) o.tls.alpn=a; }
+                    if(n.tls_min_version) o.tls.min_version=n.tls_min_version;
+                    if(n.tls_max_version) o.tls.max_version=n.tls_max_version;
+                    if(n.cipher_suites){ const cs=n.cipher_suites.split(',').map(s=>s.trim()).filter(Boolean); if(cs.length) o.tls.cipher_suites=cs; }
                     if(n.utls_fingerprint) o.tls.utls={enabled:true,fingerprint:n.utls_fingerprint};
+                    if(n.ech_enabled){
+                        const ech={enabled:true};
+                        if(n.ech_config){ const ec=n.ech_config.split('\n').map(s=>s.trim()).filter(Boolean); if(ec.length) ech.config=ec; }
+                        o.tls.ech=ech;
+                    }
+                    if(n.tls_fragment||n.tls_record_fragment){
+                        if(n.tls_fragment) o.tls.fragment=true;
+                        if(n.tls_record_fragment) o.tls.record_fragment=true;
+                        if(n.tls_fragment_fallback_delay) o.tls.fragment_fallback_delay=n.tls_fragment_fallback_delay;
+                    }
                     if(n.reality&&['vless','trojan'].includes(n.type)){
                         o.tls.reality={enabled:true,public_key:n.reality_pubkey,short_id:n.reality_sid};
                         if(!o.tls.utls) o.tls.utls={enabled:true,fingerprint:'chrome'};
                     }
                 }
 
-                if(n.transport&&['vless','vmess','trojan'].includes(n.type)){
+                if(n.transport&&['vless','vmess','trojan','shadowsocks'].includes(n.type)){
                     if(n.transport==='ws') o.transport={type:'ws',path:n.path||'/',headers:n.ws_host?{Host:n.ws_host}:undefined};
                     else if(n.transport==='grpc') o.transport={type:'grpc',service_name:n.path||''};
                     else if(n.transport==='http') o.transport={type:'http',path:n.path||'/',host:n.ws_host?[n.ws_host]:undefined};
@@ -2621,6 +2880,9 @@ ${ipv6Block}
                 if (c.type !== 'wireguard') { delete c.wg_private_key; delete c.wg_peer_pubkey; delete c.wg_local_address; delete c.wg_psk; delete c.wg_mtu; delete c.wg_reserved; }
                 if (c.type !== 'socks') { delete c.socks_version; }
                 if (c.type !== 'ssh') { delete c.ssh_auth_type; }
+                if (c.type !== 'shadowtls') { delete c.shadowtls_version; delete c.shadowtls_password; delete c.shadowtls_handshake_server; delete c.shadowtls_handshake_port; }
+                if (c.type !== 'anytls') { delete c.anytls_idle_session_check_interval; }
+                if (c.type !== 'tor') { delete c.tor_executable_path; delete c.tor_extra_args; delete c.tor_data_directory; }
                 if (!PROTO_SUPPORT_USER.includes(c.type)) { delete c.username; }
                 if (!PROTO_SUPPORT_TRANSPORT.includes(c.type)) { delete c.transport; delete c.path; delete c.ws_host; delete c.mux_enabled; delete c.mux_protocol; delete c.mux_max_connections; delete c.mux_min_streams; }
                 if (c.type !== 'vless') { delete c.flow; }
