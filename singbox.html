@@ -601,7 +601,52 @@
                                 <div v-if="node.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Service Name</label><input type="text" v-model="node.path" placeholder="grpc" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div v-if="node.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">WS Host Header</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div v-if="node.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP Host</label><input type="text" v-model="node.ws_host" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                                <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label><input type="text" v-model="node.flow" placeholder="xtls-rprx-vision" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label>
+                                    <select v-model="node.flow" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                        <option value="">不启用（默认）</option>
+                                        <option value="xtls-rprx-vision">xtls-rprx-vision</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- network + packet_encoding 行 -->
+                            <div class="grid grid-cols-3 gap-3 mt-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
+                                    <select v-model="node.network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                        <option value="">TCP + UDP (默认)</option>
+                                        <option value="tcp">仅 TCP</option>
+                                        <option value="udp">仅 UDP</option>
+                                    </select>
+                                </div>
+                                <div v-if="['vless','vmess'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
+                                    <select v-model="node.packet_encoding" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-mono">
+                                        <option value="xudp">xudp (默认，xray)</option>
+                                        <option value="packetaddr">packetaddr (v2ray 5+)</option>
+                                        <option value="">禁用</option>
+                                    </select>
+                                </div>
+                                <div v-if="node.type==='vmess'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">security <span class="normal-case font-normal text-gray-400">(加密方式)</span></label>
+                                    <select v-model="node.vmess_security" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-mono">
+                                        <option value="auto">auto (推荐)</option>
+                                        <option value="aes-128-gcm">aes-128-gcm</option>
+                                        <option value="chacha20-poly1305">chacha20-poly1305</option>
+                                        <option value="none">none</option>
+                                        <option value="zero">zero</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <!-- VMess 协议参数 -->
+                            <div v-if="node.type==='vmess'" class="grid grid-cols-3 gap-3 mt-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">alter_id</label>
+                                    <input type="number" v-model.number="node.vmess_alter_id" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                </div>
+                                <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="node.vmess_global_padding" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-xs font-bold text-gray-700">global_padding</span>
+                                </label></div>
+                                <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="node.vmess_authenticated_length" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-xs font-bold text-gray-700">authenticated_length</span>
+                                </label></div>
                             </div>
                             <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                 <label class="flex items-center gap-2 cursor-pointer mb-3">
@@ -625,16 +670,38 @@
                             <template v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)">
                                 <label v-if="!['naive'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
                                 <label v-if="['vless','trojan'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
-                                <div v-if="['vless','vmess','trojan'].includes(node.type)" class="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
-                                    <span class="text-xs font-bold text-gray-500">uTLS:</span>
-                                    <select v-model="node.utls_fingerprint" class="px-2 py-1 border border-gray-300 rounded-md text-xs outline-none bg-white font-mono">
-                                        <option value="">不启用</option>
-                                        <option value="chrome">chrome</option><option value="firefox">firefox</option><option value="safari">safari</option><option value="edge">edge</option><option value="ios">ios</option><option value="android">android</option><option value="random">random</option><option value="randomized">randomized</option>
-                                    </select>
-                                </div>
-                                <div class="flex items-center gap-2 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
-                                    <span class="text-xs font-bold text-gray-500">ALPN:</span>
-                                    <input type="text" v-model="node.alpn" placeholder="h2,http/1.1" class="px-2 py-1 border border-gray-300 rounded-md text-xs outline-none font-mono bg-white w-32 focus:ring-1">
+                                <!-- uTLS + ALPN 网格 -->
+                                <div class="w-full mt-1 grid grid-cols-2 gap-3">
+                                    <div v-if="['vless','vmess','trojan'].includes(node.type)">
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">uTLS 指纹</label>
+                                        <select v-model="node.utls_fingerprint" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
+                                            <option value="">不启用（默认）</option>
+                                            <option value="chrome">chrome</option>
+                                            <option value="firefox">firefox</option>
+                                            <option value="safari">safari</option>
+                                            <option value="edge">edge</option>
+                                            <option value="ios">ios</option>
+                                            <option value="android">android</option>
+                                            <option value="random">random</option>
+                                            <option value="randomized">randomized</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">ALPN</label>
+                                        <select v-if="!node.alpn_custom" v-model="node.alpn" @change="if(node.alpn==='__custom__'){node.alpn_custom=true;node.alpn=''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
+                                            <option value="">不指定（默认）</option>
+                                            <option value="h2">h2</option>
+                                            <option value="http/1.1">http/1.1</option>
+                                            <option value="h2,http/1.1">h2, http/1.1</option>
+                                            <option value="h3">h3</option>
+                                            <option value="h3,h2">h3, h2</option>
+                                            <option value="__custom__">自定义...</option>
+                                        </select>
+                                        <div v-if="node.alpn_custom" class="flex gap-1">
+                                            <input type="text" v-model="node.alpn" placeholder="h2,http/1.1" class="flex-1 px-3 py-2 border border-indigo-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <button @click="node.alpn_custom=false; node.alpn=''" class="px-2 py-1 text-gray-400 hover:text-red-500 border border-gray-200 rounded-lg bg-white text-xs transition-colors" title="取消自定义"><i class="fas fa-times"></i></button>
+                                        </div>
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -645,7 +712,7 @@
                         </div>
 
                         <!-- ── 高级 TLS 选项 ── -->
-                        <div v-if="node.tls || ['hysteria2','hysteria','tuic','naive','anytls'].includes(node.type)" class="mt-3">
+                        <div v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)" class="mt-3">
                             <details class="group">
                                 <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
                                     <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
@@ -1714,12 +1781,20 @@ createApp({
         const addProvider    = () => providers.value.push({ tag:`Sub${providers.value.length+1}`, url:'' });
         const removeProvider = (i) => { showConfirm('确定要删除此订阅源吗？', ()=>providers.value.splice(i,1), {title:'删除订阅源', okText:'删除'}); };
 
-        const makeNode = (overrides={}) => ({
+        const makeNode = (overrides={}) => {
+            // 先确定协议类型（优先用 overrides 中的 type）
+            const type = overrides.type || 'vless';
+            const tlsDefault = ['vless','vmess','trojan','hysteria2','hysteria','tuic','naive','anytls'].includes(type);
+            return {
             tag:'', type:'vless', server:'', port:443, secret:'', sni:'',
             transport:'', path:'', ws_host:'', flow:'',
             mux_enabled:false, mux_protocol:'smux', mux_max_connections:4, mux_min_streams:4,
-            tls:true, insecure:false, reality:false, reality_pubkey:'', reality_sid:'',
-            utls_fingerprint:'', alpn:'',
+            tls:tlsDefault, insecure:false, reality:false, reality_pubkey:'', reality_sid:'',
+            utls_fingerprint:'', alpn:'', alpn_custom:false,
+            // network & packet encoding (vless/vmess/trojan/shadowsocks)
+            network:'', packet_encoding:'xudp',
+            // VMess 协议参数
+            vmess_security:'auto', vmess_alter_id:0, vmess_global_padding:false, vmess_authenticated_length:true,
             // TLS 高级参数
             disable_sni:false,
             tls_min_version:'', tls_max_version:'',
@@ -1753,7 +1828,8 @@ createApp({
             // DNS outbound
             dns_tag:'',
             ...overrides
-        });
+            };
+        };
 
         const nodes = ref([]);
         const addNode = async () => {
@@ -1772,8 +1848,14 @@ createApp({
             }
         };
 
+        const PROTO_TLS_DEFAULT_ON  = ['vless','vmess','trojan','hysteria2','hysteria','tuic','naive','anytls'];
+        const PROTO_TLS_DEFAULT_OFF = ['http','socks']; // 支持 TLS 但默认关闭
+
         const onNodeTypeChange = (node) => {
             if(!PROTO_SUPPORT_TRANSPORT.includes(node.type)) node.transport = '';
+            // 切换协议时修正 tls 默认值
+            if(PROTO_TLS_DEFAULT_ON.includes(node.type)) node.tls = true;
+            else node.tls = false;
         };
 
         const removeNode = (i) => {
@@ -2534,7 +2616,13 @@ ${ipv6Block}
                 o.server=n.server; o.server_port=n.port;
 
                 if(n.type==='vless') o.uuid=n.secret;
-                else if(n.type==='vmess'){ o.uuid=n.secret; o.security='auto'; o.alter_id=0; }
+                else if(n.type==='vmess'){
+                    o.uuid=n.secret;
+                    o.security=n.vmess_security||'auto';
+                    o.alter_id=n.vmess_alter_id||0;
+                    if(n.vmess_global_padding) o.global_padding=true;
+                    if(n.vmess_authenticated_length===false) o.authenticated_length=false;
+                }
                 else if(n.type==='trojan') o.password=n.secret;
                 else if(n.type==='shadowsocks'){ o.method=n.ss_method||'chacha20-ietf-poly1305'; o.password=n.secret; if(n.ss_plugin){ o.plugin=n.ss_plugin; if(n.ss_plugin_opts) o.plugin_opts=n.ss_plugin_opts; } }
                 else if(n.type==='hysteria2'){
@@ -2602,6 +2690,19 @@ ${ipv6Block}
                     else if(n.transport==='http') o.transport={type:'http',path:n.path||'/',host:n.ws_host?[n.ws_host]:undefined};
                     else if(n.transport==='httpupgrade') o.transport={type:'httpupgrade',path:n.path||'/',host:n.ws_host||undefined};
                     else if(n.transport==='quic') o.transport={type:'quic'};
+                }
+
+                // network: 仅在非默认（非空）时写入
+                if(n.network&&['vless','vmess','trojan'].includes(n.type)){
+                    o.network=n.network;
+                }
+
+                // packet_encoding: vless 默认 xudp，vmess 默认空；仅在用户明确选择时写入
+                if(['vless','vmess'].includes(n.type)){
+                    // 空字符串表示禁用，xudp 是 vless 默认可省略，但 vmess 没有默认值
+                    if(n.packet_encoding==='') o.packet_encoding='';  // 明确禁用
+                    else if(n.packet_encoding && !(n.type==='vless' && n.packet_encoding==='xudp')) o.packet_encoding=n.packet_encoding;
+                    // vless 的 xudp 是默认值，不写入（sing-box 自动使用）
                 }
 
                 if(n.mux_enabled&&['vless','vmess','trojan'].includes(n.type)){
