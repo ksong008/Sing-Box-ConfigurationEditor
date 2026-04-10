@@ -610,7 +610,7 @@
                             </div>
                             <!-- network + packet_encoding 行 -->
                             <div class="grid grid-cols-3 gap-3 mt-2">
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
+                                <div v-if="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
                                     <select v-model="node.network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                         <option value="">TCP + UDP (默认)</option>
                                         <option value="tcp">仅 TCP</option>
@@ -670,8 +670,9 @@
                             <template v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)">
                                 <label v-if="!['naive'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
                                 <label v-if="['vless','trojan'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
-                                <!-- uTLS + ALPN 网格 -->
+                                <!-- uTLS + ALPN 网格：仅对支持的协议显示对应控件 -->
                                 <div class="w-full mt-1 grid grid-cols-2 gap-3">
+                                    <!-- uTLS：仅 vless/vmess/trojan -->
                                     <div v-if="['vless','vmess','trojan'].includes(node.type)">
                                         <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">uTLS 指纹</label>
                                         <select v-model="node.utls_fingerprint" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
@@ -686,7 +687,8 @@
                                             <option value="randomized">randomized</option>
                                         </select>
                                     </div>
-                                    <div>
+                                    <!-- ALPN：对支持 TLS 且 ALPN 有实际意义的协议显示 -->
+                                    <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','anytls','naive'].includes(node.type)">
                                         <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">ALPN</label>
                                         <select v-if="!node.alpn_custom" v-model="node.alpn" @change="if(node.alpn==='__custom__'){node.alpn_custom=true;node.alpn=''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
                                             <option value="">不指定（默认）</option>
@@ -721,8 +723,8 @@
                                 </summary>
                                 <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
 
-                                    <!-- SNI 控制 -->
-                                    <div class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
+                                    <!-- SNI 控制：QUIC 协议不支持（仅 TCP TLS 有意义） -->
+                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
                                         <label class="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" v-model="node.disable_sni" class="w-4 h-4 text-orange-600 rounded">
                                             <span class="text-xs font-bold text-gray-700">禁用 SNI <span class="text-gray-400 font-normal">(disable_sni)</span></span>
@@ -730,8 +732,8 @@
                                         <span class="text-[10px] text-gray-400">勾选后 ClientHello 中不发送 server_name，可用于防止 SNI 探测，但可能导致某些服务器拒绝连接</span>
                                     </div>
 
-                                    <!-- TLS 版本 & 加密套件 -->
-                                    <div class="grid grid-cols-2 gap-3">
+                                    <!-- TLS 版本 & 加密套件：QUIC 协议不支持（QUIC 内部处理） -->
+                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="grid grid-cols-2 gap-3">
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低 TLS 版本 <span class="normal-case font-normal text-gray-300">(min_version)</span></label>
                                             <select v-model="node.tls_min_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
@@ -766,8 +768,8 @@
                                         </div>
                                     </div>
 
-                                    <!-- 握手分片 -->
-                                    <div class="pt-2 border-t border-gray-200">
+                                    <!-- 握手分片：仅 TCP TLS 协议有效，QUIC 无效 -->
+                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="pt-2 border-t border-gray-200">
                                         <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">握手分片（绕过简单防火墙）</div>
                                         <div class="flex flex-wrap gap-4 items-start">
                                             <label class="flex items-center gap-2 cursor-pointer">
@@ -786,7 +788,7 @@
                                         <p class="text-[10px] text-gray-400 mt-1.5">建议优先尝试 Record 分片，性能更好；两者均仅针对明文包匹配型防火墙有效，不用于绕过实质性审查</p>
                                     </div>
 
-                                    <!-- ECH -->
+                                    <!-- ECH：所有 TLS 协议均支持 -->
                                     <div class="pt-2 border-t border-gray-200">
                                         <label class="flex items-center gap-2 cursor-pointer mb-2">
                                             <input type="checkbox" v-model="node.ech_enabled" class="w-4 h-4 text-violet-600 rounded">
@@ -2533,7 +2535,33 @@ ${ipv6Block}
 # 验证：  ss -tlnp | grep ${tport}  &&  ss -ulnp | grep ${dnsPort}
 `;
         });
-        
+
+        // 纯净版（用于复制/下载）：去除所有 # 注释行和行尾注释，保留纯规则
+        const generatedNftClean = computed(() => {
+            if (!generatedNft.value) return '';
+            return generatedNft.value
+                .split('\n')
+                .map((line, i) => {
+                    // 第一行 shebang 原样保留
+                    if (i === 0 && line.startsWith('#!')) return line;
+                    // 整行注释（含前置空格）直接删除，返回 null
+                    if (line.trim().startsWith('#')) return null;
+                    // 去除行尾注释：找第一个 # 的位置，截断并 rtrim
+                    const ci = line.indexOf('#');
+                    if (ci !== -1) return line.slice(0, ci).trimEnd();
+                    return line;
+                })
+                .filter(line => line !== null)
+                // 压缩连续空行为最多一个
+                .reduce((acc, line) => {
+                    if (line.trim() === '' && acc.length > 0 && acc[acc.length - 1].trim() === '') return acc;
+                    acc.push(line);
+                    return acc;
+                }, [])
+                .join('\n')
+                .trim() + '\n';
+        });
+
         const generatedJson = computed(() => {
             const allTags = [...groups.value.map(g=>g.tag), ...nodes.value.map(n=>n.tag)];
             const tagCount = {};
@@ -3255,12 +3283,12 @@ ${ipv6Block}
             const nftCopyIcon = ref('fas fa-copy');
             const copyNft = async () => {
                 nftCopyIcon.value = 'fas fa-spinner fa-spin';
-                const ok = await copyToClipboard(generatedNft.value);
+                const ok = await copyToClipboard(generatedNftClean.value);
                 setTimeout(() => {
                     if(ok){
                         nftCopyIcon.value = 'fas fa-check';
                         nftCopyText.value = '已复制';
-                        showToast('NFTables 规则已复制','ok');
+                        showToast('NFTables 规则已复制（纯净版）','ok');
                     } else {
                         nftCopyIcon.value = 'fas fa-times';
                         nftCopyText.value = '复制失败';
@@ -3270,7 +3298,7 @@ ${ipv6Block}
             };
 
             const downloadNft = () => {
-                const blob = new Blob([generatedNft.value], {type:'text/plain'});
+                const blob = new Blob([generatedNftClean.value], {type:'text/plain'});
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
                 a.download = `${tproxy.value.nft_table || 'singbox'}.nft`;
@@ -3311,7 +3339,7 @@ ${ipv6Block}
 				isFetching, fetchStatus, rawPastedText,
                 fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
                 generatedJson, copyText, copyIcon, copyConfig,
-                tproxy, tproxyConflicts, generatedNft, nftCopyText, nftCopyIcon, copyNft, downloadNft,
+                tproxy, tproxyConflicts, generatedNft, generatedNftClean, nftCopyText, nftCopyIcon, copyNft, downloadNft,
                 showImportExport, importExportTab, importJsonText, importError,
                 modalContentReady, exportSnapshotPanel, exportSnapshotRuntime,
                 exportPreviewJson, exportPreviewTab, openImportExport, doExportDownload, doExportRuntimeDownload, doExportCopy, doExportRuntimeCopy, doImportFile, doImportText,
