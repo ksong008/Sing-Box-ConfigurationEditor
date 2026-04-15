@@ -213,7 +213,222 @@
                         </div>
                     </div>
 
+                                        <!-- ===== EXTRA_INBOUNDS_PATCH_START ===== -->
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <div class="stitle mb-0">额外入站</div>
+                                <p class="text-xs text-gray-500 mt-1 pl-3">
+                                    在 mixed / tun / tproxy 之外额外追加 http / socks / direct 入站。
+                                    TLS 为可选项，勾选后才显示证书和私钥路径；SOCKS 仅 version=5 显示 TLS。
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap gap-2 justify-end">
+                                <button @click="addExtraInbound('http')" class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 border border-indigo-200 font-bold transition">
+                                    <i class="fas fa-plus mr-1"></i>HTTP
+                                </button>
+                                <button @click="addExtraInbound('socks')" class="text-xs bg-sky-50 text-sky-700 px-3 py-1.5 rounded-lg hover:bg-sky-100 border border-sky-200 font-bold transition">
+                                    <i class="fas fa-plus mr-1"></i>SOCKS
+                                </button>
+                                <button @click="addExtraInbound('direct')" class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg hover:bg-emerald-100 border border-emerald-200 font-bold transition">
+                                    <i class="fas fa-plus mr-1"></i>DIRECT
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="extraInbounds.length === 0" class="text-center text-sm font-bold text-gray-400 py-6 border-2 border-dashed border-gray-200 rounded-xl">
+                            暂无额外入站，请点击右上角按钮添加。
+                        </div>
+
+                        <div
+                            v-for="(inb, idx) in extraInbounds"
+                            :key="inb.id"
+                            class="bg-gray-50 p-4 rounded-xl border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm mb-4 last:mb-0"
+                        >
+                            <div class="flex justify-between items-center mb-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="badge bg-white text-indigo-700 border border-indigo-200">Inbound {{ idx + 1 }}</span>
+                                    <span class="text-xs text-gray-500 font-medium">会追加到 inbounds 数组</span>
+                                </div>
+                                <button
+                                    @click="removeExtraInbound(idx)"
+                                    class="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100 border border-red-200 font-bold transition"
+                                >
+                                    <i class="fas fa-trash-alt mr-1"></i>删除
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label>
+                                    <select
+                                        v-model="inb.type"
+                                        @change="onExtraInboundTypeChange(inb)"
+                                        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:ring-1"
+                                    >
+                                        <option value="http">HTTP</option>
+                                        <option value="socks">SOCKS</option>
+                                        <option value="direct">DIRECT</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">标签</label>
+                                    <input
+                                        v-model="inb.tag"
+                                        placeholder="http-in"
+                                        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-bold text-indigo-700 focus:ring-1"
+                                    >
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label>
+                                    <input
+                                        v-model="inb.listen"
+                                        placeholder="127.0.0.1"
+                                        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                    >
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label>
+                                    <input
+                                        type="number"
+                                        v-model.number="inb.listen_port"
+                                        min="1"
+                                        max="65535"
+                                        placeholder="8080"
+                                        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                    >
+                                </div>
+
+                                <template v-if="inb.type === 'direct'">
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">override_address</label>
+                                        <input
+                                            v-model="inb.override_address"
+                                            placeholder="1.1.1.1"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">override_port</label>
+                                        <input
+                                            type="number"
+                                            v-model="inb.override_port"
+                                            min="1"
+                                            max="65535"
+                                            placeholder="53"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                        >
+                                    </div>
+                                </template>
+
+                                <template v-else>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名</label>
+                                        <input
+                                            v-model="inb.username"
+                                            placeholder="admin"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none focus:ring-1"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
+                                        <input
+                                            v-model="inb.password"
+                                            type="password"
+                                            placeholder="留空表示不启用认证"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                        >
+                                    </div>
+                                </template>
+
+                                <div v-if="inb.type === 'socks'">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SOCKS 版本</label>
+                                    <select
+                                        v-model="inb.socks_version"
+                                        @change="onExtraInboundSocksVersionChange(inb)"
+                                        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:ring-1"
+                                    >
+                                        <option value="4">4</option>
+                                        <option value="4a">4a</option>
+                                        <option value="5">5</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-span-2 flex flex-wrap gap-5 bg-white p-3 rounded-lg border border-gray-200">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" v-model="inb.sniff" class="w-4 h-4 text-indigo-600 rounded">
+                                        <span class="text-sm font-bold text-gray-700">启用 sniff</span>
+                                    </label>
+
+                                    <label
+                                        v-if="inb.type === 'http' || (inb.type === 'socks' && inb.socks_version === '5')"
+                                        class="flex items-center gap-2 cursor-pointer"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            v-model="inb.tls"
+                                            @change="resetExtraInboundTls(inb)"
+                                            class="w-4 h-4 text-indigo-600 rounded"
+                                        >
+                                        <span class="text-sm font-bold text-gray-700">启用 TLS</span>
+                                    </label>
+
+                                    <span
+                                        v-if="inb.type === 'socks' && inb.socks_version !== '5'"
+                                        class="text-xs text-gray-400 font-semibold"
+                                    >
+                                        SOCKS 4 / 4a 不显示 TLS
+                                    </span>
+                                </div>
+
+                                <template v-if="(inb.type === 'http' || (inb.type === 'socks' && inb.socks_version === '5')) && inb.tls">
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">证书路径</label>
+                                        <input
+                                            v-model="inb.tls_cert_path"
+                                            placeholder="/etc/sing-box/cert.pem"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                        >
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">私钥路径</label>
+                                        <input
+                                            v-model="inb.tls_key_path"
+                                            placeholder="/etc/sing-box/key.pem"
+                                            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1"
+                                        >
+                                    </div>
+                                </template>
+
+                                <div
+                                    v-if="(inb.username && !inb.password) || (!inb.username && inb.password)"
+                                    class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3"
+                                >
+                                    <p class="text-xs text-amber-700 font-semibold">
+                                        <i class="fas fa-info-circle mr-1.5"></i>用户名和密码需要同时填写，生成 JSON 时才会写入 users。
+                                    </p>
+                                </div>
+
+                                <div
+                                    v-if="(inb.type === 'http' || (inb.type === 'socks' && inb.socks_version === '5')) && inb.tls && (!inb.tls_cert_path || !inb.tls_key_path)"
+                                    class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3"
+                                >
+                                    <p class="text-xs text-amber-700 font-semibold">
+                                        <i class="fas fa-exclamation-triangle mr-1.5"></i>已启用 TLS，建议同时填写证书路径和私钥路径。
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- ===== EXTRA_INBOUNDS_PATCH_END ===== -->
+
+<div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="flex justify-between items-center mb-4">
                             <div class="flex items-center gap-2">
                                 <div class="stitle mb-0">DNS 服务器</div>
@@ -258,7 +473,7 @@
                         <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-5 bg-indigo-50/50 p-3 rounded-lg">
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" v-model="settings.independent_cache" class="w-4 h-4 text-indigo-600 rounded">
-                                <span class="text-sm text-gray-700 font-medium">独立缓存 <span class="text-gray-400 text-xs font-normal">(FakeIP 必需)</span></span>
+                                <span class="text-sm text-gray-700 font-medium">独立缓存 <span class="text-gray-400 text-xs font-normal">(FakeIP 推荐，开启时自动勾选)</span></span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" v-model="settings.reverse_mapping" class="w-4 h-4 text-indigo-600 rounded">
@@ -1322,7 +1537,6 @@
                     </div>
                 </div>
 
-
                 <div v-show="currentTab==='tproxy'" class="space-y-5">
 
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -1362,20 +1576,68 @@
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">NFTables 表名</label>
                                     <input type="text" v-model="tproxy.nft_table" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
                                 </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Mark (hex)</label>
-                                    <input type="text" v-model="tproxy.mark" placeholder="0x01" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Mark (hex/dec) <span class="normal-case font-normal text-gray-300">代理流量</span></label>
+                                    <input type="text" v-model="tproxy.mark" @blur="sanitizeTproxyMarks" placeholder="111" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
                                 </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box 运行用户 (uid)</label>
-                                    <input type="text" v-model="tproxy.uid" placeholder="sing-box" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">用于跳过自身流量，防止回环（skuid）</p>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Route Mark (hex/dec) <span class="normal-case font-normal text-gray-300">自身出站</span></label>
+                                    <input type="text" v-model="tproxy.route_mark" @blur="sanitizeTproxyMarks" placeholder="112" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">sing-box 自身出站流量标记，不触发策略路由，需与 proxy mark 不同</p>
                                 </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box DNS 入站端口 <span class="text-indigo-400 normal-case font-normal">(dns-in)</span></label>
+                                
+                                <div class="col-span-2">
+                                    <div v-if="tproxyMarkIssues.length>0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                                        <p class="text-xs font-black text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>Mark 参数检查</p>
+                                        <ul class="list-disc pl-5 text-[11px] text-red-700 leading-6">
+                                            <li v-for="(msg, midx) in tproxyMarkIssues" :key="'mk-'+midx">{{ msg }}</li>
+                                        </ul>
+                                        <button @click="resetTproxyMarksSafe" class="mt-2 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition">
+                                            一键恢复 111 / 112
+                                        </button>
+                                    </div>
+                                    <div v-else class="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2">
+                                        <p class="text-[11px] text-emerald-700 font-semibold"><i class="fas fa-check-circle mr-1.5"></i>Mark 检查通过。避免使用保留值 0/253/254/255，且 Mark 与 Route Mark 不可相同。</p>
+                                    </div>
+                                </div>
+<div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box UID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
+                                    <input type="text" v-model="tproxy.proxy_uid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_uid ? 'border-amber-300' : 'border-gray-300'">
+                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -u sing-box</code>（无需 sing-box 运行，仅需系统存在该用户）</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box GID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
+                                    <input type="text" v-model="tproxy.proxy_gid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_gid ? 'border-amber-300' : 'border-gray-300'">
+                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -g sing-box</code>（无需 sing-box 运行，仅需系统存在该用户组）</p>
+                                    <p v-if="!tproxy.proxy_uid || !tproxy.proxy_gid" class="text-[10px] text-amber-600 mt-1 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>未填写时将使用 oifname lo 兜底防回环，需确保已开启 auto_detect_interface，否则仍可能出现 DNS 死循环</p>
+                                    <p v-else class="text-[10px] text-emerald-600 mt-1"><i class="fas fa-check-circle mr-1"></i>已启用 skuid/skgid 精准防回环</p>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">DNS 接管方式</label>
+                                    <select v-model="tproxy.dns_hijack_mode" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                        <option value="tproxy">53 直接进入 TProxy（推荐）</option>
+                                        <option value="nat">NAT DNAT 到 dns-in（兼容旧方案）</option>
+                                    </select>
+                                    <p class="text-[10px] text-gray-400 mt-1">
+                                        {{ tproxy.dns_hijack_mode === 'nat'
+                                            ? '将生成 dns-in + DNS NAT 规则（53 -> dns-in 端口）'
+                                            : '不生成 DNS NAT，53 端口直接进入 tproxy-in' }}
+                                    </p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">入站接口</label>
+                                    <input type="text" v-model.trim="tproxy.ingress_iface" placeholder="br-lan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅处理来自此接口的入站/转发流量。留空则处理所有入站接口。路由常见为 br-lan，单网卡主机可留空或填写实际网卡名，比如 eth0。</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出口接口</label>
+                                    <input type="text" v-model.trim="tproxy.egress_iface" placeholder="pppoe-wan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅对最终从此接口发出的本机流量应用 output 标记。留空表示不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、VPN、隧道等虚拟接口。通常建议填写实际的物理/WAN 出口接口，如 pppoe-wan、eth0、enp1s0。</p>
+                                </div>
+
+                                <div v-if="!tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                                    <span class="font-semibold">出口接口未填写：</span>当前将不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、WireGuard、Tailscale、OpenVPN 等虚拟/隧道接口。通常建议填写实际的 WAN/物理出口接口，如 <code class="font-mono">pppoe-wan</code>、<code class="font-mono">eth0</code>、<code class="font-mono">enp1s0</code>。
+                                </div>
+                                <div v-if="tproxy.ingress_iface.trim() && tproxy.egress_iface.trim() && tproxy.ingress_iface.trim() === tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800">
+                                    <span class="font-semibold">单网卡场景提示：</span>当前入站接口与出口接口相同，通常见于单网卡主机、VPS 或仅代理本机流量的部署，属于正常配置。生成器会自动保留 <code class="font-mono">lo</code> 回注路径，确保本机 output 流量经策略路由回注后仍可进入 TProxy。若部署在软路由上，通常应改为“入站接口 = LAN/bridge（如 <code class="font-mono">br-lan</code>），出口接口 = WAN/默认路由接口（如 <code class="font-mono">pppoe-wan</code> / <code class="font-mono">eth0</code>）”。
+                                </div>
+                                <div v-if="tproxy.dns_hijack_mode === 'nat'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box DNS 入站端口 <span class="text-indigo-400 normal-case font-normal">(dns-in)</span></label>
                                     <input type="number" v-model.number="tproxy.dns_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">nft 将 53 端口 DNAT 至此端口，需与 dns-in inbound 一致</p>
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">局域网网卡</label>
-                                    <input type="text" v-model="tproxy.iface" placeholder="eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">仅处理此接口入站流量，留空则处理所有接口</p>
+                                    <p class="text-[10px] text-gray-400 mt-1">仅 NAT 模式使用：nft 将 53 DNAT 到该端口</p>
                                 </div>
                             </div>
 							<label class="flex items-center gap-3 cursor-pointer px-4 py-3 mt-4 rounded-xl border transition-colors"
@@ -1387,7 +1649,7 @@
 										自动检测出口接口 (auto_detect_interface)
 									</span>
 									<span class="block text-xs mt-0.5 text-gray-400">
-										全局路由参数。开启后自动绑定物理网卡，强烈建议开启以防止 TProxy 产生严重的流量回环。
+										TProxy 防环路的主要机制：开启后 sing-box 出站连接自动绑定物理网卡，不走策略路由表，避免代理流量被再次拦截。<strong class="text-teal-700">TProxy 模式下必须开启。</strong>
 									</span>
 								</div>
 							</label>
@@ -1408,9 +1670,19 @@
 
                             <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
                                 <p class="text-xs font-black text-amber-800 mb-2"><i class="fas fa-terminal mr-1.5"></i>策略路由（加载 NFT 规则后在 Shell 中执行）</p>
-                                <pre class="text-xs font-mono text-amber-900 bg-amber-100 rounded-lg p-3 select-all leading-relaxed">ip rule add fwmark {{ tproxy.mark || '0x01' }} lookup 100
-ip route add local default dev lo table 100{{ tproxy.ipv6 ? '\nip -6 rule add fwmark ' + (tproxy.mark||'0x01') + ' lookup 100\nip -6 route add local default dev lo table 100' : '' }}</pre>
-                                <p class="text-[10px] text-amber-700 mt-2">这两条命令在重启后失效，建议写入 <code>/etc/network/interfaces</code> 或 systemd 服务。</p>
+                                <pre class="text-xs font-mono text-amber-900 bg-amber-100 rounded-lg p-3 select-all leading-relaxed">ip rule add fwmark {{ tproxy.mark || '111' }} lookup {{ tproxy.mark || '111' }}
+ip route add local 0.0.0.0/0 dev lo table {{ tproxy.mark || '111' }}{{ tproxy.ipv6 ? '\nip -6 rule add fwmark ' + (tproxy.mark||'111') + ' lookup ' + (tproxy.mark||'111') + '\nip -6 route add local ::/0 dev lo table ' + (tproxy.mark||'111') : '' }}</pre>
+                                <p class="text-[10px] text-amber-700 mt-2">这两条命令在重启后失效，建议写入 <code>/etc/network/interfaces</code> 或 systemd 服务。路由表号与 fwmark 值保持一致，方便排查。</p>
+                            </div>
+                                                        <div v-if="tproxy.dns_hijack_mode==='tproxy' && settings.hijack_dns" class="mt-4 bg-rose-50 border-2 border-rose-300 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs font-black text-rose-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>DNS 53 直接进入 tproxy-in：注意事项</p>
+                                <ul class="text-[11px] text-rose-700 leading-6 list-disc pl-5">
+                                    <li>sing-box 需具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_BIND_SERVICE</code>（建议同时具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_ADMIN</code> / <code class="bg-rose-100 px-1 rounded">CAP_NET_RAW</code>）。</li>
+                                    <li>开启示例：<code class="bg-rose-100 px-1 rounded">sudo systemctl edit sing-box</code>，在 <code class="bg-rose-100 px-1 rounded">[Service]</code> 中添加 <code class="bg-rose-100 px-1 rounded">AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code> 与 <code class="bg-rose-100 px-1 rounded">CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code>，然后执行 <code class="bg-rose-100 px-1 rounded">sudo systemctl daemon-reload && sudo systemctl restart sing-box</code>。</li>
+                                    <li>建议开启 <code class="bg-rose-100 px-1 rounded">net.ipv4.ip_nonlocal_bind=1</code>（如使用 IPv6 同时开启 <code class="bg-rose-100 px-1 rounded">net.ipv6.ip_nonlocal_bind=1</code>）。</li>
+                                    <li>必须执行上方 fwmark 策略路由命令，且 mark/table 与 NFT、sing-box 保持一致。</li>
+                                    <li>此模式不会生成 <code class="bg-rose-100 px-1 rounded">dns-in</code> 与 DNS NAT 规则，请勿再手动追加 DNAT 53。</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
@@ -1562,8 +1834,12 @@ createApp({
         
         const handlePasteCleanup = () => { setTimeout(cleanExcludeText, 50); };
 
-        watch(() => fakeip.value.enabled, (newVal) => {
-            settings.value.independent_cache = newVal;
+        watch(() => fakeip.value.enabled, (newVal, oldVal) => {
+            // 仅在从关闭 -> 开启 FakeIP 时自动勾选一次
+            // 用户后续仍可手动取消 independent_cache
+            if (newVal && !oldVal && !settings.value.independent_cache) {
+                settings.value.independent_cache = true;
+            }
         });
 
         const tun = ref({ enabled:false, interface_name:'tun0', stack:'system', address_v4:'172.19.0.1/30', address_v6:'', mtu:9000, auto_route:true, strict_route:true, auto_redirect:false, endpoint_independent_nat:false, non_gateway_mode:false, bind_interface:'', route_exclude_address:'' });
@@ -1611,17 +1887,277 @@ createApp({
             listen_port: 7893,
             bypass_private: true,
             nft_table: 'singbox',
-            mark: '0x01',
-            uid: 'sing-box',
+            mark: '111',
+            route_mark: '112',
+            proxy_uid: '989',
+            proxy_gid: '989',
             ipv6: false,
             udp_fragment: true,
+            dns_hijack_mode: 'tproxy', // tproxy: 53直接进TProxy；nat: DNAT到dns-in
             dns_port: 1053,
-            iface: 'eth0',
+            ingress_iface: '',
+            egress_iface: '',
         });
+
+        // ===== EXTRA_INBOUNDS_PATCH_START =====
+        const EXTRA_INBOUND_RESERVED_TAGS = ['mixed-in', 'tun-in', 'tproxy-in', 'dns-in'];
+
+        const defaultExtraInboundPort = (type = 'http') => {
+            if (type === 'socks') return 1080;
+            if (type === 'direct') return 9000;
+            return 8080;
+        };
+
+        const isAutoExtraInboundTag = (tag = '') => /^(http|socks|direct)-in(?:-\d+)?$/.test(String(tag));
+
+        const normalizeExtraInbound = (item = {}) => {
+            const type = ['direct', 'http', 'socks'].includes(item.type) ? item.type : 'http';
+            return {
+                id: item.id || generateId('extra_inbound'),
+                type,
+                tag: String(item.tag || `${type}-in`),
+                listen: String(item.listen || '127.0.0.1'),
+                listen_port: Number(item.listen_port || defaultExtraInboundPort(type)),
+                sniff: !!item.sniff,
+                override_address: String(item.override_address || ''),
+                override_port: item.override_port === 0 ? 0 : (item.override_port || ''),
+                username: String(item.username || ''),
+                password: String(item.password || ''),
+                socks_version: ['4', '4a', '5'].includes(String(item.socks_version || '5')) ? String(item.socks_version || '5') : '5',
+                tls: !!item.tls,
+                tls_cert_path: String(item.tls_cert_path || ''),
+                tls_key_path: String(item.tls_key_path || ''),
+            };
+        };
+
+        const extraInbounds = ref([]);
+
+        const nextExtraInboundTag = (type = 'http') => {
+            const base = `${type}-in`;
+            const used = new Set([
+                ...EXTRA_INBOUND_RESERVED_TAGS,
+                ...extraInbounds.value.map(item => String(item && item.tag ? item.tag : '').trim()).filter(Boolean),
+            ]);
+            if (!used.has(base)) return base;
+            let index = 2;
+            while (used.has(`${base}-${index}`)) index += 1;
+            return `${base}-${index}`;
+        };
+
+        const makeExtraInbound = (type = 'http') => normalizeExtraInbound({
+            id: generateId('extra_inbound'),
+            type,
+            tag: nextExtraInboundTag(type),
+            listen: '127.0.0.1',
+            listen_port: defaultExtraInboundPort(type),
+            sniff: false,
+            socks_version: '5',
+            tls: false,
+        });
+
+        const addExtraInbound = (type = 'http') => {
+            extraInbounds.value.push(makeExtraInbound(type));
+        };
+
+        const removeExtraInbound = (index) => {
+            extraInbounds.value.splice(index, 1);
+        };
+
+        const resetExtraInboundTls = (inbound) => {
+            if (!inbound || inbound.tls) return;
+            inbound.tls_cert_path = '';
+            inbound.tls_key_path = '';
+        };
+
+        const onExtraInboundSocksVersionChange = (inbound) => {
+            if (!inbound || inbound.type !== 'socks') return;
+            if (String(inbound.socks_version || '5') !== '5') {
+                inbound.tls = false;
+                inbound.tls_cert_path = '';
+                inbound.tls_key_path = '';
+            }
+        };
+
+        const onExtraInboundTypeChange = (inbound) => {
+            if (!inbound) return;
+
+            if (!inbound.listen) inbound.listen = '127.0.0.1';
+
+            const portNum = parseInt(inbound.listen_port, 10);
+            if (!(portNum > 0 && portNum < 65536)) {
+                inbound.listen_port = defaultExtraInboundPort(inbound.type || 'http');
+            }
+
+            if (!inbound.tag || isAutoExtraInboundTag(inbound.tag)) {
+                inbound.tag = nextExtraInboundTag(inbound.type || 'http');
+            }
+
+            if (inbound.type === 'direct') {
+                inbound.username = '';
+                inbound.password = '';
+                inbound.socks_version = '5';
+                inbound.tls = false;
+                inbound.tls_cert_path = '';
+                inbound.tls_key_path = '';
+            } else if (inbound.type === 'http') {
+                inbound.override_address = '';
+                inbound.override_port = '';
+                inbound.socks_version = '5';
+            } else if (inbound.type === 'socks') {
+                inbound.override_address = '';
+                inbound.override_port = '';
+                if (!['4', '4a', '5'].includes(String(inbound.socks_version || '5'))) {
+                    inbound.socks_version = '5';
+                }
+                onExtraInboundSocksVersionChange(inbound);
+            }
+        };
+
+        const buildExtraInbounds = () => {
+            const seenTags = new Set(EXTRA_INBOUND_RESERVED_TAGS);
+
+            return extraInbounds.value
+                .map(item => normalizeExtraInbound(item))
+                .map(item => {
+                    const tag = String(item.tag || '').trim();
+                    const listen = String(item.listen || '').trim();
+                    const listenPort = parseInt(item.listen_port, 10);
+
+                    if (!tag || !listen || !(listenPort > 0 && listenPort < 65536)) {
+                        return null;
+                    }
+
+                    if (seenTags.has(tag)) {
+                        console.warn('[extraInbounds] 跳过重复或保留的入站 tag:', tag);
+                        return null;
+                    }
+                    seenTags.add(tag);
+
+                    const inbound = {
+                        type: item.type,
+                        tag,
+                        listen,
+                        listen_port: listenPort,
+                    };
+
+                    if (item.sniff) {
+                        inbound.sniff = true;
+                        if (settings.value.sniff_override_destination) inbound.sniff_override_destination = true;
+                        if (settings.value.sniff_timeout) inbound.sniff_timeout = settings.value.sniff_timeout;
+                    }
+
+                    if (item.type === 'direct') {
+                        if (item.override_address) inbound.override_address = item.override_address;
+                        if (String(item.override_port).trim() !== '') {
+                            const overridePort = parseInt(item.override_port, 10);
+                            if (overridePort > 0 && overridePort < 65536) inbound.override_port = overridePort;
+                        }
+                        return inbound;
+                    }
+
+                    if (item.username && item.password) {
+                        inbound.users = [{
+                            username: item.username,
+                            password: item.password,
+                        }];
+                    }
+
+                    if (item.type === 'socks') {
+                        inbound.version = item.socks_version || '5';
+                    }
+
+                    const canUseTls = item.type === 'http' || (item.type === 'socks' && String(item.socks_version || '5') === '5');
+                    if (item.tls && canUseTls) {
+                        inbound.tls = { enabled: true };
+                        if (item.tls_cert_path) inbound.tls.certificate_path = item.tls_cert_path;
+                        if (item.tls_key_path) inbound.tls.key_path = item.tls_key_path;
+                    }
+
+                    return inbound;
+                })
+                .filter(Boolean);
+        };
+        // ===== EXTRA_INBOUNDS_PATCH_END =====
+
+        const RESERVED_MARK_TABLE_IDS = new Set([0, 253, 254, 255]);
+
+        const parseTproxyMark = (value) => {
+            if (value === null || value === undefined) return NaN;
+            const s = String(value).trim();
+            if (!s) return NaN;
+            const base = s.toLowerCase().startsWith('0x') ? 16 : 10;
+            const n = parseInt(s, base);
+            return Number.isFinite(n) ? n : NaN;
+        };
+
+        const tproxyMarkIssues = computed(() => {
+            const issues = [];
+            const m = parseTproxyMark(tproxy.value.mark);
+            const r = parseTproxyMark(tproxy.value.route_mark);
+
+            if (!Number.isInteger(m) || m < 1 || m > 4294967295) {
+                issues.push('Mark 必须是 1~4294967295 的整数（支持十进制或 0x 十六进制）');
+            } else if (RESERVED_MARK_TABLE_IDS.has(m)) {
+                issues.push(`Mark=${m} 与系统保留路由表号冲突（0/253/254/255）`);
+            }
+
+            if (!Number.isInteger(r) || r < 1 || r > 4294967295) {
+                issues.push('Route Mark 必须是 1~4294967295 的整数（支持十进制或 0x 十六进制）');
+            } else if (RESERVED_MARK_TABLE_IDS.has(r)) {
+                issues.push(`Route Mark=${r} 与系统保留路由表号冲突（0/253/254/255）`);
+            }
+
+            if (Number.isInteger(m) && Number.isInteger(r) && m === r) {
+                issues.push('Mark 与 Route Mark 不能相同（会导致策略路由冲突/回环）');
+            }
+
+            return issues;
+        });
+
+        const sanitizeTproxyMarks = () => {
+            const fallbackMark = 111;
+            const fallbackRoute = 112;
+
+            let m = parseTproxyMark(tproxy.value.mark);
+            let r = parseTproxyMark(tproxy.value.route_mark);
+
+            const mBad = !Number.isInteger(m) || m < 1 || m > 4294967295 || RESERVED_MARK_TABLE_IDS.has(m);
+            const rBad = !Number.isInteger(r) || r < 1 || r > 4294967295 || RESERVED_MARK_TABLE_IDS.has(r);
+
+            if (mBad) m = fallbackMark;
+            if (rBad) r = fallbackRoute;
+            if (m === r) r = (m === fallbackMark ? fallbackRoute : fallbackMark);
+
+            const oldM = String(tproxy.value.mark ?? '').trim();
+            const oldR = String(tproxy.value.route_mark ?? '').trim();
+
+            tproxy.value.mark = String(m);
+            tproxy.value.route_mark = String(r);
+
+            if (oldM != String(m) || oldR != String(r)) {
+                showToast('Mark 已自动修正为安全值（111/112 或可用值）', 'warn', 3200);
+            }
+        };
+
+        const resetTproxyMarksSafe = () => {
+            tproxy.value.mark = '111';
+            tproxy.value.route_mark = '112';
+            showToast('已恢复安全默认：Mark=111，Route Mark=112', 'ok', 2800);
+        };
 
         const tproxyConflicts = computed(() => {
             if (!tproxy.value.enabled) return [];
             const conflicts = [];
+            const markIssues = tproxyMarkIssues.value;
+            if (markIssues.length > 0) {
+                conflicts.push({
+                    key: 'mark_guard',
+                    label: 'Mark / Route Mark 配置异常',
+                    desc: markIssues[0],
+                    fix: () => { resetTproxyMarksSafe(); },
+                    fixLabel: '恢复默认 111/112',
+                });
+            }
             if (tun.value.enabled) {
                 conflicts.push({
                     key: 'tun',
@@ -1834,8 +2370,30 @@ createApp({
         };
 
         const nodes = ref([]);
+
+        // 精准定位右侧 JSON 到关键词所在行，nextTick 后计算确保 scrollHeight 已更新
+        const scrollJsonTo = async (keyword, { offset = 0, fallbackToEnd = false } = {}) => {
+            await nextTick();
+            const el = jsonContainer.value;
+            if (!el) return;
+            const text = generatedJson.value;
+            const lines = text.split('\n');
+            let targetLine = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes(keyword)) { targetLine = i; break; }
+            }
+            if (targetLine === -1) {
+                if (fallbackToEnd) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                return;
+            }
+            targetLine = Math.max(0, targetLine + offset);
+            const lineHeight = el.scrollHeight / Math.max(lines.length, 1);
+            el.scrollTo({ top: Math.max(0, targetLine * lineHeight - el.clientHeight * 0.25), behavior: 'smooth' });
+        };
+
         const addNode = async () => {
-            nodes.value.push(makeNode({ tag:`Node-${nodes.value.length+1}` }));
+            const newTag = `Node-${nodes.value.length+1}`;
+            nodes.value.push(makeNode({ tag: newTag }));
             await nextTick();
             const newIdx = nodes.value.length - 1;
             const el = document.getElementById(`node-card-${newIdx}`);
@@ -1848,6 +2406,8 @@ createApp({
                 const nameInput = el.querySelector('input[type="text"]');
                 if (nameInput) setTimeout(() => nameInput.focus(), 300);
             }
+            // 右侧 JSON 定位到新节点的 tag
+            scrollJsonTo(`"tag": "${newTag}"`, { fallbackToEnd: true });
         };
 
         const PROTO_TLS_DEFAULT_ON  = ['vless','vmess','trojan','hysteria2','hysteria','tuic','naive','anytls'];
@@ -1883,12 +2443,15 @@ createApp({
             { id: generateId('g'), tag:'节点选择', type:'selector', members:['自动选择','direct'], regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 },
             { id: generateId('g'), tag:'自动选择', type:'urltest',  members:[],                        regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 },
         ]);
-        const addGroup    = async () => { 
-            groups.value.push({ id: generateId('g'), tag:`Group-${groups.value.length+1}`, type:'selector', members:[], regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 });
+        const addGroup    = async () => {
+            const newTag = `Group-${groups.value.length+1}`;
+            groups.value.push({ id: generateId('g'), tag: newTag, type:'selector', members:[], regex:'', url:'https://www.gstatic.com/generate_204', interval:'3m', tolerance:50 });
             await nextTick();
             if (tabContentContainer.value) {
                 tabContentContainer.value.scrollTo({ top: tabContentContainer.value.scrollHeight, behavior: 'smooth' });
             }
+            // 右侧 JSON 定位到新策略组的 tag
+            scrollJsonTo(`"tag": "${newTag}"`, { fallbackToEnd: true });
         };
         
         const removeGroup = (i) => {
@@ -2017,6 +2580,24 @@ createApp({
             if (ruleSetContainer.value) {
                 ruleSetContainer.value.scrollTo({ top: ruleSetContainer.value.scrollHeight, behavior: 'smooth' });
             }
+            // 右侧 JSON 定位到最后一个 rule_set 条目（新增项在数组末尾）
+            await nextTick();
+            const el = jsonContainer.value;
+            if (!el) return;
+            const text = generatedJson.value;
+            const lines = text.split('\n');
+            // 从末尾向前找最后一个 "update_interval" 所在行
+            let targetLine = -1;
+            for (let i = lines.length - 1; i >= 0; i--) {
+                if (lines[i].includes('"update_interval"')) { targetLine = i; break; }
+            }
+            if (targetLine !== -1) {
+                const lineHeight = el.scrollHeight / Math.max(lines.length, 1);
+                const targetY = Math.max(0, targetLine - 4) * lineHeight;
+                el.scrollTo({ top: Math.max(0, targetY - el.clientHeight * 0.25), behavior: 'smooth' });
+            } else {
+                el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+            }
         };
         const removeRuleSet = (i) => { showConfirm('确定要删除此规则集吗？', ()=>ruleSets.value.splice(i,1), {title:'删除规则集', okText:'删除'}); };
         
@@ -2097,10 +2678,14 @@ createApp({
         ];
         const routeRules = ref(defaultRouteRules.map(migrateRule));
         
-        const addCustomRule = () => routeRules.value.unshift({ 
-            id: generateId('r'), enabled:true, name:'自定义规则', mode: 'and', invert: false,
-            conditions: [{type: 'domain_suffix', value: ''}], isEditing:true, outbound:'direct', draggable: false 
-        });
+        const addCustomRule = async () => {
+            routeRules.value.unshift({ 
+                id: generateId('r'), enabled:true, name:'自定义规则', mode: 'and', invert: false,
+                conditions: [{type: 'domain_suffix', value: ''}], isEditing:true, outbound:'direct', draggable: false 
+            });
+            // 右侧 JSON 定位到 route.rules 区块开头（新规则 unshift 在最前）
+            scrollJsonTo('"rules": [', { offset: 1, fallbackToEnd: false });
+        };
         const removeRule    = (i) => { showConfirm('确定要删除此路由规则吗？', ()=>routeRules.value.splice(i,1), {title:'删除路由规则', okText:'删除'}); };
 
         const toggleRuleSetCond = (cond, tag) => {
@@ -2334,209 +2919,195 @@ createApp({
             else { showToast(`本地解析成功，导入 ${c} 个节点`,'ok'); rawPastedText.value=''; }
         };
 
-        // NFTables 规则生成
+        // NFTables 规则生成（支持 DNS NAT / DNS 直入 TProxy；入站/出口接口分离）
         const generatedNft = computed(() => {
             if (!tproxy.value.enabled) return '';
-            const { listen_port, bypass_private, nft_table, mark, uid, ipv6, dns_port, iface } = tproxy.value;
-            const markHex = mark || '0x01';
-            const table = nft_table || 'singbox';
-            const tport = listen_port || 7893;
-            const dnsPort = dns_port || 1053;
+            const {
+                listen_port, nft_table, mark, route_mark,
+                proxy_uid, proxy_gid, ipv6,
+                dns_port, dns_hijack_mode, ingress_iface, egress_iface
+            } = tproxy.value;
 
-            const ALL_PRIVATE_RANGES4 = [
-                '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10',
-                '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
-                '192.0.0.0/24', '192.168.0.0/16',
-                '198.18.0.0/15',
-                '198.51.100.0/24', '203.0.113.0/24',
-                '224.0.0.0/4', '240.0.0.0/4', '255.255.255.255/32'
-            ];
-            const fakeip4Range = (fakeip.value.enabled && fakeip.value.inet4_range) ? fakeip.value.inet4_range.trim() : '198.18.0.0/15';
+            const enableDnsHijack = !!settings.value.hijack_dns;
+            const dnsMode = dns_hijack_mode || 'tproxy';
+            const useDnsNat = enableDnsHijack && dnsMode === 'nat';
+            const useDnsDirectTproxy = enableDnsHijack && dnsMode !== 'nat';
+
+            // 统一转为十进制整数（支持 hex 0x.. 或十进制输入）
+            const toDec = (v, def) => {
+                const s = String(v ?? '').trim();
+                const n = parseInt(s, s.toLowerCase().startsWith('0x') ? 16 : 10);
+                return isNaN(n) ? def : n;
+            };
+            const markDec      = toDec(mark, 111);
+            const routeMarkDec = toDec(route_mark, 112);
+
+            const table     = nft_table   || 'singbox';
+            const tport     = listen_port || 7893;
+            const dnsPort   = dns_port    || 1053;
+
+            const ingressIfaceName = String(ingress_iface || '').trim();
+            const egressIfaceName  = String(egress_iface || '').trim();
+            const hasIngressIface  = !!ingressIfaceName;
+            const hasEgressIface   = !!egressIfaceName;
+
+            const uidVal = String(proxy_uid || '').trim();
+            const gidVal = String(proxy_gid || '').trim();
+            const hasUid = uidVal && gidVal;
+            // 本机作为服务端的回包直接放行，避免 SSH / HTTPS 等服务回包再次被 output TProxy 捕获
+            const replyBypassRule = `ct direction reply accept`;
+
+            // FakeIP 网段自动排除出私有地址集合
+            const fakeip4Range = (fakeip.value.enabled && fakeip.value.inet4_range) ? fakeip.value.inet4_range.trim() : '';
             const fakeip6Range = (fakeip.value.enabled && fakeip.value.inet6_range) ? fakeip.value.inet6_range.trim() : '';
 
-            const privateRanges4 = ALL_PRIVATE_RANGES4.filter(r => r !== fakeip4Range);
-            const ALL_PRIVATE_RANGES6 = ['::1/128', 'fc00::/7', 'fe80::/10', 'ff00::/8', '100::/64'];
-            const privateRanges6 = fakeip6Range ? ALL_PRIVATE_RANGES6.filter(r => r !== fakeip6Range) : ALL_PRIVATE_RANGES6;
+            const ALL_PRIVATE4 = [
+                '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10',
+                '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
+                '192.0.0.0/24', '192.0.2.0/24', '192.88.99.0/24',
+                '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24',
+                '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4'
+            ];
+            const ALL_PRIVATE6 = ['::1/128', 'fc00::/7', 'fe80::/10', 'ff00::/8', '100::/64'];
 
-            const skipSelfOutput = uid ? `meta skuid "${uid}" return` : `meta mark ${markHex} return`;
-            // skipSelfDnsOutput 逻辑与 skipSelfOutput 完全相同，直接复用
+            const privateRanges4 = ALL_PRIVATE4.filter(r => r !== fakeip4Range);
+            const privateRanges6 = ALL_PRIVATE6.filter(r => r !== fakeip6Range);
 
-            const bypassPrivate4 = bypass_private ? `ip daddr { ${privateRanges4.join(', ')} } return` : '';
-            const bypassPrivate6 = (bypass_private && ipv6) ? `ip6 daddr { ${privateRanges6.join(', ')} } return` : '';
+            const fakeip4Note = fakeip4Range ? ` # fakeip ${fakeip4Range} 已排除，流量正常进入 tproxy` : '';
+            const fakeip6Note = fakeip6Range ? ` # fakeip ${fakeip6Range} 已排除` : '';
 
-            const ifaceName = iface || 'eth0';
+            // 防回环
+            const dnsSkipLine = hasUid
+                ? `        meta skuid $PROXY_UID meta skgid $PROXY_GID accept # sing-box 自身 DNS 请求直接放行，防止死循环\n`
+                : `        oifname "lo" return # 兜底：lo 上的包不劫持（需配合 auto_detect_interface）\n`;
 
-            const ipv6Block = ipv6 ? `
+            const outputSkipLine = hasUid
+                ? `        meta skuid $PROXY_UID meta skgid $PROXY_GID meta mark set $ROUTE_MARK accept # sing-box 出站流量打 ROUTE_MARK，走默认路由不触发策略路由\n`
+                : '';
 
-    # ════════════════════════════════════════════════════════════════
-    # IPv6 出站：本机流量打标，触发策略路由
-    # ════════════════════════════════════════════════════════════════
-    chain output_v6 {
-        type route hook output priority mangle - 1; policy accept;
-        # 跳过 sing-box 自身，防止代理回环
-        ${skipSelfOutput}
-        # 跳过 IPv6 私有/保留地址
-        ${bypassPrivate6}
-        # 仅代理 TCP/UDP，打标后触发策略路由
-        meta l4proto { tcp, udp } mark set ${markHex}
+            const uidDefines = hasUid ? `define PROXY_UID    = ${uidVal}\ndefine PROXY_GID    = ${gidVal}\n` : '';
+
+            const ingressDefineLine = hasIngressIface
+                ? `define INGRESS_INTERFACE = "${ingressIfaceName}"\n`
+                : '';
+
+            const egressDefineLine = hasEgressIface
+                ? `define EGRESS_INTERFACE  = "${egressIfaceName}"\n`
+                : '';
+
+            const dnsDefineLine = useDnsNat
+                ? `define DNS_PORT     = ${dnsPort}\n`
+                : '';
+
+            const preroutingIngressGuard = hasIngressIface
+                ? `        iifname != "lo" iifname != $INGRESS_INTERFACE accept             # 非 lo 且非目标入站接口直接放行\n`
+                : '';
+
+            const outputEgressGuard = hasEgressIface
+                ? `        oifname != $EGRESS_INTERFACE accept                          # 非目标出口接口直接放行\n`
+                : '';
+
+            const dnsNatPreroutingLine = hasIngressIface
+                ? `        iifname $INGRESS_INTERFACE meta l4proto { tcp, udp } th dport 53 dnat ip to 127.0.0.1:$DNS_PORT\n`
+                : `        meta l4proto { tcp, udp } th dport 53 dnat ip to 127.0.0.1:$DNS_PORT\n`;
+
+            const dnsNatChains = useDnsNat ? `
+    chain prerouting_dns {
+        type nat hook prerouting priority dstnat; policy accept;
+${dnsNatPreroutingLine}    }
+
+    chain output_dns {
+        type nat hook output priority dstnat; policy accept;
+${dnsSkipLine}        meta l4proto { tcp, udp } th dport 53 dnat ip to 127.0.0.1:$DNS_PORT
+    }
+` : '';
+
+            const preroutingDnsDirectLine = useDnsDirectTproxy
+                ? `        meta l4proto { tcp, udp } th dport 53 tproxy to :$TPROXY_PORT meta mark set $PROXY_MARK accept\n`
+                : '';
+
+            const outputDnsDirectLine = useDnsDirectTproxy
+                ? `        meta l4proto { tcp, udp } th dport 53 meta mark set $PROXY_MARK\n`
+                : '';
+
+            const preroutingDnsDirectLineV6 = useDnsDirectTproxy
+                ? `        meta l4proto { tcp, udp } th dport 53 tproxy to :$TPROXY_PORT meta mark set $PROXY_MARK accept\n`
+                : '';
+
+            const outputDnsDirectLineV6 = useDnsDirectTproxy
+                ? `        meta l4proto { tcp, udp } th dport 53 meta mark set $PROXY_MARK\n`
+                : '';
+
+            const ipv6Sets = ipv6 ? `
+    set reserved_ipv6 {
+        type ipv6_addr
+        flags interval
+        elements = {${fakeip6Note}
+            ${privateRanges6.join(',\n            ')}
+        }
+    }
+` : '';
+
+            const ipv6Chains = ipv6 ? `
+    chain prerouting_tproxy_v6 {
+        type filter hook prerouting priority mangle; policy accept;
+${preroutingIngressGuard}${preroutingDnsDirectLineV6}        fib daddr type local accept
+        ip6 daddr @reserved_ipv6 accept
+        meta l4proto { tcp, udp } th dport $TPROXY_PORT reject with icmpx type host-unreachable
+        meta l4proto tcp socket transparent 1 meta mark set $PROXY_MARK accept
+        meta l4proto { tcp, udp } tproxy to :$TPROXY_PORT meta mark set $PROXY_MARK
     }
 
-    # ════════════════════════════════════════════════════════════════
-    # IPv6 TProxy 入口：lo 本机回环 + LAN 局域网
-    # ════════════════════════════════════════════════════════════════
-    chain prerouting_v6 {
-        type filter hook prerouting priority mangle - 1; policy accept;
-        # lo 本机回环：已建立连接快速放行
-        iifname "lo" meta mark ${markHex} socket transparent 1 accept
-        # lo 本机回环：新连接执行 tproxy
-        iifname "lo" meta mark ${markHex} meta l4proto { tcp, udp } tproxy ip6 to [::1]:${tport} accept
-        # 非 LAN 接口直接放行，不代理
-        iifname != "${ifaceName}" return
-        # LAN：已建立连接快速放行
-        socket transparent 1 accept
-        # LAN：跳过私有目标
-        ${bypassPrivate6}
-        # LAN：其余流量执行 tproxy
-        meta l4proto tcp tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
-        meta l4proto udp tproxy ip6 to [::1]:${tport} mark set ${markHex} accept
-    }` : '';
+    chain output_tproxy_v6 {
+        type route hook output priority mangle; policy accept;
+${outputEgressGuard}        ${replyBypassRule}
+        meta mark $ROUTE_MARK accept
+${outputSkipLine}${outputDnsDirectLineV6}        fib daddr type local accept
+        ip6 daddr @reserved_ipv6 accept
+        meta l4proto { tcp, udp } meta mark set $PROXY_MARK
+    }
+` : '';
 
             return `#!/usr/sbin/nft -f
-# ═══════════════════════════════════════════════════════════════════
-# sing-box TProxy 透明代理 NFTables 规则
-# 自动生成 · 适用于 sing-box v1.12
-# TProxy 端口: ${tport}  |  DNS 入站端口: ${dnsPort}
-# LAN 接口: ${ifaceName}  |  fwmark: ${markHex}
-# ═══════════════════════════════════════════════════════════════════
-#
-# 数据流：
-#
-#   [LAN 设备] → prerouting(mangle) → 跳过私有目标 → tproxy:${tport} → sing-box
-#
-#   [本机进程] → output(mangle) → 跳过自身/私有 → mark=${markHex}
-#             → 策略路由表100 → lo
-#             → prerouting(mangle, iifname=lo, mark=${markHex}) → tproxy:${tport} → sing-box
-#
-#   [DNS 劫持] → prerouting/output(nat) → dport=53 → DNAT:${dnsPort} → sing-box dns-in
-#               (不过滤目标 IP，无论客户端 DNS 设为任何地址均劫持)
-#
-#   [Fake-IP]  → ${fakeip4Range} 不在 bypass 列表，Fake-IP 连接正常进入 tproxy${fakeip6Range ? '\n#              ' + fakeip6Range + ' (IPv6 Fake-IP) 同样不在 bypass 列表' : ''}
-#
-# ═══════════════════════════════════════════════════════════════════
-# 前置要求（每次重启后执行）：
-#   ip rule add fwmark ${markHex} lookup 100
-#   ip route add local default dev lo table 100${ipv6 ? '\n#   ip -6 rule add fwmark ' + markHex + ' lookup 100\n#   ip -6 route add local default dev lo table 100' : ''}
-# sing-box 需以 "${uid || 'sing-box'}" 用户运行，或具备 CAP_NET_ADMIN + CAP_NET_RAW
-# ═══════════════════════════════════════════════════════════════════
 
+${ingressDefineLine}${egressDefineLine}define TPROXY_PORT  = ${tport}
+${dnsDefineLine}define PROXY_MARK   = ${markDec}
+define ROUTE_MARK   = ${routeMarkDec}
+${uidDefines}
 add table inet ${table}
 flush table inet ${table}
 
 table inet ${table} {
 
-    # ════════════════════════════════════════════════════════════════
-    # DNS 劫持 - LAN 设备
-    # 劫持来自 LAN 接口的所有 DNS 请求，不过滤目标 IP
-    # 覆盖场景：客户端 DNS 设为 8.8.8.8、192.168.1.1 等任意地址均生效
-    # ════════════════════════════════════════════════════════════════
-    chain prerouting_dns {
-        type nat hook prerouting priority dstnat; policy accept;
-        iifname "${ifaceName}" udp dport 53 dnat ip to 127.0.0.1:${dnsPort}
-        iifname "${ifaceName}" tcp dport 53 dnat ip to 127.0.0.1:${dnsPort}
+    set reserved_ipv4 {
+        type ipv4_addr
+        flags interval
+        elements = {${fakeip4Note}
+            ${privateRanges4.join(',\n            ')}
+        }
+    }
+${ipv6Sets}${dnsNatChains}
+    chain prerouting_tproxy {
+        type filter hook prerouting priority mangle; policy accept;
+${preroutingIngressGuard}${preroutingDnsDirectLine}        fib daddr type local accept
+        ip daddr @reserved_ipv4 accept
+        meta l4proto { tcp, udp } th dport $TPROXY_PORT reject with icmpx type host-unreachable
+        meta l4proto tcp socket transparent 1 meta mark set $PROXY_MARK accept
+        meta l4proto { tcp, udp } tproxy to :$TPROXY_PORT meta mark set $PROXY_MARK
     }
 
-    # ════════════════════════════════════════════════════════════════
-    # DNS 劫持 - 本机进程
-    # 劫持本机所有进程的 DNS 请求，sing-box 自身除外（防止回环）
-    # ════════════════════════════════════════════════════════════════
-    chain output_dns {
-        type nat hook output priority dstnat; policy accept;
-        # 跳过 sing-box 自身，防止 sing-box → 系统解析 → 再次劫持成环
-        ${skipSelfOutput}
-        udp dport 53 dnat ip to 127.0.0.1:${dnsPort}
-        tcp dport 53 dnat ip to 127.0.0.1:${dnsPort}
+    chain output_tproxy {
+        type route hook output priority mangle; policy accept;
+${outputEgressGuard}        ${replyBypassRule}
+        meta mark $ROUTE_MARK accept
+${outputSkipLine}${outputDnsDirectLine}        fib daddr type local accept
+        ip daddr @reserved_ipv4 accept
+        meta l4proto { tcp, udp } meta mark set $PROXY_MARK
     }
-
-    # ════════════════════════════════════════════════════════════════
-    # 本机出站：打标触发策略路由，使流量经 lo 重新进入 prerouting
-    # ════════════════════════════════════════════════════════════════
-    chain output {
-        type route hook output priority mangle - 1; policy accept;${!ipv6 ? `
-        # IPv6 未启用，直接放行，防止 inet 表漏匹配导致内核警告
-        meta nfproto ipv6 return` : ''}
-        # 跳过 sing-box 自身，防止代理回环
-        ${skipSelfOutput}
-        # 跳过私有/保留地址${fakeip4Range ? '（已排除 Fake-IP 段 ' + fakeip4Range + '）' : ''}
-        ${bypassPrivate4}
-        # 非 TCP/UDP 直接放行
-        meta l4proto != { tcp, udp } return
-        # 打标，触发策略路由表100 → 路由到 lo → 重新进入 prerouting
-        mark set ${markHex}
-    }
-
-    # ════════════════════════════════════════════════════════════════
-    # TProxy 入口：处理本机回环（lo + mark）和 LAN 两路流量
-    #
-    #   lo + mark=${markHex}  → 本机经策略路由绕回，执行 tproxy
-    #   ${ifaceName}          → LAN 流量，跳过私有目标后执行 tproxy
-    #   其他接口              → 直接放行，不代理
-    # ════════════════════════════════════════════════════════════════
-    chain prerouting {
-        type filter hook prerouting priority mangle - 1; policy accept;${!ipv6 ? `
-        # IPv6 未启用，直接放行，避免 ip daddr 漏匹配
-        meta nfproto ipv6 return` : ''}
-
-        # 本机回环 - 已建立连接，socket 快速放行
-        iifname "lo" meta mark ${markHex} socket transparent 1 accept
-        # 本机回环 - 新连接执行 tproxy
-        iifname "lo" meta mark ${markHex} meta l4proto { tcp, udp } tproxy ip to 127.0.0.1:${tport} accept
-
-        # 非 LAN 接口（非 lo、非 ${ifaceName}）直接放行
-        iifname != "${ifaceName}" return
-
-        # LAN - 已建立连接，socket 快速放行
-        socket transparent 1 accept
-        # LAN - 跳过私有目标
-        ${bypassPrivate4}
-        # LAN - 仅代理 TCP/UDP（tproxy 前需明确 l4proto）
-        meta l4proto tcp tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
-        meta l4proto udp tproxy ip to 127.0.0.1:${tport} mark set ${markHex} accept
-    }
-${ipv6Block}
-}
-
-# ════════════════════════════════════════════════════════════════════
-# 策略路由（每次重启后在 shell 执行，或使用 Systemd-Network方式）
-# ════════════════════════════════════════════════════════════════════
-# 手动执行
-# ip rule add fwmark ${markHex} lookup 100
-# ip route add local default dev lo table 100${ipv6 ? '\n# ip -6 rule add fwmark ' + markHex + ' lookup 100\n# ip -6 route add local default dev lo table 100' : ''}
-# ════════════════════════════════════════════════════════════════════
-# Systemd-Network方式，以下仅以 Ip4 为例，Ipv6 请自行修改。
-# cat > /etc/systemd/system/tproxy-route.service << 'EOF'
-# [Unit]
-# Description=tproxy routing rules
-# After=network.target
-# [Service]
-# Type=oneshot
-# RemainAfterExit=yes
-# ExecStart=/bin/bash -c 'ip rule add fwmark 1 table 100; ip route add local default dev lo table 100'
-# ExecStop=/bin/bash -c 'ip rule del fwmark 1 table 100; ip route del local default dev lo table 100'
-# [Install]
-# WantedBy=multi-user.target
-# EOF
-
-# ════════════════════════════════════════════════════════════════════
-# 常用操作
-# ════════════════════════════════════════════════════════════════════
-# 加载：  nft -f /etc/nftables.d/${table}.nft
-# 查看：  nft list ruleset
-# 清除：  nft delete table inet ${table}
-# 验证：  ss -tlnp | grep ${tport}  &&  ss -ulnp | grep ${dnsPort}
+${ipv6Chains}}
 `;
         });
 
-        // 纯净版（用于复制/下载）：去除所有 # 注释行和行尾注释，保留纯规则
         const generatedNftClean = computed(() => {
             if (!generatedNft.value) return '';
             return generatedNft.value
@@ -2769,6 +3340,9 @@ ${ipv6Block}
             }
 
             const routeArr=[];
+            const tproxyDnsMode = tproxy.value.dns_hijack_mode || 'tproxy';
+            const useDnsNatInTproxy = tproxy.value.enabled && settings.value.hijack_dns && tproxyDnsMode === 'nat';
+            const useDnsDirectInTproxy = tproxy.value.enabled && settings.value.hijack_dns && tproxyDnsMode !== 'nat';
 
             const rsArr = ruleSets.value.filter(rs => rs.tag && rs.url).map(rs => ({
                 tag: rs.tag,
@@ -2785,12 +3359,25 @@ ${ipv6Block}
                 routeArr.push(sniffRule);
             }
 
-            if(tproxy.value.enabled && settings.value.hijack_dns){
-                routeArr.push({ type:'logical', mode:'or', rules:[ {inbound:['dns-in']}, {protocol:'dns'} ], action:'hijack-dns' });
-            } else if(tproxy.value.enabled){
-                routeArr.push({inbound:['dns-in'],action:'hijack-dns'});
-            } else if(settings.value.hijack_dns){
-                routeArr.push({protocol:'dns',action:'hijack-dns'});
+            if (settings.value.hijack_dns) {
+                if (tproxy.value.enabled) {
+                    if (useDnsNatInTproxy) {
+                        routeArr.push({ inbound:['dns-in'], action:'hijack-dns' });
+                    } else if (useDnsDirectInTproxy) {
+                        routeArr.push({
+                            inbound:['tproxy-in'],
+                            network:['tcp','udp'],
+                            port:[53],
+                            action:'hijack-dns'
+                        });
+                    }
+                } else {
+                    if (tun.value.enabled) {
+                        routeArr.push({ inbound:['tun-in'], protocol:'dns', action:'hijack-dns' });
+                    } else {
+                        routeArr.push({ protocol:'dns', action:'hijack-dns' });
+                    }
+                }
             }
 
             if(settings.value.private_direct) routeArr.push({ip_is_private:true,outbound:'direct'});
@@ -2876,13 +3463,15 @@ ${ipv6Block}
                 if(tproxy.value.udp_fragment) tp.udp_fragment = true;
                 if(settings.value.sniff_enabled){ tp.sniff=true; if(settings.value.sniff_override_destination) tp.sniff_override_destination=true; if(settings.value.sniff_timeout) tp.sniff_timeout=settings.value.sniff_timeout; }
                 inbounds.push(tp);
-                inbounds.push({
-                    type:'direct',
-                    tag:'dns-in',
-                    listen:'127.0.0.1',
-                    listen_port: tproxy.value.dns_port || 1053,
-                    override_port: 53,
-                });
+                if (useDnsNatInTproxy) {
+                    inbounds.push({
+                        type:'direct',
+                        tag:'dns-in',
+                        listen:'127.0.0.1',
+                        listen_port: tproxy.value.dns_port || 1053,
+                        override_port: 53,
+                    });
+                }
             }
             if(settings.value.sniff_enabled){ mixedIn.sniff=true; if(settings.value.sniff_override_destination) mixedIn.sniff_override_destination=true; if(settings.value.sniff_timeout) mixedIn.sniff_timeout=settings.value.sniff_timeout; }
             inbounds.push(mixedIn);
@@ -2902,6 +3491,12 @@ ${ipv6Block}
                 if(settings.value.sniff_enabled){ t.sniff=true; if(settings.value.sniff_override_destination) t.sniff_override_destination=true; if(settings.value.sniff_timeout) t.sniff_timeout=settings.value.sniff_timeout; }
                 inbounds.push(t); 
             }
+
+            // ===== EXTRA_INBOUNDS_APPEND_START =====
+
+            inbounds.push(...buildExtraInbounds());
+
+            // ===== EXTRA_INBOUNDS_APPEND_END =====
 
             const route={rules:routeArr,final:settings.value.final_outbound,auto_detect_interface:settings.value.auto_detect_interface};
             const validDnsTags = new Set(dnsServers.map(d=>d.tag));
@@ -2937,7 +3532,7 @@ ${ipv6Block}
             const cfg={
                 log:{level:settings.value.log_level,timestamp:true},
                 ntp:ntp.value.enabled?{enabled:true,server:ntp.value.server,server_port:ntp.value.server_port,interval:ntp.value.interval,detour:ntp.value.detour}:undefined,
-                dns:{servers:dnsServers,rules:dnsRules.length>0?dnsRules:undefined,strategy:settings.value.dns_strategy,final:settings.value.dns_final||undefined,independent_cache:(settings.value.independent_cache||fakeip.value.enabled)||undefined,reverse_mapping:settings.value.reverse_mapping||undefined},
+                dns:{servers:dnsServers,rules:dnsRules.length>0?dnsRules:undefined,strategy:settings.value.dns_strategy,final:settings.value.dns_final||undefined,independent_cache:settings.value.independent_cache||undefined,reverse_mapping:settings.value.reverse_mapping||undefined},
                 inbounds, outbounds, route, experimental
             };
 
@@ -2945,29 +3540,31 @@ ${ipv6Block}
         });
 
         let diffScrollTimer = null;
+
         watch(generatedJson, (newStr, oldStr) => {
             if (!oldStr || !jsonContainer.value) return;
             clearTimeout(diffScrollTimer);
-            diffScrollTimer = setTimeout(() => {
+            diffScrollTimer = setTimeout(async () => {
+                await nextTick();
+                const el = jsonContainer.value;
+                if (!el) return;
                 const newLines = newStr.split('\n');
                 const oldLines = oldStr.split('\n');
                 let diffLine = -1;
-                for(let i = 0; i < newLines.length; i++){
-                    if(newLines[i] !== oldLines[i]) { diffLine = i; break; }
+                for (let i = 0; i < newLines.length; i++) {
+                    if (newLines[i] !== oldLines[i]) { diffLine = i; break; }
                 }
                 if (diffLine === -1 && newLines.length < oldLines.length) diffLine = newLines.length - 1;
                 if (diffLine !== -1) {
-                    const el = jsonContainer.value;
-                    // 动态计算行高，避免硬编码在不同缩放比例下不准确
                     const lineHeight = el.scrollHeight / Math.max(newLines.length, 1);
-                    const targetY = diffLine * lineHeight + 24;
+                    const targetY = diffLine * lineHeight;
                     const currentTop = el.scrollTop;
                     const viewHeight = el.clientHeight;
                     if (targetY < currentTop + 60 || targetY > currentTop + viewHeight - 60) {
-                        el.scrollTo({ top: Math.max(0, targetY - viewHeight / 2), behavior: 'smooth' });
+                        el.scrollTo({ top: Math.max(0, targetY - viewHeight * 0.25), behavior: 'smooth' });
                     }
                 }
-            }, 120);
+            }, 80);
         });
 
         watch(currentTab, (newTab) => {
@@ -3043,7 +3640,8 @@ ${ipv6Block}
                 tun: tun.value,
                 clashApi: clashApi.value,
                 ntp: ntp.value,
-                tproxy: tproxy.value,
+                tproxy: (({ server_ports, ...rest }) => rest)(tproxy.value),
+                extraInbounds: extraInbounds.value.map(normalizeExtraInbound),
                 corsProxyEnabled: corsProxyEnabled.value,
                 dnsList: dnsList.value,
                 providers: providers.value,
@@ -3153,12 +3751,32 @@ ${ipv6Block}
                 // 版本不匹配时仍继续导入，但给出提示
                 showToast(`配置版本为 ${data._version}，当前面板适配 v1.12，部分字段可能不兼容`, 'warn', 5000);
             }
-            if(data.settings)    Object.assign(settings.value, data.settings);
+            // 先 fakeip 后 settings，避免 fakeip watcher 覆盖 imported independent_cache
             if(data.fakeip)      Object.assign(fakeip.value, data.fakeip);
+            if(data.settings)    Object.assign(settings.value, data.settings);
             if(data.tun)         Object.assign(tun.value, data.tun);
             if(data.clashApi)    Object.assign(clashApi.value, data.clashApi);
             if(data.ntp)         Object.assign(ntp.value, data.ntp);
-            if(data.tproxy)      Object.assign(tproxy.value, data.tproxy);
+            if(data.tproxy) {
+                const incomingTproxy = { ...data.tproxy };
+                // 兼容旧导入：无 dns_hijack_mode 时沿用旧 NAT 语义
+                if (!incomingTproxy.dns_hijack_mode) {
+                    incomingTproxy.dns_hijack_mode = incomingTproxy.dns_port ? 'nat' : 'tproxy';
+                }
+                // 兼容旧导入：旧版单 iface 拆分为 ingress/egress
+                if (incomingTproxy.ingress_iface === undefined && incomingTproxy.egress_iface === undefined) {
+                    const legacyIface = String(incomingTproxy.iface || '').trim();
+                    incomingTproxy.ingress_iface = legacyIface || '';
+                    incomingTproxy.egress_iface = legacyIface || '';
+                } else {
+                    if (incomingTproxy.ingress_iface === undefined) incomingTproxy.ingress_iface = '';
+                    if (incomingTproxy.egress_iface === undefined) incomingTproxy.egress_iface = '';
+                }
+                delete incomingTproxy.iface;
+                delete incomingTproxy.server_ports;
+                Object.assign(tproxy.value, incomingTproxy);
+                extraInbounds.value = Array.isArray(data.extraInbounds) ? data.extraInbounds.map(normalizeExtraInbound) : [];
+            }
             if(typeof data.corsProxyEnabled === 'boolean') corsProxyEnabled.value = data.corsProxyEnabled;
             if(data.dnsList)     dnsList.value = data.dnsList;
             if(data.providers)   providers.value = data.providers;
@@ -3307,7 +3925,7 @@ ${ipv6Block}
             };
 
             // Watch for changes to save to localStorage
-            watch([settings, fakeip, tun, clashApi, ntp, tproxy, dnsList, providers, nodes, groups, ruleSets, routeRules, corsProxyEnabled], () => {
+            watch([settings, fakeip, tun, clashApi, ntp, tproxy, dnsList, providers, nodes, groups, ruleSets, routeRules, extraInbounds, corsProxyEnabled], () => {
                 saveLocalStorage();
             }, { deep: true });
 
@@ -3339,7 +3957,7 @@ ${ipv6Block}
 				isFetching, fetchStatus, rawPastedText,
                 fetchAndParse, parseManualText, resetConfig, clearLocalStorage, storageSavedAgo, lastSavedAt,
                 generatedJson, copyText, copyIcon, copyConfig,
-                tproxy, tproxyConflicts, generatedNft, generatedNftClean, nftCopyText, nftCopyIcon, copyNft, downloadNft,
+                tproxy, extraInbounds, addExtraInbound, removeExtraInbound, onExtraInboundTypeChange, onExtraInboundSocksVersionChange, resetExtraInboundTls, tproxyMarkIssues, sanitizeTproxyMarks, resetTproxyMarksSafe, tproxyConflicts, generatedNft, generatedNftClean, nftCopyText, nftCopyIcon, copyNft, downloadNft,
                 showImportExport, importExportTab, importJsonText, importError,
                 modalContentReady, exportSnapshotPanel, exportSnapshotRuntime,
                 exportPreviewJson, exportPreviewTab, openImportExport, doExportDownload, doExportRuntimeDownload, doExportCopy, doExportRuntimeCopy, doImportFile, doImportText,
