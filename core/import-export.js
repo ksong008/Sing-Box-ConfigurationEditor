@@ -1,6 +1,74 @@
 const { computed, watch } = window.Vue;
 
 export function setupImportExportCore(ctx) {
+    const supportsNativeFileSave = typeof window.showSaveFilePicker === 'function';
+    let panelFileHandle = null;
+    let runtimeFileHandle = null;
+
+    const padNumber = (value) => String(value).padStart(2, '0');
+    const buildDefaultPanelExportFilename = () => {
+        const now = new Date();
+        return `singbox-panel-config-${now.getFullYear()}${padNumber(now.getMonth() + 1)}${padNumber(now.getDate())}-${padNumber(now.getHours())}${padNumber(now.getMinutes())}${padNumber(now.getSeconds())}.json`;
+    };
+    const sanitizeFilename = (rawName, fallbackName) => {
+        const cleaned = String(rawName || '')
+            .trim()
+            .replace(/[\\/:*?"<>|]/g, '-')
+            .replace(/\s+/g, ' ');
+        const baseName = cleaned || fallbackName;
+        return /\.json$/i.test(baseName) ? baseName : `${baseName}.json`;
+    };
+    const resetExportFilenames = () => {
+        ctx.panelExportFilename.value = buildDefaultPanelExportFilename();
+        ctx.runtimeExportFilename.value = 'config.json';
+    };
+    const triggerJsonDownload = (content, nameRef, fallbackName, successMessage) => {
+        const filename = sanitizeFilename(nameRef.value, fallbackName);
+        nameRef.value = filename;
+        const blob = new Blob([content], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (successMessage) ctx.showToast(successMessage, 'ok');
+    };
+    const saveJsonFile = async (content, nameRef, fallbackName, handleType, successMessage) => {
+        const filename = sanitizeFilename(nameRef.value, fallbackName);
+        nameRef.value = filename;
+
+        if (!supportsNativeFileSave) {
+            triggerJsonDownload(content, nameRef, fallbackName, successMessage);
+            return;
+        }
+
+        try {
+            let handle = handleType === 'panel' ? panelFileHandle : runtimeFileHandle;
+            if (!handle || handle.name !== filename) {
+                handle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [
+                        {
+                            description: 'JSON Files',
+                            accept: {
+                                'application/json': ['.json'],
+                            },
+                        },
+                    ],
+                });
+            }
+            const writable = await handle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            if (handleType === 'panel') panelFileHandle = handle;
+            else runtimeFileHandle = handle;
+            ctx.showToast(successMessage, 'ok');
+        } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            triggerJsonDownload(content, nameRef, fallbackName);
+            ctx.showToast('当前环境不支持直接写入本地，已回退为浏览器下载', 'warn', 4200);
+        }
+    };
     const exportPreviewJson = computed(() => JSON.stringify(ctx.getFullState(), (key, value) => {
         if (value === '') return undefined;
         if (value === null) return undefined;
@@ -12,6 +80,7 @@ export function setupImportExportCore(ctx) {
         ctx.importJsonText.value = '';
         ctx.importError.value = '';
         ctx.modalContentReady.value = false;
+        if (tab === 'export') resetExportFilenames();
         ctx.showImportExport.value = true;
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -32,13 +101,8 @@ export function setupImportExportCore(ctx) {
         }
     });
 
-    const doExportDownload = () => {
-        const blob = new Blob([exportPreviewJson.value], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `singbox-panel-config-${Date.now()}.json`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+    const doExportDownload = async () => {
+        await saveJsonFile(exportPreviewJson.value, ctx.panelExportFilename, buildDefaultPanelExportFilename(), 'panel', supportsNativeFileSave ? '面板配置已保存到本地' : '面板配置已下载');
     };
 
     const validateConfig = () => {
@@ -64,14 +128,8 @@ export function setupImportExportCore(ctx) {
 
     const doExportRuntimeDownload = () => {
         const warnings = validateConfig();
-        const doDownload = () => {
-            const blob = new Blob([ctx.generatedJson.value], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'config.json';
-            a.click();
-            URL.revokeObjectURL(a.href);
-            ctx.showToast('运行配置已下载', 'ok');
+        const doDownload = async () => {
+            await saveJsonFile(ctx.generatedJson.value, ctx.runtimeExportFilename, 'config.json', 'runtime', supportsNativeFileSave ? '运行配置已保存到本地' : '运行配置已下载');
         };
         if (warnings.length > 0) {
             ctx.showConfirm(`检测到以下问题，确认仍要下载吗？<br><br>${warnings.map((warning) => `• ${warning}`).join('<br>')}`, doDownload, {
@@ -126,7 +184,13 @@ export function setupImportExportCore(ctx) {
         if (data.dnsList) ctx.dnsList.value = data.dnsList;
         if (data.providers) ctx.providers.value = data.providers;
         if (data.nodes) ctx.nodes.value = data.nodes.map((node) => ctx.makeNode(node));
-        if (data.groups) ctx.groups.value = data.groups.map((group) => ({ ...group, id: group.id || ctx.generateId('g') }));
+        if (data.groups) {
+            ctx.groups.value = data.groups.map((group) => (
+                typeof ctx.normalizeGroup === 'function'
+                    ? ctx.normalizeGroup(group)
+                    : { ...group, id: group.id || ctx.generateId('g') }
+            ));
+        }
         if (data.ruleSets) ctx.ruleSets.value = data.ruleSets.map((ruleSet) => ({ ...ruleSet, id: ruleSet.id || ctx.generateId('rs') }));
         if (data.routeRules) {
             ctx.routeRules.value = data.routeRules
@@ -173,5 +237,7 @@ export function setupImportExportCore(ctx) {
         applyImport,
         doImportFile,
         doImportText,
+        resetExportFilenames,
+        supportsNativeFileSave,
     });
 }

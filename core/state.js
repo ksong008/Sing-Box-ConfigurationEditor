@@ -97,6 +97,8 @@ export function createBaseState() {
     const modalContentReady = ref(false);
     const exportSnapshotPanel = ref('');
     const exportSnapshotRuntime = ref('');
+    const panelExportFilename = ref('');
+    const runtimeExportFilename = ref('');
 
     const jsonContainer = ref(null);
     const ruleSetContainer = ref(null);
@@ -273,6 +275,8 @@ export function createBaseState() {
         modalContentReady,
         exportSnapshotPanel,
         exportSnapshotRuntime,
+        panelExportFilename,
+        runtimeExportFilename,
         jsonContainer,
         ruleSetContainer,
         tabContentContainer,

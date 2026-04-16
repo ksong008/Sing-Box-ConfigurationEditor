@@ -764,6 +764,7 @@ export function setupConfigCore(ctx) {
             groups: ctx.groups.value.map((group) => {
                 const cleanGroup = { ...group };
                 delete cleanGroup.draggable;
+                delete cleanGroup.collapsed;
                 return cleanGroup;
             }),
             ruleSets: ctx.ruleSets.value,
