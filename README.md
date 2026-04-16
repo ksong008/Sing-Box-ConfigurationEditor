@@ -6,6 +6,8 @@ A simple HTML-based configuration editor for `sing-box` settings.
 
 This repository contains the frontend and supporting files for an editor that helps users create, modify, and export `sing-box` configuration files through a browser-based UI.
 
+This `v1.12` branch keeps the packaged single-file `singbox.html` release.
+
 NOTE：sing-box v1.12 only
 
 ## Features
