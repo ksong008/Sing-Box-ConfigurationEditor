@@ -22,6 +22,13 @@ modules/
   rules.js
   tproxy.js
   tun.js
+ui/
+  app-header.js
+  import-export-modal.js
+  json-preview.js
+  register-components.js
+  shared.js
+  tab-panels.js
 main.js
 singbox.html
 ```
