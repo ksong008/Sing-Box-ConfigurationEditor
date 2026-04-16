@@ -37,6 +37,9 @@ NOTE：sing-box v1.12 only
 
 ## Features
 
+- Browser-based editor for `sing-box` v1.12
+- Supports importing panel backup JSON and exporting both panel/runtime config JSON
+- Can build a fully self-contained single-file release HTML for offline use
 
 ## Getting Started
 
@@ -60,11 +63,15 @@ NOTE：sing-box v1.12 only
 - The page now uses browser ES modules, so opening `singbox.html` directly with `file://` is not recommended during development.
 - Keep shared state and cross-cutting logic in `core/`.
 - Put feature-specific logic in `modules/`.
+- Reusable Vue UI components live in `ui/`.
+- Vendored third-party assets used for release packaging live in `vendor/`.
 - To build a single-file release HTML from the split source, run:
 
   ```bash
   node scripts/build-single-html.mjs
   ```
+
+- The generated `dist/singbox.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
 
 
 ## Usage
