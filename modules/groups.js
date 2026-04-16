@@ -1,15 +1,50 @@
 const { ref, computed, nextTick } = window.Vue;
 
 export function setupGroupsModule(ctx) {
+    let highlightTimer = null;
+
+    const normalizeGroup = (group = {}) => {
+        const tolerance = Number(group.tolerance);
+        return {
+            id: group.id || ctx.generateId('g'),
+            tag: typeof group.tag === 'string' && group.tag.trim() ? group.tag.trim() : 'Group',
+            type: group.type === 'urltest' ? 'urltest' : 'selector',
+            members: Array.isArray(group.members) ? [...group.members] : [],
+            regex: typeof group.regex === 'string' ? group.regex : '',
+            url: typeof group.url === 'string' && group.url ? group.url : 'https://www.gstatic.com/generate_204',
+            interval: typeof group.interval === 'string' && group.interval ? group.interval : '3m',
+            tolerance: Number.isFinite(tolerance) ? tolerance : 50,
+            collapsed: group.collapsed === undefined ? true : !!group.collapsed,
+        };
+    };
+
     const groups = ref([
-        { id: ctx.generateId('g'), tag: '节点选择', type: 'selector', members: ['自动选择', 'direct'], regex: '', url: 'https://www.gstatic.com/generate_204', interval: '3m', tolerance: 50 },
-        { id: ctx.generateId('g'), tag: '自动选择', type: 'urltest', members: [], regex: '', url: 'https://www.gstatic.com/generate_204', interval: '3m', tolerance: 50 },
+        normalizeGroup({ tag: '节点选择', type: 'selector', members: ['自动选择', 'direct'], regex: '' }),
+        normalizeGroup({ tag: '自动选择', type: 'urltest', members: [], regex: '' }),
     ]);
+    const highlightedGroupId = ref('');
+
+    const focusGroupCard = async (groupId) => {
+        await nextTick();
+        const card = ctx.tabContentContainer.value?.querySelector(`[data-group-card-id="${groupId}"]`);
+        if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const nameInput = card.querySelector('[data-group-name-input="true"]');
+            if (nameInput && typeof nameInput.focus === 'function') {
+                nameInput.focus({ preventScroll: true });
+                if (typeof nameInput.select === 'function') nameInput.select();
+            }
+        }
+        highlightedGroupId.value = groupId;
+        clearTimeout(highlightTimer);
+        highlightTimer = setTimeout(() => {
+            if (highlightedGroupId.value === groupId) highlightedGroupId.value = '';
+        }, 2200);
+    };
 
     const addGroup = async () => {
         const newTag = `Group-${groups.value.length + 1}`;
-        groups.value.push({
-            id: ctx.generateId('g'),
+        const newGroup = normalizeGroup({
             tag: newTag,
             type: 'selector',
             members: [],
@@ -17,17 +52,29 @@ export function setupGroupsModule(ctx) {
             url: 'https://www.gstatic.com/generate_204',
             interval: '3m',
             tolerance: 50,
+            collapsed: false,
         });
-        await nextTick();
-        if (ctx.tabContentContainer.value) {
-            ctx.tabContentContainer.value.scrollTo({
-                top: ctx.tabContentContainer.value.scrollHeight,
-                behavior: 'smooth',
-            });
-        }
+        groups.value.push(newGroup);
+        await focusGroupCard(newGroup.id);
         if (typeof ctx.scrollJsonTo === 'function') {
             ctx.scrollJsonTo(`"tag": "${newTag}"`, { fallbackToEnd: true });
         }
+    };
+
+    const toggleGroupCollapsed = (index) => {
+        groups.value[index].collapsed = !groups.value[index].collapsed;
+    };
+
+    const collapseAllGroups = () => {
+        groups.value.forEach((group) => {
+            group.collapsed = true;
+        });
+    };
+
+    const expandAllGroups = () => {
+        groups.value.forEach((group) => {
+            group.collapsed = false;
+        });
     };
 
     const removeGroup = (index) => {
@@ -84,8 +131,7 @@ export function setupGroupsModule(ctx) {
             if (matchingNodes.length > 0) {
                 let group = groups.value.find((item) => item.tag === country.name);
                 if (!group) {
-                    groups.value.push({
-                        id: ctx.generateId('g'),
+                    groups.value.push(normalizeGroup({
                         tag: country.name,
                         type: 'urltest',
                         members: [...matchingNodes],
@@ -93,7 +139,7 @@ export function setupGroupsModule(ctx) {
                         url: 'https://www.gstatic.com/generate_204',
                         interval: '3m',
                         tolerance: 50,
-                    });
+                    }));
                     generatedCount++;
                 } else {
                     matchingNodes.forEach((tag) => {
@@ -153,7 +199,12 @@ export function setupGroupsModule(ctx) {
 
     Object.assign(ctx, {
         groups,
+        normalizeGroup,
+        highlightedGroupId,
         addGroup,
+        toggleGroupCollapsed,
+        collapseAllGroups,
+        expandAllGroups,
         removeGroup,
         updateGroupTag,
         generateCountryGroups,
