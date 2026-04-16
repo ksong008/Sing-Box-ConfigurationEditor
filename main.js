@@ -9,10 +9,11 @@ import { setupProvidersModule } from './modules/providers.js';
 import { setupRulesModule } from './modules/rules.js';
 import { setupTproxyModule } from './modules/tproxy.js';
 import { setupTunModule } from './modules/tun.js';
+import { registerUIComponents } from './ui/register-components.js';
 
-const { createApp } = window.Vue;
+const { createApp, provide } = window.Vue;
 
-createApp({
+const app = createApp({
     setup() {
         const ctx = createBaseState();
 
@@ -27,6 +28,11 @@ createApp({
         setupImportExportCore(ctx);
         setupStorageCore(ctx);
 
-        return ctx;
+        provide('ctx', ctx);
+
+        return {};
     },
-}).mount('#app');
+});
+
+registerUIComponents(app);
+app.mount('#app');
