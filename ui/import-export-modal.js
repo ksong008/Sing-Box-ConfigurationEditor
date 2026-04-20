@@ -21,7 +21,7 @@ export const ImportExportModal = {
                     <p class="text-sm text-gray-500 shrink-0">将当前所有设置导出为 JSON。可选择保存为"面板配置"以便后续重新导入修改，或直接下载可供 Sing-Box 运行的标准配置。</p>
                     <div class="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shrink-0">
                         <p class="text-xs font-semibold" :class="supportsNativeFileSave ? 'text-emerald-700' : 'text-amber-700'">
-                            <i :class="supportsNativeFileSave ? 'fas fa-hdd mr-2' : 'fas fa-download mr-2'"></i>{{ supportsNativeFileSave ? '当前浏览器支持直接写入本地文件。首次保存时选择路径，之后同名保存可直接覆盖。' : '当前浏览器不支持直接写入本地文件，将自动回退为普通下载。' }}
+                            <i :class="supportsNativeFileSave ? 'fas fa-hdd mr-2' : 'fas fa-download mr-2'"></i>{{ supportsNativeFileSave ? '当前浏览器支持直接写入本地文件。首次保存时选择路径，之后同名保存会先确认是否覆盖。' : '当前浏览器不支持直接写入本地文件，将自动回退为普通下载。' }}
                         </p>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
@@ -50,8 +50,13 @@ export const ImportExportModal = {
                 </div>
 
                 <div v-if="importExportTab==='import'" class="flex flex-col gap-4 modal-content-ready">
-                    <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                        <p class="text-sm text-amber-800 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>注意：只能导入"面板配置文件"。导入将覆盖当前所有设置，请确保已备份。</p>
+                    <div class="flex gap-3 p-1 bg-gray-100 rounded-xl">
+                        <button @click="importConfigKind='panel'" :class="importConfigKind==='panel'?'bg-white text-indigo-600 shadow-sm':'text-gray-500 hover:text-gray-700'" class="flex-1 py-2.5 rounded-lg text-sm font-bold" style="transition:background-color .2s,color .2s"><i class="fas fa-sliders-h mr-1.5"></i>面板配置</button>
+                        <button @click="importConfigKind='runtime'" :class="importConfigKind==='runtime'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'" class="flex-1 py-2.5 rounded-lg text-sm font-bold" style="transition:background-color .2s,color .2s"><i class="fas fa-cog mr-1.5"></i>运行配置</button>
+                    </div>
+                    <div class="rounded-xl px-4 py-3" :class="importConfigKind==='panel' ? 'bg-amber-50 border border-amber-200' : 'bg-blue-50 border border-blue-200'">
+                        <p v-if="importConfigKind==='panel'" class="text-sm text-amber-800 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>导入面板配置会完整覆盖当前面板状态，请确保已备份。</p>
+                        <p v-else class="text-sm text-blue-800 font-bold"><i class="fas fa-circle-info mr-2"></i>导入运行配置会按 sing-box runtime JSON 尽力还原回面板状态，推荐优先导入由本编辑器导出的运行配置。</p>
                     </div>
                     <label class="cursor-pointer group">
                         <div class="bg-indigo-600 group-hover:bg-indigo-500 text-white py-4 rounded-xl text-sm font-bold text-center shadow-sm" style="transition:background-color .2s"><i class="fas fa-folder-open mr-2"></i>选择本地 JSON 文件</div>
@@ -62,8 +67,8 @@ export const ImportExportModal = {
                         <span class="text-xs text-gray-400 font-bold">或粘贴 JSON 文本</span>
                         <div class="flex-1 h-px bg-gray-200"></div>
                     </div>
-                    <textarea v-model="importJsonText" rows="5" placeholder='粘贴面板配置 JSON 内容...' class="w-full px-4 py-3 text-xs border border-gray-300 rounded-xl outline-none font-mono bg-gray-50 focus:bg-white resize-none"></textarea>
-                    <button @click="doImportText" :disabled="!importJsonText.trim()" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white py-3 rounded-xl text-sm font-bold shadow-sm" style="transition:background-color .2s"><i class="fas fa-file-import mr-2"></i>从文本导入</button>
+                    <textarea v-model="importJsonText" rows="5" :placeholder="importConfigKind==='panel' ? '粘贴面板配置 JSON 内容...' : '粘贴 sing-box 运行配置 JSON 内容...'" class="w-full px-4 py-3 text-xs border border-gray-300 rounded-xl outline-none font-mono bg-gray-50 focus:bg-white resize-none"></textarea>
+                    <button @click="doImportText" :disabled="!importJsonText.trim()" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white py-3 rounded-xl text-sm font-bold shadow-sm" style="transition:background-color .2s"><i class="fas fa-file-import mr-2"></i>{{ importConfigKind==='panel' ? '导入面板配置' : '导入运行配置' }}</button>
                     <div v-if="importError" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 font-semibold">{{ importError }}</div>
                 </div>
             </template>
