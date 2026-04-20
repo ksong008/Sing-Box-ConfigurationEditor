@@ -158,10 +158,30 @@ export function setupImportExportCore(ctx) {
             ctx.showToast(`配置版本为 ${data._version}，当前面板适配 v1.12，部分字段可能不兼容`, 'warn', 5000);
         }
         if (data.fakeip) Object.assign(ctx.fakeip.value, data.fakeip);
-        if (data.settings) Object.assign(ctx.settings.value, data.settings);
-        if (data.tun) Object.assign(ctx.tun.value, data.tun);
+        if (data.settings) {
+            Object.assign(ctx.settings.value, data.settings);
+            if (Array.isArray(ctx.settings.value.default_network_type)) {
+                ctx.settings.value.default_network_type = ctx.settings.value.default_network_type.join(', ');
+            }
+            if (Array.isArray(ctx.settings.value.default_fallback_network_type)) {
+                ctx.settings.value.default_fallback_network_type = ctx.settings.value.default_fallback_network_type.join(', ');
+            }
+        }
+        if (data.tun) {
+            Object.assign(ctx.tun.value, data.tun);
+            ['include_interface', 'exclude_interface', 'include_package', 'exclude_package', 'route_exclude_address'].forEach((key) => {
+                if (Array.isArray(ctx.tun.value[key])) {
+                    ctx.tun.value[key] = ctx.tun.value[key].join('\n');
+                }
+            });
+        }
         if (data.clashApi) Object.assign(ctx.clashApi.value, data.clashApi);
-        if (data.ntp) Object.assign(ctx.ntp.value, data.ntp);
+        if (data.ntp) {
+            Object.assign(
+                ctx.ntp.value,
+                typeof ctx.normalizeNtp === 'function' ? ctx.normalizeNtp(data.ntp) : data.ntp,
+            );
+        }
         if (data.tproxy) {
             const incomingTproxy = { ...data.tproxy };
             if (!incomingTproxy.dns_hijack_mode) {
@@ -181,7 +201,15 @@ export function setupImportExportCore(ctx) {
             ctx.extraInbounds.value = Array.isArray(data.extraInbounds) ? data.extraInbounds.map(ctx.normalizeExtraInbound) : [];
         }
         if (typeof data.corsProxyEnabled === 'boolean') ctx.corsProxyEnabled.value = data.corsProxyEnabled;
-        if (data.dnsList) ctx.dnsList.value = data.dnsList;
+        if (data.dnsList) {
+            ctx.dnsList.value = Array.isArray(data.dnsList)
+                ? data.dnsList.map((dns, index) => (
+                    typeof ctx.normalizeDnsServer === 'function'
+                        ? ctx.normalizeDnsServer(dns, index)
+                        : dns
+                ))
+                : data.dnsList;
+        }
         if (data.providers) ctx.providers.value = data.providers;
         if (data.nodes) ctx.nodes.value = data.nodes.map((node) => ctx.makeNode(node));
         if (data.groups) {
