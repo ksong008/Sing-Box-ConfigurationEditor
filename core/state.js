@@ -93,6 +93,7 @@ export function createBaseState() {
     const showImportExport = ref(false);
     const importExportTab = ref('export');
     const exportPreviewTab = ref('panel');
+    const importConfigKind = ref('panel');
     const importJsonText = ref('');
     const importError = ref('');
     const modalContentReady = ref(false);
@@ -321,6 +322,7 @@ export function createBaseState() {
         showImportExport,
         importExportTab,
         exportPreviewTab,
+        importConfigKind,
         importJsonText,
         importError,
         modalContentReady,
