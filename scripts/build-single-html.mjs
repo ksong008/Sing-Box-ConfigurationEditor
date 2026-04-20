@@ -16,7 +16,8 @@ const mainSource = fs.readFileSync(mainPath, 'utf8');
 
 const moduleBodies = [];
 const vendorBlockPattern = /[ \t]*<!-- BUILD_VENDOR_ASSETS_START -->[\s\S]*?<!-- BUILD_VENDOR_ASSETS_END -->/;
-const entryScriptTag = '<script type="module" src="./main.js"></script>';
+const externalEntryScriptTag = '<script type="module" src="./main.js"></script>';
+const inlineEntryScriptPattern = /<script type="module">[\s\S]*?import\('\.\/main\.js'\)[\s\S]*?<\/script>/;
 const visitedModules = new Set();
 
 function readText(filePath, label) {
@@ -198,10 +199,16 @@ if (!vendorBlockPattern.test(html)) {
 }
 
 let packedHtml = html.replace(vendorBlockPattern, () => buildVendorBlock());
-packedHtml = packedHtml.replace(entryScriptTag, () => bundledScript);
+if (packedHtml.includes(externalEntryScriptTag)) {
+    packedHtml = packedHtml.replace(externalEntryScriptTag, () => bundledScript);
+} else if (inlineEntryScriptPattern.test(packedHtml)) {
+    packedHtml = packedHtml.replace(inlineEntryScriptPattern, () => bundledScript);
+} else {
+    throw new Error('Failed to find module entry script in singbox.html');
+}
 
-if (packedHtml === html || packedHtml.includes(entryScriptTag)) {
-    throw new Error('Failed to replace module entry script tag in singbox.html');
+if (packedHtml === html || packedHtml.includes(externalEntryScriptTag) || inlineEntryScriptPattern.test(packedHtml)) {
+    throw new Error('Failed to replace module entry script in singbox.html');
 }
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
