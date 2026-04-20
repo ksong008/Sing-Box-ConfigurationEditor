@@ -53,6 +53,7 @@ export function setupProvidersModule(ctx) {
                 reality_sid: params.get('sid') || '',
                 utls_fingerprint: params.get('fp') || '',
                 alpn: params.get('alpn') || '',
+                collapsed: true,
             });
         } catch {
             return null;
@@ -83,6 +84,7 @@ export function setupProvidersModule(ctx) {
                 reality_sid: params.get('sid') || '',
                 utls_fingerprint: params.get('fp') || '',
                 alpn: params.get('alpn') || '',
+                collapsed: true,
             });
         } catch {
             return null;
@@ -106,6 +108,7 @@ export function setupProvidersModule(ctx) {
                 ws_host: payload.host || '',
                 tls: payload.tls === 'tls',
                 alpn: payload.alpn || '',
+                collapsed: true,
             });
         } catch {
             return null;
@@ -147,7 +150,7 @@ export function setupProvidersModule(ctx) {
                     }
                 }
             }
-            return ctx.makeNode({ tag: name, type: 'shadowsocks', server: host, port, secret: password, ss_method: method, tls: false });
+            return ctx.makeNode({ tag: name, type: 'shadowsocks', server: host, port, secret: password, ss_method: method, tls: false, collapsed: true });
         } catch {
             return null;
         }
@@ -168,6 +171,7 @@ export function setupProvidersModule(ctx) {
                 hy2_obfs_type: url.searchParams.get('obfs') || '',
                 hy2_obfs_password: url.searchParams.get('obfs-password') || '',
                 tls: true,
+                collapsed: true,
             });
         } catch {
             return null;
@@ -191,6 +195,7 @@ export function setupProvidersModule(ctx) {
                 insecure: url.searchParams.get('allow_insecure') === '1',
                 alpn: url.searchParams.get('alpn') || 'h3',
                 tls: true,
+                collapsed: true,
             });
         } catch {
             return null;
@@ -198,6 +203,7 @@ export function setupProvidersModule(ctx) {
     };
 
     const coreParser = (text) => {
+        const firstNewIndex = ctx.nodes.value.length;
         let source = text.trim();
         const hasProtocol = ['vless://', 'vmess://', 'trojan://', 'ss://', 'hysteria2://', 'hy2://', 'tuic://', 'socks://', 'http://'].some((prefix) => source.includes(prefix));
         if (!hasProtocol) {
@@ -207,7 +213,7 @@ export function setupProvidersModule(ctx) {
                 source = text.trim();
             }
         }
-        let count = 0;
+        const parsedNodes = [];
         source
             .split(/\r?\n/)
             .map((line) => line.trim())
@@ -221,11 +227,13 @@ export function setupProvidersModule(ctx) {
                 else if (line.startsWith('hysteria2://') || line.startsWith('hy2://')) node = parseHy2(line);
                 else if (line.startsWith('tuic://')) node = parseTuic(line);
                 if (node) {
-                    ctx.nodes.value.push(node);
-                    count++;
+                    parsedNodes.push(ctx.makeNode({ ...node, collapsed: true }));
                 }
             });
-        return count;
+        if (parsedNodes.length > 0) {
+            ctx.nodes.value.push(...parsedNodes);
+        }
+        return { count: parsedNodes.length, firstNewIndex };
     };
 
     const PROXIES = [
@@ -265,9 +273,10 @@ export function setupProvidersModule(ctx) {
         ctx.fetchStatus.value = { type: 'loading', msg: '尝试直接拉取...' };
         let text = await tryFetch(provider.url, 8000);
         if (text) {
-            const count = coreParser(text);
-            if (count > 0) {
-                ctx.fetchStatus.value = { type: 'ok', msg: `直接拉取成功，导入 ${count} 个节点` };
+            const result = coreParser(text);
+            if (result.count > 0) {
+                if (typeof ctx.focusNodeCard === 'function') ctx.focusNodeCard(result.firstNewIndex);
+                ctx.fetchStatus.value = { type: 'ok', msg: `直接拉取成功，导入 ${result.count} 个节点` };
                 setTimeout(() => {
                     ctx.fetchStatus.value = null;
                 }, 4000);
@@ -286,9 +295,10 @@ export function setupProvidersModule(ctx) {
             ctx.fetchStatus.value = { type: 'loading', msg: `尝试 CORS 代理 ${i + 1}/${PROXIES.length}...` };
             text = await tryFetch(PROXIES[i](provider.url), 12000);
             if (text) {
-                const count = coreParser(text);
-                if (count > 0) {
-                    ctx.fetchStatus.value = { type: 'ok', msg: `代理拉取成功，导入 ${count} 个节点` };
+                const result = coreParser(text);
+                if (result.count > 0) {
+                    if (typeof ctx.focusNodeCard === 'function') ctx.focusNodeCard(result.firstNewIndex);
+                    ctx.fetchStatus.value = { type: 'ok', msg: `代理拉取成功，导入 ${result.count} 个节点` };
                     setTimeout(() => {
                         ctx.fetchStatus.value = null;
                     }, 4000);
@@ -304,10 +314,11 @@ export function setupProvidersModule(ctx) {
 
     const parseManualText = () => {
         if (!ctx.rawPastedText.value.trim()) return ctx.showToast('请先粘贴内容！', 'warn');
-        const count = coreParser(ctx.rawPastedText.value);
-        if (count === 0) ctx.showToast('未能识别任何节点，请确认格式正确或 Base64 内容完整', 'err');
+        const result = coreParser(ctx.rawPastedText.value);
+        if (result.count === 0) ctx.showToast('未能识别任何节点，请确认格式正确或 Base64 内容完整', 'err');
         else {
-            ctx.showToast(`本地解析成功，导入 ${count} 个节点`, 'ok');
+            if (typeof ctx.focusNodeCard === 'function') ctx.focusNodeCard(result.firstNewIndex);
+            ctx.showToast(`本地解析成功，导入 ${result.count} 个节点`, 'ok');
             ctx.rawPastedText.value = '';
         }
     };

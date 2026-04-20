@@ -100,6 +100,87 @@
         <json-preview></json-preview>
     </div>
 </div>
-<script type="module" src="./main.js"></script>
+<script type="module">
+    const appRoot = document.getElementById('app');
+    const CLEARABLE_STORAGE_KEYS = ['singbox_web_config_v1_12_test', 'singbox_web_config'];
+
+    const clearEditorCache = () => {
+        CLEARABLE_STORAGE_KEYS.forEach((key) => {
+            try {
+                localStorage.removeItem(key);
+            } catch {
+                // ignore localStorage errors
+            }
+        });
+    };
+
+    const renderBootMessage = (title, message, actions = []) => {
+        if (!appRoot) return;
+        appRoot.removeAttribute('v-cloak');
+        appRoot.innerHTML = `
+            <div class="min-h-full flex items-center justify-center">
+                <div class="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-xl p-8">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fas fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h1 class="text-2xl font-black text-gray-900 mb-3">${title}</h1>
+                            <div class="text-sm leading-7 text-gray-600 whitespace-pre-line">${message}</div>
+                            <div class="mt-6 flex flex-wrap gap-3">
+                                ${actions.map((action) => `<button data-boot-action="${action.id}" class="${action.className}">${action.label}</button>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        actions.forEach((action) => {
+            const button = appRoot.querySelector(`[data-boot-action="${action.id}"]`);
+            if (button) button.addEventListener('click', action.onClick);
+        });
+    };
+
+    if (location.protocol === 'file:') {
+        renderBootMessage(
+            '当前文件不能直接双击打开',
+            '这是 test 分支的模块化开发版，使用 file:// 本地打开时，浏览器通常会拦截 ES modules，表现就是白屏。\n\n推荐做法：\n1. 在项目目录运行 python3 -m http.server 8000\n2. 浏览器访问 http://127.0.0.1:8000/singbox.html\n\n如果你只是想离线直接打开，请使用打包后的单文件发布版。',
+            [
+                {
+                    id: 'reload-http-help',
+                    label: '我知道了',
+                    className: 'px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-sm transition',
+                    onClick: () => {},
+                },
+            ],
+        );
+    } else {
+        import('./main.js').catch((error) => {
+            console.error('[boot] failed to start app:', error);
+            renderBootMessage(
+                '编辑器启动失败',
+                '这通常是脚本加载异常，或者旧缓存把当前页面状态带崩了。\n\n你可以先清理本地缓存再重试；如果仍然失败，再看浏览器控制台里的报错。',
+                [
+                    {
+                        id: 'clear-cache-reload',
+                        label: '清理缓存并重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold shadow-sm transition',
+                        onClick: () => {
+                            clearEditorCache();
+                            location.reload();
+                        },
+                    },
+                    {
+                        id: 'plain-reload',
+                        label: '直接重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-bold shadow-sm transition',
+                        onClick: () => location.reload(),
+                    },
+                ],
+            );
+        });
+    }
+</script>
 </body>
 </html>

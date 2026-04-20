@@ -265,11 +265,12 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                         </div>
                         <div class="space-y-3">
                             <div class="grid grid-cols-12 gap-2 items-center px-1 mb-1">
-                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">标签</div>
-                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">类型</div>
-                                <div class="col-span-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">服务器地址</div>
-                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">出站 detour <span class="normal-case text-gray-400 font-normal">(留空=不写入)</span></div>
-                                <div class="col-span-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-violet-500">域名解析器</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">标签</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">类型</div>
+                                <div class="col-span-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">服务器地址</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">域名解析器</div>
+                                <div class="col-span-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">出站 detour</div>
+                                <div class="col-span-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider">端口</div>
                                 <div class="col-span-1"></div>
                             </div>
                             <div v-for="(dns,idx) in dnsList" :key="idx" class="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors">
@@ -279,30 +280,161 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                                         <option value="tls">DoT</option><option value="https">DoH</option><option value="udp">UDP</option>
                                         <option value="tcp">TCP</option><option value="quic">DoQ</option><option value="h3">DoH3</option><option value="local">本地</option>
                                     </select>
-                                    <input v-if="dns.type!=='local'" v-model="dns.server" placeholder="IP或域名" class="col-span-4 px-2.5 py-1.5 text-xs border rounded-md outline-none bg-white font-mono">
-                                    <div v-else class="col-span-4 text-xs text-gray-400 italic px-2.5 py-1.5 bg-gray-100 rounded-md border border-dashed border-gray-300 text-center">使用系统 DNS</div>
+                                    <input v-if="dns.type!=='local'" v-model="dns.server" placeholder="IP或域名" class="col-span-3 px-2.5 py-1.5 text-xs border rounded-md outline-none bg-white font-mono">
+                                    <div v-else class="col-span-3 text-xs text-gray-400 italic px-2.5 py-1.5 bg-gray-100 rounded-md border border-dashed border-gray-300 text-center">使用系统 DNS</div>
+                                    <select v-if="['tls','https','quic','h3'].includes(dns.type)" v-model="dns.domain_resolver" class="col-span-2 px-2 py-1.5 text-xs border rounded-md outline-none bg-white text-violet-700 font-semibold">
+                                        <option value="">不指定</option>
+                                        <option v-for="tag in allDnsTags.filter(tag=>tag!==dns.tag)" :value="tag">{{ tag }}</option>
+                                    </select>
+                                    <div v-else class="col-span-2 text-[10px] text-gray-300 text-center italic py-1.5">通常不需要</div>
                                     <select v-model="dns.detour" class="col-span-2 px-2 py-1.5 text-xs border rounded-md outline-none bg-white font-semibold" :class="dns.detour?'text-indigo-700':'text-gray-400'">
                                         <option value="">默认出站</option>
                                         <option v-for="tag in availableOutboundTags.filter(t=>t!=='direct')" :value="tag">{{ tag }}</option>
                                     </select>
-                                    <select v-if="['tls','https','quic','h3'].includes(dns.type)" v-model="dns.domain_resolver" class="col-span-2 px-2 py-1.5 text-xs border rounded-md outline-none bg-white text-violet-700 font-semibold">
-                                        <option value="">(无解析器)</option>
-                                        <option v-for="d in dnsList.filter(x=>x.tag&&x.tag!==dns.tag)" :value="d.tag">{{ d.tag }}</option>
-                                    </select>
-                                    <div v-else class="col-span-2 text-[10px] text-gray-300 text-center italic py-1.5">仅加密协议需要</div>
+                                    <input v-if="dns.type!=='local'" v-model="dns.server_port" type="text" placeholder="默认" class="col-span-1 px-2 py-1.5 text-xs border rounded-md outline-none bg-white font-mono text-center">
+                                    <div v-else class="col-span-1 text-[10px] text-gray-300 text-center italic py-1.5">-</div>
                                     <button @click="removeDns(idx)" class="col-span-1 flex justify-center text-red-400 hover:text-white hover:bg-red-500 p-1.5 rounded-md transition-colors"><i class="fas fa-trash-alt text-xs"></i></button>
                                 </div>
+                                <details v-if="dns.type!=='local'" class="mt-3 group">
+                                    <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-xs font-bold text-gray-500">
+                                        <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                        <i class="fas fa-satellite-dish text-violet-400 mr-0.5"></i>DNS 高级选项
+                                        <span v-if="dns.client_subnet||dns.path||dns.headers_text||dns.bind_interface||dns.inet4_bind_address||dns.inet6_bind_address||dns.routing_mark||dns.reuse_addr||dns.netns||dns.connect_timeout||dns.network_strategy||dns.network_type||dns.fallback_network_type||dns.fallback_delay||dns.domain_strategy" class="ml-auto badge bg-violet-100 text-violet-700 border border-violet-200">已配置</span>
+                                    </summary>
+                                    <div class="mt-2 p-3 bg-white rounded-lg border border-gray-200 space-y-3">
+                                        <div class="text-[10px] font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+                                            这里是 DNS server 的拨号与解析细节。常见情况只需要 <code>server</code>、<code>server_port</code> 和必要时的 <code>domain_resolver</code>。
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名策略 (Domain Strategy)</label>
+                                                <select v-model="dns.domain_strategy" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                                    <option value="">默认</option>
+                                                    <option value="prefer_ipv4">prefer_ipv4</option>
+                                                    <option value="prefer_ipv6">prefer_ipv6</option>
+                                                    <option value="ipv4_only">ipv4_only</option>
+                                                    <option value="ipv6_only">ipv6_only</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时 (Connect Timeout)</label>
+                                                <input v-model="dns.connect_timeout" placeholder="5s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">最常见的高级项之一；限制连接上游 DNS 服务器的等待时间。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端子网 (Client Subnet)</label>
+                                                <input v-model="dns.client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">向上游 DNS 显式携带客户端网段，常见于地理位置优化场景。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口 (Bind Interface)</label>
+                                                <input v-model="dns.bind_interface" placeholder="eth0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">多网卡或策略路由场景更常见。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 绑定地址 (IPv4 Bind Address)</label>
+                                                <input v-model="dns.inet4_bind_address" placeholder="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv4 出口地址。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 绑定地址 (IPv6 Bind Address)</label>
+                                                <input v-model="dns.inet6_bind_address" placeholder="2001:db8::10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv6 出口地址。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络策略 (Network Strategy)</label>
+                                                <select v-model="dns.network_strategy" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                                    <option value="">默认</option>
+                                                    <option value="default">default</option>
+                                                    <option value="hybrid">hybrid</option>
+                                                </select>
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">更常见于 Android / Apple 图形客户端的多网络选择场景。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络类型 (Network Type)</label>
+                                                <input v-model="dns.network_type" placeholder="wifi,cellular" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">通常配合 <code>network_strategy</code> 使用，如 <code>wifi</code> / <code>cellular</code>。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退网络类型 (Fallback Network Type)</label>
+                                                <input v-model="dns.fallback_network_type" placeholder="ethernet,other" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">当首选网络类型不可用时的候选类型列表。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退延迟 (Fallback Delay)</label>
+                                                <input v-model="dns.fallback_delay" placeholder="300ms" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">仅在配置了 <code>network_strategy</code> 或其它回退策略时更有意义。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 (Routing Mark)</label>
+                                                <input v-model="dns.routing_mark" placeholder="255 / 0xff" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；常见于 fwmark / policy routing。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">地址复用 (Reuse Address)</label>
+                                                <label class="mt-0.5 flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" v-model="dns.reuse_addr" class="w-4 h-4 text-violet-600 rounded">
+                                                    <span class="text-xs font-bold text-gray-700">启用 <span class="text-gray-400 font-normal">(reuse_addr)</span></span>
+                                                </label>
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">底层 socket 复用选项，通常仅在特殊端口占用/重启场景才需要。</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间 (NetNS)</label>
+                                                <input v-model="dns.netns" placeholder="singbox" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；指定网络命名空间。</p>
+                                            </div>
+                                        </div>
+                                        <div v-if="['https','h3'].includes(dns.type)" class="pt-3 border-t border-gray-200 space-y-3">
+                                            <div class="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求路径 (HTTP Path)</label>
+                                                    <input v-model="dns.path" placeholder="/dns-query" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                                    <p class="mt-1 text-[10px] font-medium text-gray-500">仅对 DoH / DoH3 这类 HTTP 风格 DNS 有意义。</p>
+                                                </div>
+                                                <div></div>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 头 (HTTP Headers)</label>
+                                                <textarea v-model="dns.headers_text" rows="3" placeholder="Accept: application/dns-message&#10;X-Client: sing-box" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
+                                                <p class="mt-1 text-[10px] font-medium text-gray-500">仅对 DoH / DoH3 有意义；每行一条 <code>Key: Value</code>。</p>
+                                            </div>
+                                        </div>
+                                        <div class="pt-3 border-t border-gray-200 text-[10px] font-medium text-gray-500 bg-violet-50/60 rounded-lg px-3 py-2">
+                                            目前仍未突出展示的低频项主要是 <code>tcp_fast_open</code>、<code>tcp_multi_path</code>、<code>udp_fragment</code>；其余 DNS 常见拨号策略项已恢复到上面的高级区。
+                                        </div>
+                                    </div>
+                                </details>
                             </div>
                         </div>
-                        <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-5 bg-indigo-50/50 p-3 rounded-lg">
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" v-model="settings.independent_cache" class="w-4 h-4 text-indigo-600 rounded">
-                                <span class="text-sm text-gray-700 font-medium">独立缓存 <span class="text-gray-400 text-xs font-normal">(FakeIP 推荐，开启时自动勾选)</span></span>
-                            </label>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" v-model="settings.reverse_mapping" class="w-4 h-4 text-indigo-600 rounded">
-                                <span class="text-sm text-gray-700 font-medium">反向映射 (reverse_mapping)</span>
-                            </label>
+                        <div class="mt-4 pt-4 border-t border-gray-100 bg-indigo-50/50 p-3 rounded-lg space-y-3">
+                            <div class="flex flex-wrap gap-5">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.independent_cache" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm text-gray-700 font-medium">独立缓存 <span class="text-gray-400 text-xs font-normal">(FakeIP 推荐，开启时自动勾选)</span></span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.reverse_mapping" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm text-gray-700 font-medium">反向映射 (reverse_mapping)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.dns_disable_cache" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm text-gray-700 font-medium">禁用 DNS 缓存 (disable_cache)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.dns_disable_expire" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm text-gray-700 font-medium">禁止过期应答 (disable_expire)</span>
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端子网 <span class="normal-case font-normal text-gray-300">(dns.client_subnet)</span></label>
+                                    <input v-model="settings.dns_client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">缓存容量 <span class="normal-case font-normal text-gray-300">(cache_capacity)</span></label>
+                                    <input type="number" v-model.number="settings.dns_cache_capacity" min="0" placeholder="1024" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-1">
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -392,50 +524,91 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         <span class="text-base font-extrabold text-gray-800"><i class="fas fa-server mr-2 text-indigo-500"></i>代理节点 <span class="ml-2 text-xs bg-indigo-100 text-indigo-700 px-2.5 py-0.5 rounded-full font-black">{{ nodes.length }}</span></span>
                         <div class="flex gap-3">
                             <button @click="clearNodes" class="text-xs font-bold bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-100 transition"><i class="fas fa-trash mr-1.5"></i>清空全部</button>
-                            <button @click="addNode" class="text-xs font-bold bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建节点</button>
+                            <button @click="addNode('top')" class="text-xs font-bold bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建节点</button>
                         </div>
                     </div>
 
-                    <div v-for="(node,idx) in nodes" :key="idx" :id="\`node-card-\${idx}\`" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-colors">
-                        <button @click="removeNode(idx)" class="absolute -top-2.5 -right-2.5 w-7 h-7 flex items-center justify-center bg-white text-red-400 border border-red-200 hover:text-white hover:bg-red-500 hover:border-red-500 rounded-full opacity-0 group-hover:opacity-100 shadow-md transition-all z-10"><i class="fas fa-times text-xs"></i></button>
+                    <div v-for="(node,idx) in nodes" :key="idx" :id="\`node-card-\${idx}\`"
+                         :draggable="node.draggable || false"
+                         @dragstart="onNodeDragStart(idx, $event)"
+                         @dragenter.prevent="onNodeDragEnter(idx)"
+                         @dragover.prevent
+                         @drop="onNodeDrop(idx)"
+                         @dragend="onNodeDragEnd"
+                         :class="{
+                             'opacity-40 border-dashed border-indigo-400': draggedNodeIndex === idx,
+                             'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex > idx,
+                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex < idx
+                         }"
+                         class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-all">
+                        <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
+                            <button @click="toggleNodeCollapsed(idx)" class="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 w-7 h-7 flex justify-center items-center rounded-lg transition-colors" :title="node.collapsed ? '展开卡片' : '折叠卡片'">
+                                <i :class="node.collapsed ? 'fas fa-chevron-down text-sm' : 'fas fa-chevron-up text-sm'"></i>
+                            </button>
+                            <button @click="removeNode(idx)" class="text-red-400 hover:text-white hover:bg-red-500 w-7 h-7 flex justify-center items-center rounded-lg transition-colors"><i class="fas fa-trash-alt text-sm"></i></button>
+                        </div>
                         
-                        <div class="grid grid-cols-12 gap-3 mb-3">
-                            <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">节点名称</label><input type="text" v-model="node.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-1 focus:bg-white"></div>
-                            <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
-                                <select v-model="node.type" @change="onNodeTypeChange(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:ring-1 focus:bg-white">
-                                    <optgroup label="常用">
-                                        <option value="vless">VLESS</option>
-                                        <option value="vmess">VMess</option>
-                                        <option value="trojan">Trojan</option>
-                                        <option value="shadowsocks">Shadowsocks</option>
-                                    </optgroup>
-                                    <optgroup label="新型">
-                                        <option value="hysteria2">Hysteria2</option>
-                                        <option value="hysteria">Hysteria</option>
-                                        <option value="tuic">TUIC v5</option>
-                                        <option value="anytls">AnyTLS</option>
-                                    </optgroup>
-                                    <optgroup label="混淆/隐匿">
-                                        <option value="shadowtls">ShadowTLS</option>
-                                        <option value="naive">NaiveProxy</option>
-                                    </optgroup>
-                                    <optgroup label="基础">
-                                        <option value="socks">SOCKS5</option>
-                                        <option value="http">HTTP</option>
-                                        <option value="wireguard">WireGuard</option>
-                                        <option value="ssh">SSH</option>
-                                    </optgroup>
-                                    <optgroup label="特殊">
-                                        <option value="tor">Tor</option>
-                                        <option value="dns">DNS</option>
-                                    </optgroup>
-                                </select>
+                        <div class="flex items-start gap-4 pr-20" :class="node.collapsed ? 'mb-1' : 'mb-3'">
+                            <div class="flex items-center justify-center shrink-0 w-8 h-8 cursor-move text-gray-400 hover:text-indigo-600 bg-gray-50 border border-gray-200 rounded-lg shadow-sm transition-colors mt-6"
+                                 title="按住此处拖动排序"
+                                 @mouseenter="node.draggable = true"
+                                 @mouseleave="node.draggable = false"
+                                 @mousedown="node.draggable = true"
+                                 @mouseup="node.draggable = false">
+                                <i class="fas fa-grip-vertical"></i>
                             </div>
-                            <div class="col-span-4 grid grid-cols-3 gap-2">
-                                <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                            <div class="flex-1">
+                                <div v-if="node.collapsed" class="flex flex-wrap items-center gap-2 min-h-[42px]">
+                                    <span class="text-sm font-extrabold text-gray-800">{{ node.tag || '未命名节点' }}</span>
+                                    <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
+                                    <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                                </div>
+                                <div v-else class="grid grid-cols-12 gap-3">
+                                    <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">节点名称</label><input type="text" v-model="node.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-1 focus:bg-white"></div>
+                                    <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
+                                        <select v-model="node.type" @change="onNodeTypeChange(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:ring-1 focus:bg-white">
+                                            <optgroup label="常用">
+                                                <option value="vless">VLESS</option>
+                                                <option value="vmess">VMess</option>
+                                                <option value="trojan">Trojan</option>
+                                                <option value="shadowsocks">Shadowsocks</option>
+                                            </optgroup>
+                                            <optgroup label="新型">
+                                                <option value="hysteria2">Hysteria2</option>
+                                                <option value="hysteria">Hysteria</option>
+                                                <option value="tuic">TUIC v5</option>
+                                                <option value="anytls">AnyTLS</option>
+                                            </optgroup>
+                                            <optgroup label="混淆/隐匿">
+                                                <option value="shadowtls">ShadowTLS</option>
+                                                <option value="naive">NaiveProxy</option>
+                                            </optgroup>
+                                            <optgroup label="基础">
+                                                <option value="socks">SOCKS5</option>
+                                                <option value="http">HTTP</option>
+                                                <option value="wireguard">WireGuard</option>
+                                                <option value="ssh">SSH</option>
+                                            </optgroup>
+                                            <optgroup label="特殊">
+                                                <option value="tor">Tor</option>
+                                                <option value="dns">DNS</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                    <div class="col-span-4 grid grid-cols-3 gap-2">
+                                        <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
+                        <div v-if="!node.collapsed" class="ml-12 flex flex-wrap items-center gap-2 mb-3">
+                            <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
+                            <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                        </div>
+
+                        <div v-if="!node.collapsed" class="ml-12">
 
                         <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2','hysteria'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ ['vless','vmess','tuic'].includes(node.type)?'UUID':'密码 (Password)' }}</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
@@ -456,11 +629,28 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     <option value="aes-128-cfb">aes-128-cfb (不推荐)</option>
                                 </select>
                             </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
+                                <select v-model="node.network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                </select>
+                            </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">插件 (Plugin)</label>
                                 <select v-model="node.ss_plugin" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="">无</option>
                                     <option value="obfs-local">obfs-local</option>
                                     <option value="v2ray-plugin">v2ray-plugin</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="node.ss_udp_over_tcp" :disabled="node.mux_enabled" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-40">
+                                    <span class="text-xs font-bold text-gray-700">UDP over TCP <span class="text-gray-400 font-normal">(与 Multiplex 互斥)</span></span>
+                                </label>
+                            </div>
+                            <div v-if="node.ss_udp_over_tcp"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP over TCP 版本</label>
+                                <select v-model="node.ss_udp_over_tcp_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="2">2 (默认)</option>
+                                    <option value="1">1</option>
                                 </select>
                             </div>
                             <div v-if="node.ss_plugin" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">插件参数 (Plugin Opts)</label><input type="text" v-model="node.ss_plugin_opts" placeholder="obfs=http;obfs-host=www.bing.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
@@ -469,38 +659,74 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         <div v-if="node.type==='tuic'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input type="text" v-model="node.tuic_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拥塞控制</label>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拥塞控制 (Congestion Control)</label>
                                 <select v-model="node.tuic_congestion" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="cubic">cubic</option><option value="new_reno">new_reno</option><option value="bbr">bbr</option>
                                 </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">控制 UDP / QUIC 拥塞算法，常见默认是 <code>cubic</code>。</p>
                             </div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Relay Mode</label>
-                                <select v-model="node.tuic_udp_relay_mode" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 转发模式 (UDP Relay Mode)</label>
+                                <select v-model="node.tuic_udp_relay_mode" :disabled="node.tuic_udp_over_stream" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 disabled:opacity-40">
                                     <option value="native">native</option><option value="quic">quic</option>
                                 </select>
+                                <p class="mt-1 text-[10px] font-medium text-amber-700">仅在未启用 <code>udp_over_stream</code> 时有效。</p>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
+                                <select v-model="node.tuic_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">心跳间隔 (Heartbeat)</label><input type="text" v-model="node.tuic_heartbeat" placeholder="10s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">用于保持连接活性，长连接场景更常见。</p></div>
+                            <div class="col-span-2 flex flex-wrap gap-4 pt-1">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tuic_udp_over_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP Over Stream</span><span class="text-[10px] font-medium text-gray-500">把 UDP 封装到流里</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tuic_zero_rtt_handshake" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">0-RTT 握手 (Zero RTT Handshake)</span><span class="text-[10px] font-medium text-amber-700">降低延迟，但依赖服务端支持</span></label>
+                            </div>
+                            <div v-if="node.tuic_udp_over_stream" class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                <p class="text-xs text-amber-700 font-semibold"><i class="fas fa-info-circle mr-1.5"></i>启用 <code>udp_over_stream</code> 后，<code>udp_relay_mode</code> 将不再写入配置。</p>
                             </div>
                         </div>
 
                         <div v-if="node.type==='hysteria'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_up_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_down_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥</label><input type="text" v-model="node.hy_obfs" placeholder="salamander" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证协议</label>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥 (OBFS Password)</label><input type="text" v-model="node.hy_obfs" placeholder="salamander" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">用于混淆流量；仅配置对应服务端时才需要。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证类型 (Auth Type)</label>
                                 <select v-model="node.hy_auth_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="str">string</option><option value="base64">base64</option>
                                 </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">控制认证字段写入为普通字符串还是 Base64。</p>
                             </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃端口 (Server Ports)</label><input type="text" v-model="node.hy_server_ports" placeholder="2080:3000,4000:5000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-amber-700">启用端口跳跃时使用；可填多个端口或端口范围。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃间隔 (Hop Interval)</label><input type="text" v-model="node.hy_hop_interval" placeholder="30s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">控制端口跳跃切换频率。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
+                                <select v-model="node.hy_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
+                            </div>
+                            <div class="col-span-2 text-[10px] font-medium text-gray-500">支持填写多个跳跃端口或端口范围，使用逗号分隔，例如 <code>2080:3000,4000:5000</code>。</div>
                         </div>
 
                         <div v-if="node.type==='hysteria2'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (up_mbps)</label><input type="text" v-model="node.hy2_up" placeholder="100 mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (down_mbps)</label><input type="text" v-model="node.hy2_down" placeholder="100 mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 类型</label>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 类型 (OBFS Type)</label>
                                 <select v-model="node.hy2_obfs_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="">无</option><option value="salamander">salamander</option>
                                 </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">控制 Hysteria2 的混淆方式；仅服务端启用时才需要。</p>
                             </div>
-                            <div v-if="node.hy2_obfs_type"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥</label><input type="text" v-model="node.hy2_obfs_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div v-if="node.hy2_obfs_type"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥 (OBFS Password)</label><input type="text" v-model="node.hy2_obfs_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">与上面的混淆类型配套使用。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃端口 (Server Ports)</label><input type="text" v-model="node.hy2_server_ports" placeholder="2080:3000,4000:5000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-amber-700">启用端口跳跃时使用；可填多个端口或端口范围。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃间隔 (Hop Interval)</label><input type="text" v-model="node.hy2_hop_interval" placeholder="30s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">控制端口跳跃切换频率。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
+                                <select v-model="node.hy2_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                </select>
+                                <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
+                            </div>
+                            <div class="col-span-2 text-[10px] font-medium text-gray-500">支持填写多个跳跃端口或端口范围，使用逗号分隔，例如 <code>2080:3000,4000:5000</code>。</div>
                         </div>
 
                         <div v-if="node.type==='socks'" class="grid grid-cols-2 gap-3 mb-3">
@@ -509,13 +735,33 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     <option value="5">SOCKS5</option><option value="4a">SOCKS4a</option><option value="4">SOCKS4</option>
                                 </select>
                             </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
+                                <select v-model="node.socks_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                </select>
+                            </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div class="flex items-end">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="node.socks_udp_over_tcp" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-xs font-bold text-gray-700">UDP over TCP</span>
+                                </label>
+                            </div>
+                            <div v-if="node.socks_udp_over_tcp"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP over TCP 版本</label>
+                                <select v-model="node.socks_udp_over_tcp_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="2">2 (默认)</option>
+                                    <option value="1">1</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div v-if="node.type==='http'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input type="text" v-model="node.http_path" placeholder="/" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求头 (Headers)</label><textarea v-model="node.http_headers_text" rows="3" placeholder="User-Agent: sing-box&#10;X-Proxy: corp" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea></div>
                             <div class="col-span-2"><label class="flex items-center gap-2 cursor-pointer bg-gray-50 p-2 rounded-lg border border-gray-200"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 TLS</span></label></div>
                         </div>
 
@@ -527,6 +773,19 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Pre-Shared Key (可选)</label><input type="text" v-model="node.wg_psk" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU</label><input type="number" v-model.number="node.wg_mtu" placeholder="1280" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reserved (逗号分隔)</label><input type="text" v-model="node.wg_reserved" placeholder="0,0,0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Interface Name</label><input type="text" v-model="node.wg_interface_name" placeholder="wg0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Workers</label><input type="number" v-model.number="node.wg_workers" min="1" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network</label>
+                                    <select v-model="node.wg_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                        <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                    </select>
+                                </div>
+                                <div class="flex items-end pb-2">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" v-model="node.wg_system_interface" class="w-4 h-4 text-indigo-600 rounded">
+                                        <span class="text-xs font-bold text-gray-700">system_interface</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -624,14 +883,14 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan','shadowsocks'].includes(node.type)" class="mb-3">
+                        <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
                             <div class="grid grid-cols-3 gap-3 mb-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
                                     <select v-model="node.transport" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
                                         <option value="">TCP (默认)</option>
                                         <option value="ws">WebSocket</option>
                                         <option value="grpc">gRPC</option>
-                                        <option value="http">HTTP/2</option>
+                                        <option value="http">HTTP</option>
                                         <option value="httpupgrade">HTTPUpgrade</option>
                                         <option value="quic">QUIC</option>
                                     </select>
@@ -647,6 +906,24 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     </select>
                                 </div>
                             </div>
+                            <div v-if="['ws','http','httpupgrade'].includes(node.transport)" class="mt-2">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层请求头 (Headers)</label>
+                                <textarea v-model="node.transport_headers_text" rows="3" placeholder="Host: example.com&#10;User-Agent: sing-box" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
+                            </div>
+                            <div v-if="node.transport==='ws'" class="grid grid-cols-2 gap-3 mt-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大 Early Data</label><input type="number" v-model.number="node.transport_max_early_data" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Early Data Header</label><input type="text" v-model="node.transport_early_data_header_name" placeholder="Sec-WebSocket-Protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            </div>
+                            <div v-if="node.transport==='http'" class="grid grid-cols-3 gap-3 mt-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><input type="text" v-model="node.transport_method" placeholder="PUT" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            </div>
+                            <div v-if="node.transport==='grpc'" class="grid grid-cols-3 gap-3 mt-2">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Permit Without Stream</span></label></div>
+                            </div>
                             <!-- network + packet_encoding 行 -->
                             <div class="grid grid-cols-3 gap-3 mt-2">
                                 <div v-if="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
@@ -656,7 +933,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                         <option value="udp">仅 UDP</option>
                                     </select>
                                 </div>
-                                <div v-if="['vless','vmess'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
+                                <div v-if="['vless','vmess'].includes(node.type) && node.network !== 'tcp'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
                                     <select v-model="node.packet_encoding" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-mono">
                                         <option value="xudp">xudp (默认，xray)</option>
                                         <option value="packetaddr">packetaddr (v2ray 5+)</option>
@@ -687,32 +964,41 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     <span class="text-xs font-bold text-gray-700">authenticated_length</span>
                                 </label></div>
                             </div>
-                            <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <label class="flex items-center gap-2 cursor-pointer mb-3">
-                                    <input type="checkbox" v-model="node.mux_enabled" class="w-4 h-4 text-indigo-600 rounded">
-                                    <span class="text-sm font-bold text-gray-700">启用多路复用 (Multiplex / Mux)</span>
-                                </label>
-                                <div v-if="node.mux_enabled" class="grid grid-cols-3 gap-3">
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
-                                        <select v-model="node.mux_protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                            <option value="smux">smux</option><option value="yamux">yamux</option><option value="h2mux">h2mux</option>
-                                        </select>
-                                    </div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大并发</label><input type="number" v-model.number="node.mux_max_connections" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">每连接最大流</label><input type="number" v-model.number="node.mux_min_streams" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                        </div>
+
+                        <div v-if="PROTO_SUPPORT_MULTIPLEX.includes(node.type)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <label class="flex items-center gap-2 cursor-pointer mb-3">
+                                <input type="checkbox" v-model="node.mux_enabled" :disabled="node.type==='shadowsocks' && node.ss_udp_over_tcp" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-40">
+                                <span class="text-sm font-bold text-gray-700">启用多路复用 (Multiplex / Mux)</span>
+                            </label>
+                            <p v-if="node.type==='shadowsocks' && node.ss_udp_over_tcp" class="mb-3 text-[10px] font-medium text-amber-700">Shadowsocks 的 <code>udp_over_tcp</code> 与 <code>multiplex</code> 互斥；当前已启用前者，因此这里会被禁用。</p>
+                            <div v-if="node.mux_enabled" class="grid grid-cols-3 gap-3">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">协议</label>
+                                    <select v-model="node.mux_protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                        <option value="h2mux">h2mux</option><option value="smux">smux</option><option value="yamux">yamux</option>
+                                    </select>
                                 </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大并发</label><input type="number" v-model.number="node.mux_max_connections" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">每连接最大流</label><input type="number" v-model.number="node.mux_min_streams" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大总流数</label><input type="number" v-model.number="node.mux_max_streams" min="0" placeholder="留空=不限制" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.mux_padding" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">填充 (Padding)</span></label></div>
+                                <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.mux_brutal_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">TCP Brutal</span></label></div>
+                            </div>
+                            <div v-if="node.mux_enabled && node.mux_brutal_enabled" class="grid grid-cols-2 gap-3 mt-3">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 上行 Mbps</label><input type="number" v-model.number="node.mux_brutal_up_mbps" min="1" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 下行 Mbps</label><input type="number" v-model.number="node.mux_brutal_down_mbps" min="1" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','socks','anytls','naive'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
-                            <label v-if="['vless','vmess','trojan','http','socks','anytls'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
+                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','anytls','naive'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
+                            <label v-if="['vless','vmess','trojan','http','anytls'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
                             <template v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)">
                                 <label v-if="!['naive'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
-                                <label v-if="['vless','trojan'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
+                                <label v-if="isNodeRealitySupported(node)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
                                 <!-- uTLS + ALPN 网格：仅对支持的协议显示对应控件 -->
                                 <div class="w-full mt-1 grid grid-cols-2 gap-3">
-                                    <!-- uTLS：仅 vless/vmess/trojan -->
-                                    <div v-if="['vless','vmess','trojan'].includes(node.type)">
+                                    <!-- uTLS：仅非 QUIC 的 vless/vmess/trojan -->
+                                    <div v-if="isNodeUtlsSupported(node)">
                                         <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">uTLS 指纹</label>
                                         <select v-model="node.utls_fingerprint" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
                                             <option value="">不启用（默认）</option>
@@ -725,6 +1011,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                             <option value="random">random</option>
                                             <option value="randomized">randomized</option>
                                         </select>
+                                        <p class="mt-1 text-[10px] font-medium text-amber-700">官方标注为 <code>Not Recommended</code>；仅在明确需要伪装 TLS 指纹时再启用。</p>
                                     </div>
                                     <!-- ALPN：对支持 TLS 且 ALPN 有实际意义的协议显示 -->
                                     <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','anytls','naive'].includes(node.type)">
@@ -747,7 +1034,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </template>
                         </div>
 
-                        <div v-if="node.reality && ['vless','trojan'].includes(node.type) && node.tls" class="mt-4 grid grid-cols-2 gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                        <div v-if="node.reality && isNodeRealitySupported(node)" class="mt-4 grid grid-cols-2 gap-3 p-3 bg-purple-50 rounded-lg border border-purple-100">
                             <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Public Key</label><input type="text" v-model="node.reality_pubkey" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
                             <div><label class="block text-[10px] font-black text-purple-400 uppercase mb-1 tracking-wider">Short ID</label><input type="text" v-model="node.reality_sid" class="w-full px-3 py-2 border border-purple-200 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 focus:border-purple-400"></div>
                         </div>
@@ -758,57 +1045,65 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
                                     <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
                                     <i class="fas fa-shield-alt text-indigo-400 mr-0.5"></i>高级 TLS 选项
-                                    <span v-if="node.disable_sni||node.tls_min_version||node.tls_max_version||node.cipher_suites||node.tls_fragment||node.tls_record_fragment||node.ech_enabled" class="ml-auto badge bg-indigo-100 text-indigo-600 border border-indigo-200">已配置</span>
+                                    <span v-if="hasNodeTlsAdvancedConfig(node)" class="ml-auto badge bg-indigo-100 text-indigo-600 border border-indigo-200">已配置</span>
                                 </summary>
                                 <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
 
-                                    <!-- SNI 控制：QUIC 协议不支持（仅 TCP TLS 有意义） -->
-                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
+                                    <!-- SNI 控制：标准 TLS 字段，TCP / QUIC TLS 均可配置 -->
+                                    <div v-if="isNodeTlsContext(node)" class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
                                         <label class="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" v-model="node.disable_sni" class="w-4 h-4 text-orange-600 rounded">
                                             <span class="text-xs font-bold text-gray-700">禁用 SNI <span class="text-gray-400 font-normal">(disable_sni)</span></span>
                                         </label>
-                                        <span class="text-[10px] text-gray-400">勾选后 ClientHello 中不发送 server_name，可用于防止 SNI 探测，但可能导致某些服务器拒绝连接</span>
+                                        <span class="text-[10px] text-gray-400">标准 TLS 字段；勾选后 ClientHello 中不发送 server_name，可用于降低 SNI 暴露，但也可能导致某些服务器拒绝连接。</span>
                                     </div>
 
-                                    <!-- TLS 版本 & 加密套件：QUIC 协议不支持（QUIC 内部处理） -->
-                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="grid grid-cols-2 gap-3">
+                                    <!-- TLS 版本：通用 TLS 字段；cipher_suites 仅 TCP TLS 1.0–1.2 有意义 -->
+                                    <div v-if="isNodeTlsContext(node)" class="grid grid-cols-2 gap-3">
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低 TLS 版本 <span class="normal-case font-normal text-gray-300">(min_version)</span></label>
                                             <select v-model="node.tls_min_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                                <option value="">默认 (TLS 1.2)</option>
-                                                <option value="1.0">TLS 1.0</option>
-                                                <option value="1.1">TLS 1.1</option>
-                                                <option value="1.2">TLS 1.2</option>
+                                                <option value="">{{ isNodeQuicTlsContext(node) ? '默认 (QUIC 通常为 TLS 1.3)' : '默认 (TLS 1.2)' }}</option>
+                                                <option value="1.0" :disabled="isNodeQuicTlsContext(node)">TLS 1.0</option>
+                                                <option value="1.1" :disabled="isNodeQuicTlsContext(node)">TLS 1.1</option>
+                                                <option value="1.2" :disabled="isNodeQuicTlsContext(node)">TLS 1.2</option>
                                                 <option value="1.3">TLS 1.3</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最高 TLS 版本 <span class="normal-case font-normal text-gray-300">(max_version)</span></label>
                                             <select v-model="node.tls_max_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                                <option value="">默认 (TLS 1.3)</option>
-                                                <option value="1.0">TLS 1.0</option>
-                                                <option value="1.1">TLS 1.1</option>
-                                                <option value="1.2">TLS 1.2</option>
+                                                <option value="">{{ isNodeQuicTlsContext(node) ? '默认 (QUIC 通常为 TLS 1.3)' : '默认 (TLS 1.3)' }}</option>
+                                                <option value="1.0" :disabled="isNodeQuicTlsContext(node)">TLS 1.0</option>
+                                                <option value="1.1" :disabled="isNodeQuicTlsContext(node)">TLS 1.1</option>
+                                                <option value="1.2" :disabled="isNodeQuicTlsContext(node)">TLS 1.2</option>
                                                 <option value="1.3">TLS 1.3</option>
                                             </select>
+                                        </div>
+                                        <div v-if="isNodeQuicTlsContext(node)" class="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-medium text-sky-700">
+                                            当前是 QUIC TLS 场景，实际通常只使用 <code>TLS 1.3</code>；保留 <code>min_version / max_version</code> 是为了和官方字段保持一致，但一般建议留空或显式设为 <code>1.3</code>。
                                         </div>
                                         <div class="col-span-2">
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">
                                                 加密套件 <span class="normal-case font-normal text-gray-300">(cipher_suites · 逗号分隔 · 仅 TLS 1.0–1.2)</span>
                                             </label>
-                                            <select v-model="node.cipher_suites" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
+                                            <select v-model="node.cipher_suites" :disabled="!isNodeCipherSuitesMeaningful(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono disabled:opacity-40">
                                                 <option value="">默认（推荐留空）</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">AES-128-GCM (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384">AES-256-GCM (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">ChaCha20-Poly1305 (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">AES-128-GCM + ChaCha20（均衡）</option>
                                             </select>
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">
+                                                仅对 TCP TLS 的 TLS 1.0–1.2 有意义；
+                                                <span v-if="isNodeQuicTlsContext(node)">当前是 QUIC TLS，实际使用 TLS 1.3，此项会自动禁用。</span>
+                                                <span v-else>如果最低 TLS 版本已设为 <code>1.3</code>，此项会自动禁用。</span>
+                                            </p>
                                         </div>
                                     </div>
 
                                     <!-- 握手分片：仅 TCP TLS 协议有效，QUIC 无效 -->
-                                    <div v-if="!['hysteria','hysteria2','tuic'].includes(node.type)" class="pt-2 border-t border-gray-200">
+                                    <div v-if="isNodeTcpTlsContext(node)" class="pt-2 border-t border-gray-200">
                                         <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">握手分片（绕过简单防火墙）</div>
                                         <div class="flex flex-wrap gap-4 items-start">
                                             <label class="flex items-center gap-2 cursor-pointer">
@@ -824,7 +1119,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                                 <input type="text" v-model="node.tls_fragment_fallback_delay" placeholder="500ms" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-xs outline-none font-mono bg-white focus:ring-1">
                                             </div>
                                         </div>
-                                        <p class="text-[10px] text-gray-400 mt-1.5">建议优先尝试 Record 分片，性能更好；两者均仅针对明文包匹配型防火墙有效，不用于绕过实质性审查</p>
+                                        <p class="text-[10px] text-gray-400 mt-1.5">仅对 TCP TLS 场景有意义；QUIC / Hysteria / TUIC 不适用。建议优先尝试 Record 分片，性能更好；两者均仅针对明文包匹配型防火墙有效，不用于绕过实质性审查。</p>
                                     </div>
 
                                     <!-- ECH：所有 TLS 协议均支持 -->
@@ -845,6 +1140,125 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 </div>
                             </details>
                         </div>
+                        <div v-if="hasNodeDialOptions(node)" class="mt-3">
+                            <details class="group">
+                                <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
+                                    <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                    <i class="fas fa-network-wired text-emerald-400 mr-0.5"></i>高级拨号选项
+                                    <span v-if="hasNodeDialConfig(node)" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
+                                </summary>
+                                <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                                    <div class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                        按协议与当前场景自动筛选，仅显示更可能有效的拨号字段；若某字段已经配置过，仍会继续显示，方便修改。
+                                    </div>
+                                    <div v-if="nodeHasDetourOverride(node)" class="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                        当前已设置 <code>detour</code>。根据手册，这会让下面大多数拨号字段失去意义，因此它们会被禁用显示。
+                                    </div>
+                                    <div v-else-if="nodeHasBindingOverride(node)" class="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                        当前已设置接口/地址绑定字段，<code>network_strategy / network_type / fallback_*</code> 通常不再生效，因此会被禁用显示。
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div v-if="isNodeDialFieldVisible(node, 'detour')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站中转 (Detour)</label>
+                                            <select v-model="node.detour" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-semibold" :class="node.detour?'text-emerald-700':'text-gray-400'">
+                                                <option value="">默认直连/默认路由</option>
+                                                <option v-for="tag in availableOutboundTags.filter(t=>t!=='direct'&&t!==node.tag)" :value="tag">{{ tag }}</option>
+                                            </select>
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">改用其它出站拨号；设置后，下方大多数拨号字段通常不再生效。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'domain_resolver')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器 (Domain Resolver)</label>
+                                            <select v-model="node.domain_resolver" :disabled="isNodeDialFieldEffectivelyMuted(node, 'domain_resolver')" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-semibold disabled:opacity-40" :class="node.domain_resolver?'text-violet-700':'text-gray-400'">
+                                                <option value="">不指定</option>
+                                                <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
+                                            </select>
+                                            <p class="mt-1 text-[10px] font-medium text-violet-700">仅当服务端是域名时通常有意义；如果 <code>server</code> 已是 IP，一般不需要。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'connect_timeout')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时 (Connect Timeout)</label>
+                                            <input v-model="node.connect_timeout" :disabled="isNodeDialFieldEffectivelyMuted(node, 'connect_timeout')" placeholder="5s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">限制单次连接建立等待时间。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'bind_interface')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口 (Bind Interface)</label>
+                                            <input v-model="node.bind_interface" :disabled="isNodeDialFieldEffectivelyMuted(node, 'bind_interface')" placeholder="eth0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">绑定物理网卡；常见于多网卡、策略路由或 Linux 场景。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'inet4_bind_address')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 绑定地址 (IPv4 Bind Address)</label>
+                                            <input v-model="node.inet4_bind_address" :disabled="isNodeDialFieldEffectivelyMuted(node, 'inet4_bind_address')" placeholder="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">绑定本地 IPv4 出口地址。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'inet6_bind_address')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 绑定地址 (IPv6 Bind Address)</label>
+                                            <input v-model="node.inet6_bind_address" :disabled="isNodeDialFieldEffectivelyMuted(node, 'inet6_bind_address')" placeholder="2001:db8::10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">绑定本地 IPv6 出口地址。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'network_strategy')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络策略 (Network Strategy)</label>
+                                            <select v-model="node.network_strategy" :disabled="isNodeDialFieldEffectivelyMuted(node, 'network_strategy')" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 disabled:opacity-40">
+                                                <option value="">默认</option>
+                                                <option value="default">default</option>
+                                                <option value="hybrid">hybrid</option>
+                                                <option value="fallback">fallback</option>
+                                            </select>
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">主要对图形客户端 / 移动平台有意义；与 <code>bind_interface</code> 等字段可能冲突。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'network_type')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络类型 (Network Type) <span class="normal-case font-normal text-gray-300">(逗号分隔)</span></label>
+                                            <input v-model="node.network_type" :disabled="isNodeDialFieldEffectivelyMuted(node, 'network_type')" placeholder="wifi,cellular" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">通常配合 <code>network_strategy</code> 使用，例如 <code>wifi</code> / <code>cellular</code>。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'fallback_network_type')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退网络类型 (Fallback Network Type) <span class="normal-case font-normal text-gray-300">(逗号分隔)</span></label>
+                                            <input v-model="node.fallback_network_type" :disabled="isNodeDialFieldEffectivelyMuted(node, 'fallback_network_type')" placeholder="ethernet,other" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">仅对 <code>fallback</code> 策略相关。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'fallback_delay')" class="col-span-2">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退延迟 (Fallback Delay)</label>
+                                            <input v-model="node.fallback_delay" :disabled="isNodeDialFieldEffectivelyMuted(node, 'fallback_delay')" placeholder="300ms" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="text-[10px] font-medium text-gray-500 mt-1">仅在域名策略 / 网络策略启用回退时有意义。支持的网络类型包括 <code>wifi</code>、<code>cellular</code>、<code>ethernet</code>、<code>other</code>。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'routing_mark')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 (Routing Mark)</label>
+                                            <input v-model="node.routing_mark" :disabled="isNodeDialFieldEffectivelyMuted(node, 'routing_mark')" placeholder="255 / 0xff" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；用于 fwmark / 策略路由。</p>
+                                        </div>
+                                        <div v-if="isNodeDialFieldVisible(node, 'netns')">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间 (NetNS)</label>
+                                            <input v-model="node.netns" :disabled="isNodeDialFieldEffectivelyMuted(node, 'netns')" placeholder="singbox" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1 disabled:opacity-40">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；指定网络命名空间。</p>
+                                        </div>
+                                    </div>
+                                    <div class="pt-3 border-t border-gray-200 flex flex-wrap gap-4">
+                                        <label v-if="isNodeDialFieldVisible(node, 'reuse_addr')" class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" v-model="node.reuse_addr" :disabled="isNodeDialFieldEffectivelyMuted(node, 'reuse_addr')" class="w-4 h-4 text-emerald-600 rounded disabled:opacity-40">
+                                            <span class="text-xs font-bold text-gray-700">地址复用 (Reuse Address)</span>
+                                            <span class="text-[10px] font-medium text-gray-500">快速重启或端口复用场景更常见</span>
+                                        </label>
+                                        <label v-if="isNodeDialFieldVisible(node, 'tcp_fast_open')" class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" v-model="node.tcp_fast_open" :disabled="isNodeDialFieldEffectivelyMuted(node, 'tcp_fast_open')" class="w-4 h-4 text-emerald-600 rounded disabled:opacity-40">
+                                            <span class="text-xs font-bold text-gray-700">TCP 快速打开 (TCP Fast Open)</span>
+                                            <span class="text-[10px] font-medium text-amber-700">仅 TCP 协议 / 传输有意义</span>
+                                        </label>
+                                        <label v-if="isNodeDialFieldVisible(node, 'tcp_multi_path')" class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" v-model="node.tcp_multi_path" :disabled="isNodeDialFieldEffectivelyMuted(node, 'tcp_multi_path')" class="w-4 h-4 text-emerald-600 rounded disabled:opacity-40">
+                                            <span class="text-xs font-bold text-gray-700">TCP 多路径 (TCP MultiPath)</span>
+                                            <span class="text-[10px] font-medium text-amber-700">仅 TCP 场景，依赖系统 / 内核支持</span>
+                                        </label>
+                                        <label v-if="isNodeDialFieldVisible(node, 'udp_fragment')" class="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" v-model="node.udp_fragment" :disabled="isNodeDialFieldEffectivelyMuted(node, 'udp_fragment')" class="w-4 h-4 text-emerald-600 rounded disabled:opacity-40">
+                                            <span class="text-xs font-bold text-gray-700">UDP 分片 (UDP Fragment)</span>
+                                            <span class="text-[10px] font-medium text-emerald-700">仅 UDP / QUIC / Datagram 场景更有意义</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                        <button @click="addNode('bottom')" class="text-sm bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-50 font-bold shadow-sm transition"><i class="fas fa-plus mr-1.5"></i>新建节点</button>
                     </div>
                 </div>
 `);
@@ -966,7 +1380,7 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                 <div class="stitle mb-0">路由规则 (Route Rules)</div>
                                 <p class="text-xs text-gray-500 mt-1 pl-3">从上到下顺序匹配。按住左侧 <i class="fas fa-grip-vertical mx-1"></i> 图标可拖拽排序。</p>
                             </div>
-                            <button @click="addCustomRule" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建规则</button>
+                            <button @click="addCustomRule('top')" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建规则</button>
                         </div>
                         
                         <div class="mb-5 p-4 bg-indigo-50/70 border border-indigo-100 rounded-xl flex flex-wrap gap-5 items-center shadow-sm">
@@ -1012,8 +1426,50 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                             </div>
                         </div>
 
+                        <details class="mb-5 group" :open="hasRouteDefaultOptions">
+                            <summary class="flex items-center gap-2 cursor-pointer select-none px-4 py-3 bg-emerald-50/60 border border-emerald-200 rounded-xl shadow-sm text-sm font-extrabold text-emerald-800 hover:bg-emerald-50 transition-colors">
+                                <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[11px]"></i>
+                                <i class="fas fa-network-wired mr-1"></i>Route 默认拨号策略
+                                <span class="text-[10px] font-bold text-emerald-700 bg-white border border-emerald-200 px-2 py-0.5 rounded-full ml-1">高级</span>
+                                <span v-if="hasRouteDefaultOptions" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
+                            </summary>
+                            <div class="mt-2 p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl shadow-sm space-y-3">
+                                <div class="flex flex-wrap gap-4 items-center">
+                                    <label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-lg border border-emerald-200 shadow-sm">
+                                        <input type="checkbox" v-model="settings.find_process" class="w-4 h-4 text-emerald-600 rounded">
+                                        <span class="text-xs text-emerald-800 font-bold">启用进程匹配 (find_process)</span>
+                                    </label>
+                                    <div class="flex items-center gap-2 ml-auto">
+                                        <span class="text-xs text-gray-700 font-bold">default_network_strategy:</span>
+                                        <select v-model="settings.default_network_strategy" class="px-3 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-bold text-emerald-700 shadow-sm focus:ring-1">
+                                            <option value="">默认</option>
+                                            <option value="default">default</option>
+                                            <option value="hybrid">hybrid</option>
+                                            <option value="fallback">fallback</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_network_type <span class="normal-case font-normal text-gray-300">(逗号分隔)</span></label>
+                                        <input v-model="settings.default_network_type" placeholder="wifi,cellular" class="w-full px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_fallback_network_type <span class="normal-case font-normal text-gray-300">(逗号分隔)</span></label>
+                                        <input v-model="settings.default_fallback_network_type" placeholder="ethernet,other" class="w-full px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_fallback_delay</label>
+                                        <input v-model="settings.default_fallback_delay" placeholder="300ms" class="w-full px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                    </div>
+                                </div>
+                                <p class="text-[10px] text-emerald-800">网络类型支持 <code>wifi</code>、<code>cellular</code>、<code>ethernet</code>、<code>other</code>。这些字段会作为 route 顶层默认拨号策略输出。</p>
+                            </div>
+                        </details>
+
                         <div class="space-y-3">
                             <div v-for="(rule,rIdx) in routeRules" :key="rule.id" 
+                                 :id="'route-rule-' + rule.id"
                                  :draggable="rule.draggable || false"
                                  @dragstart="onRuleDragStart(rIdx, $event)"
                                  @dragenter.prevent="onRuleDragEnter(rIdx)"
@@ -1044,10 +1500,18 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                     </div>
                                     <div class="flex-1 flex items-center justify-end gap-3 pl-3">
                                         <i class="fas fa-arrow-right text-gray-300 text-sm"></i>
-                                        <select v-model="rule.outbound" :disabled="!rule.enabled" class="w-[140px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-black text-indigo-700 disabled:opacity-50 shadow-sm focus:ring-1 focus:border-indigo-400">
-                                            <option value="__reject__">拒绝 (reject)</option>
-                                            <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
-                                        </select>
+                                        <template v-if="!rule.isEditing">
+                                            <select v-model="rule.action" @change="onRuleActionChange(rule)" :disabled="!rule.enabled" class="w-[150px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-black text-indigo-700 disabled:opacity-50 shadow-sm focus:ring-1 focus:border-indigo-400">
+                                                <option v-for="action in ruleActions" :key="action" :value="action" :disabled="!isRuleActionSelectable(rule, action)">{{ action }}</option>
+                                            </select>
+                                            <select v-if="rule.action==='route'" v-model="rule.outbound" :disabled="!rule.enabled" class="w-[140px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-black text-indigo-700 disabled:opacity-50 shadow-sm focus:ring-1 focus:border-indigo-400">
+                                                <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                            </select>
+                                        </template>
+                                        <template v-else>
+                                            <span class="text-[10px] font-black text-emerald-700 border border-emerald-200 bg-emerald-50 px-2 py-1 rounded shadow-sm">{{ rule.action }}</span>
+                                            <span v-if="rule.action==='route'" class="text-[10px] font-black text-indigo-700 border border-indigo-200 bg-indigo-50 px-2 py-1 rounded shadow-sm">{{ rule.outbound }}</span>
+                                        </template>
                                         <button @click="removeRule(rIdx)" class="w-9 h-9 flex items-center justify-center text-red-500 hover:text-white hover:bg-red-500 rounded-lg bg-white border border-red-200 transition-colors shadow-sm"><i class="fas fa-trash-alt text-sm"></i></button>
                                     </div>
                                 </div>
@@ -1088,17 +1552,28 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                                                 <option value="domain_keyword">domain_keyword</option>
                                                                 <option value="domain">domain</option>
                                                                 <option value="domain_regex">domain_regex</option>
+                                                                <option value="auth_user">auth_user</option>
+                                                                <option value="client">client</option>
                                                             </optgroup>
                                                             <optgroup label="IP 与网络">
+                                                                <option value="ip_version">ip_version</option>
                                                                 <option value="network">network (tcp/udp)</option>
+                                                                <option value="network_type">network_type</option>
                                                                 <option value="port">port</option>
+                                                                <option value="source_port">source_port</option>
                                                                 <option value="port_range">port_range</option>
+                                                                <option value="source_port_range">source_port_range</option>
                                                                 <option value="ip_cidr">ip_cidr</option>
                                                                 <option value="source_ip_cidr">source_ip_cidr</option>
+                                                                <option value="source_geoip">source_geoip</option>
                                                             </optgroup>
                                                             <optgroup label="协议与应用">
                                                                 <option value="protocol">protocol</option>
                                                                 <option value="process_name">process_name</option>
+                                                                <option value="process_path">process_path</option>
+                                                                <option value="package_name">package_name</option>
+                                                                <option value="user">user</option>
+                                                                <option value="user_id">user_id</option>
                                                                 <option value="geoip">geoip (旧版)</option>
                                                                 <option value="inbound">inbound</option>
                                                             </optgroup>
@@ -1114,7 +1589,56 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                                                 UDP
                                                             </label>
                                                         </div>
-                                                        <input v-else type="text" v-model="cond.value" placeholder="值 (多个用逗号分隔)" class="flex-1 px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
+                                                        <div v-else-if="cond.type === 'network_type'" class="flex-1 flex items-center gap-5 px-3 py-1.5 bg-white border border-indigo-300 rounded-md shadow-sm min-h-[34px]">
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('wifi')" @change="toggleRuleSetCond(cond, 'wifi')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                Wi-Fi
+                                                            </label>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('cellular')" @change="toggleRuleSetCond(cond, 'cellular')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                Cellular
+                                                            </label>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('ethernet')" @change="toggleRuleSetCond(cond, 'ethernet')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                Ethernet
+                                                            </label>
+                                                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700 hover:text-indigo-600 transition-colors">
+                                                                <input type="checkbox" :checked="cond.value.split(',').map(s=>s.trim()).includes('other')" @change="toggleRuleSetCond(cond, 'other')" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+                                                                Other
+                                                            </label>
+                                                        </div>
+                                                        <select v-else-if="cond.type === 'ip_version'" v-model="cond.value" class="flex-1 px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
+                                                            <option value="">选择 IP 版本</option>
+                                                            <option value="4">IPv4</option>
+                                                            <option value="6">IPv6</option>
+                                                        </select>
+                                                        <div v-else-if="cond.type === 'protocol'" class="flex-1 space-y-2">
+                                                            <div class="flex flex-wrap gap-2 px-3 py-2 bg-white border border-indigo-300 rounded-md shadow-sm min-h-[34px]">
+                                                                <button v-for="protocol in sniffProtocols" :key="protocol"
+                                                                    @click="toggleRuleSetCond(cond, protocol)"
+                                                                    :class="cond.value.split(',').map(s=>s.trim()).includes(protocol)
+                                                                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                                                                        : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'"
+                                                                    class="px-2.5 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer select-none">
+                                                                    {{ protocol }}
+                                                                </button>
+                                                            </div>
+                                                            <input type="text" v-model="cond.value" placeholder="可继续手动补充，多个用逗号分隔" class="w-full px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
+                                                        </div>
+                                                        <div v-else-if="cond.type === 'inbound'" class="flex-1 space-y-2">
+                                                            <div class="flex flex-wrap gap-2 px-3 py-2 bg-white border border-indigo-300 rounded-md shadow-sm min-h-[34px]">
+                                                                <button v-for="tag in availableInboundTags" :key="tag"
+                                                                    @click="toggleRuleSetCond(cond, tag)"
+                                                                    :class="cond.value.split(',').map(s=>s.trim()).includes(tag)
+                                                                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                                                                        : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-indigo-400 hover:text-indigo-600'"
+                                                                    class="px-2.5 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer select-none">
+                                                                    {{ tag }}
+                                                                </button>
+                                                            </div>
+                                                            <input type="text" v-model="cond.value" placeholder="可继续手动补充入站 tag，多个用逗号分隔" class="w-full px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
+                                                        </div>
+                                                        <input v-else type="text" v-model="cond.value" :placeholder="cond.type==='source_port' ? '源端口，多个用逗号分隔' : cond.type==='source_port_range' ? '源端口范围，如 1000:2000' : cond.type==='source_geoip' ? '如 cn,private' : cond.type==='process_path' ? '/usr/bin/curl,/usr/bin/wget' : cond.type==='package_name' ? 'com.example.app' : cond.type==='user' ? 'nobody,root' : cond.type==='user_id' ? '0,1000' : cond.type==='client' ? 'clash,stash' : cond.type==='auth_user' ? 'user-a,user-b' : '值 (多个用逗号分隔)'" class="flex-1 px-3 py-1.5 bg-white border border-indigo-300 rounded-md text-xs font-mono outline-none focus:ring-1 focus:ring-indigo-300 shadow-sm text-gray-700">
                                                     </div>
                                                     
                                                     <div v-if="cond.type === 'rule_set'" class="flex flex-wrap gap-1.5 mt-1">
@@ -1128,6 +1652,183 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                                             {{ rs.tag }}
                                                         </button>
                                                     </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg space-y-3">
+                                                <div class="grid grid-cols-3 gap-3 items-end">
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">规则动作</label>
+                                                        <select v-model="rule.action" @change="onRuleActionChange(rule)" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none font-bold text-emerald-700 shadow-sm focus:ring-1">
+                                                            <option v-for="action in ruleActions" :key="action" :value="action" :disabled="!isRuleActionSelectable(rule, action)">{{ action }}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div v-if="rule.action==='route'" class="col-span-2">
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站</label>
+                                                        <select v-model="rule.outbound" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none font-bold text-indigo-700 shadow-sm focus:ring-1">
+                                                            <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="!isRuleActionSelectable(rule, 'hijack-dns') || !isRuleActionSelectable(rule, 'sniff') || !isRuleActionSelectable(rule, 'resolve')" class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1">
+                                                    <div v-if="!isRuleActionSelectable(rule, 'hijack-dns')"><strong>hijack-dns</strong>：{{ getRuleActionDisabledReason(rule, 'hijack-dns') }}</div>
+                                                    <div v-if="!isRuleActionSelectable(rule, 'sniff')"><strong>sniff</strong>：{{ getRuleActionDisabledReason(rule, 'sniff') }}</div>
+                                                    <div v-if="!isRuleActionSelectable(rule, 'resolve')"><strong>resolve</strong>：{{ getRuleActionDisabledReason(rule, 'resolve') }}</div>
+                                                </div>
+
+                                                <div v-if="rule.action==='reject'" class="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拒绝方式 (Reject Method)</label>
+                                                        <select v-model="rule.reject_method" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none font-bold text-gray-700 shadow-sm focus:ring-1">
+                                                            <option value="default">default</option>
+                                                            <option value="drop">drop</option>
+                                                            <option value="reply">reply</option>
+                                                        </select>
+                                                        <p class="mt-1 text-[10px] font-medium text-gray-500">控制拒绝时是直接丢弃还是显式回应。</p>
+                                                    </div>
+                                                    <div class="flex items-end pb-2">
+                                                        <label class="flex items-center gap-2 cursor-pointer">
+                                                            <input type="checkbox" v-model="rule.reject_no_drop" class="w-4 h-4 text-emerald-600 rounded">
+                                                            <span class="text-xs font-bold text-gray-700">不丢弃连接 (No Drop)</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="rule.action==='sniff'" class="space-y-3">
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">嗅探协议 (Sniffer)</label>
+                                                        <div class="flex flex-wrap gap-2 px-3 py-2 bg-white border border-emerald-300 rounded-lg shadow-sm min-h-[38px]">
+                                                            <button v-for="protocol in sniffProtocols" :key="protocol"
+                                                                @click="toggleCsvField(rule, 'sniff_sniffer', protocol)"
+                                                                :class="rule.sniff_sniffer.split(',').map(s=>s.trim()).includes(protocol)
+                                                                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                                                    : 'bg-gray-50 text-gray-600 border-gray-300 hover:border-emerald-400 hover:text-emerald-600'"
+                                                                class="px-2.5 py-1 rounded-full border text-[10px] font-bold transition-all cursor-pointer select-none">
+                                                                {{ protocol }}
+                                                            </button>
+                                                        </div>
+                                                        <p class="mt-1 text-[10px] font-medium text-gray-500">选择允许尝试识别的协议类型。</p>
+                                                    </div>
+                                                    <div class="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">自定义嗅探协议 (Custom Sniffer)</label>
+                                                            <input v-model="rule.sniff_sniffer" placeholder="多个用逗号分隔" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                            <p class="mt-1 text-[10px] font-medium text-gray-500">用于补充上面未列出的协议名。</p>
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">超时 (Timeout)</label>
+                                                            <input v-model="rule.sniff_timeout" placeholder="300ms" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                            <p class="mt-1 text-[10px] font-medium text-gray-500">限制嗅探等待时间，避免阻塞过久。</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="rule.action==='resolve'" class="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">解析服务器 (Resolve Server)</label>
+                                                        <select v-model="rule.resolve_server" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none font-bold text-violet-700 shadow-sm focus:ring-1">
+                                                            <option value="">默认 DNS</option>
+                                                            <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
+                                                        </select>
+                                                        <p class="mt-1 text-[10px] font-medium text-violet-700">指定命中此规则时使用哪一个 DNS server 解析。</p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">解析策略 (Resolve Strategy)</label>
+                                                        <select v-model="rule.resolve_strategy" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none shadow-sm focus:ring-1">
+                                                            <option value="">默认</option>
+                                                            <option value="prefer_ipv4">prefer_ipv4</option>
+                                                            <option value="prefer_ipv6">prefer_ipv6</option>
+                                                            <option value="ipv4_only">ipv4_only</option>
+                                                            <option value="ipv6_only">ipv6_only</option>
+                                                        </select>
+                                                        <p class="mt-1 text-[10px] font-medium text-gray-500">控制解析结果偏好 IPv4 / IPv6。</p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">重写 TTL (Rewrite TTL)</label>
+                                                        <input v-model="rule.resolve_rewrite_ttl" placeholder="60" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                        <p class="mt-1 text-[10px] font-medium text-gray-500">强制覆盖解析结果的 TTL。</p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端子网 (Client Subnet)</label>
+                                                        <input v-model="rule.resolve_client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                        <p class="mt-1 text-[10px] font-medium text-gray-500">向上游 DNS 携带客户端网段，常见于地理位置优化。</p>
+                                                    </div>
+                                                    <div class="col-span-2">
+                                                        <label class="flex items-center gap-2 cursor-pointer">
+                                                            <input type="checkbox" v-model="rule.resolve_disable_cache" class="w-4 h-4 text-emerald-600 rounded">
+                                                            <span class="text-xs font-bold text-gray-700">禁用缓存 (Disable Cache)</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <details v-if="shouldShowRuleRouteOptions(rule)" class="group" :open="hasRuleRouteOptions(rule)">
+                                                    <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-white rounded-lg border border-emerald-200 hover:bg-emerald-50 transition-colors text-xs font-bold text-emerald-800">
+                                                        <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                                        高级 route-options
+                                                        <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full">可选</span>
+                                                        <span v-if="hasRuleRouteOptions(rule)" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
+                                                        <span v-else-if="hasSuggestedRouteOptions(rule)" class="ml-auto badge bg-emerald-50 text-emerald-700 border border-emerald-200">按当前规则推荐</span>
+                                                    </summary>
+                                                    <div class="mt-2 space-y-3">
+                                                        <div class="grid grid-cols-2 gap-3">
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_override_address')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">覆盖地址 (Override Address)</label>
+                                                                <input v-model="rule.option_override_address" placeholder="1.1.1.1" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-gray-500">命中规则后，改写目标地址。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_override_port')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">覆盖端口 (Override Port)</label>
+                                                                <input v-model="rule.option_override_port" placeholder="443" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-gray-500">命中规则后，改写目标端口。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_network_strategy')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络策略 (Network Strategy)</label>
+                                                                <select v-model="rule.option_network_strategy" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-sm outline-none shadow-sm focus:ring-1">
+                                                                    <option value="">默认</option>
+                                                                    <option value="default">default</option>
+                                                                    <option value="hybrid">hybrid</option>
+                                                                    <option value="fallback">fallback</option>
+                                                                </select>
+                                                                <p class="mt-1 text-[10px] font-medium text-amber-700">更偏图形客户端 / 移动平台；与接口绑定类字段存在适用前提。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_fallback_delay')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退延迟 (Fallback Delay)</label>
+                                                                <input v-model="rule.option_fallback_delay" placeholder="300ms" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-gray-500">仅在域名策略 / 网络策略回退时有意义。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_network_type')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络类型 (Network Type)</label>
+                                                                <input v-model="rule.option_network_type" placeholder="wifi,cellular" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-gray-500">例如 <code>wifi</code> / <code>cellular</code>；通常配合网络策略使用。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_fallback_network_type')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回退网络类型 (Fallback Network Type)</label>
+                                                                <input v-model="rule.option_fallback_network_type" placeholder="ethernet,other" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-gray-500">仅对回退策略相关。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_udp_timeout')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 超时 (UDP Timeout)</label>
+                                                                <input v-model="rule.option_udp_timeout" placeholder="5m" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-emerald-700">更适合 UDP / DNS / QUIC 相关流量。</p>
+                                                            </div>
+                                                            <div v-if="shouldSuggestRouteOptionField(rule, 'option_tls_fragment_fallback_delay')">
+                                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TLS 分片回退延迟 (TLS Fragment Fallback Delay)</label>
+                                                                <input v-model="rule.option_tls_fragment_fallback_delay" placeholder="300ms" class="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs outline-none font-mono shadow-sm focus:ring-1">
+                                                                <p class="mt-1 text-[10px] font-medium text-amber-700">更适合 TLS / 443 场景。</p>
+                                                            </div>
+                                                        </div>
+                                                        <div class="flex flex-wrap gap-4 pt-2 border-t border-emerald-200">
+                                                            <label v-if="shouldSuggestRouteOptionField(rule, 'option_udp_disable_domain_unmapping')" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="rule.option_udp_disable_domain_unmapping" class="w-4 h-4 text-emerald-600 rounded"><span class="text-xs font-bold text-gray-700">禁用域名反解 (UDP Disable Domain Unmapping)</span></label>
+                                                            <label v-if="shouldSuggestRouteOptionField(rule, 'option_udp_connect')" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="rule.option_udp_connect" class="w-4 h-4 text-emerald-600 rounded"><span class="text-xs font-bold text-gray-700">连接式 UDP (UDP Connect)</span></label>
+                                                            <label v-if="shouldSuggestRouteOptionField(rule, 'option_tls_fragment')" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="rule.option_tls_fragment" class="w-4 h-4 text-emerald-600 rounded"><span class="text-xs font-bold text-gray-700">TLS 分片 (TLS Fragment)</span></label>
+                                                            <label v-if="shouldSuggestRouteOptionField(rule, 'option_tls_record_fragment')" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="rule.option_tls_record_fragment" class="w-4 h-4 text-emerald-600 rounded"><span class="text-xs font-bold text-gray-700">TLS Record 分片 (TLS Record Fragment)</span></label>
+                                                        </div>
+                                                    </div>
+                                                </details>
+
+                                                <div v-if="rule.action==='hijack-dns'" class="text-[11px] text-emerald-800 bg-white border border-emerald-200 rounded-lg px-3 py-2">
+                                                    命中后会执行 <code>hijack-dns</code>，适合按条件把流量交给 sing-box DNS 模块处理。
                                                 </div>
                                             </div>
                                     
@@ -1146,6 +1847,8 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                             <span v-if="rule.invert" class="text-[10px] font-black text-red-500 border border-red-200 bg-red-50 px-1.5 py-0.5 rounded shadow-sm">NOT</span>
                                             <span v-if="rule.mode === 'or' && rule.conditions.length > 1" class="text-[10px] font-black text-amber-600 border border-amber-200 bg-amber-50 px-1.5 py-0.5 rounded shadow-sm">OR</span>
                                             <span v-if="rule.mode === 'and' && rule.conditions.length > 1" class="text-[10px] font-black text-blue-600 border border-blue-200 bg-blue-50 px-1.5 py-0.5 rounded shadow-sm">AND</span>
+                                            <span class="text-[10px] font-black text-emerald-700 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 rounded shadow-sm">{{ rule.action }}</span>
+                                            <span v-if="rule.action==='route'" class="text-[10px] font-black text-indigo-700 border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 rounded shadow-sm">-> {{ rule.outbound }}</span>
                                             
                                             <template v-for="(cond, cIdx) in rule.conditions" :key="cIdx">
                                                 <span v-if="cIdx > 0" class="text-[10px] font-bold text-gray-400">{{ rule.mode === 'or' ? '或' : '且' }}</span>
@@ -1160,6 +1863,9 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                                     </template>
                                 </div>
                             </div>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button @click="addCustomRule('bottom')" class="text-sm bg-white border border-indigo-200 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-50 font-bold shadow-sm transition"><i class="fas fa-plus mr-1.5"></i>新建规则</button>
                         </div>
                         <div class="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 shadow-sm">
                             <span class="text-sm font-extrabold text-gray-800"><i class="fas fa-flag-checkered mr-2 text-indigo-500"></i>默认路由 (Final Outbound)</span>
@@ -1187,30 +1893,56 @@ const TunTab = createInjectedComponent('TunTab', `                <div v-show="c
 
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">接口名称</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">接口名称 (Interface Name)</label>
                                     <input v-model="tun.interface_name" placeholder="tun0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1 font-mono">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">生成的 TUN 设备名称，常见如 <code>tun0</code>。</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TUN 栈</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TUN 栈 (TUN Stack)</label>
                                     <select v-model="tun.stack" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
                                         <option value="system">system (推荐)</option><option value="gvisor">gvisor</option><option value="mixed">mixed</option>
                                     </select>
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">决定 TUN 包处理方式；一般优先用 <code>system</code>。</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 地址</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 地址 (IPv4 Address)</label>
                                     <input v-model="tun.address_v4" placeholder="172.19.0.1/30" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">TUN 设备内的 IPv4 地址/CIDR。</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 地址 (可选)</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 地址 (IPv6 Address)</label>
                                     <input v-model="tun.address_v6" placeholder="fdfe:dcba:9876::1/126" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">可选；启用 IPv6 透明代理时更常见。</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU (Maximum Transmission Unit)</label>
                                     <input type="number" v-model.number="tun.mtu" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">影响包大小；过大或过小都可能带来性能问题。</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">default_mark <span class="normal-case font-normal text-gray-400">(可选 fwmark)</span></label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 超时 (UDP Timeout)</label>
+                                    <input v-model="tun.udp_timeout" placeholder="5m" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">控制 UDP 会话保持时间，流式 UDP 或长连接场景更敏感。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">回环地址 (Loopback Address)</label>
+                                    <input v-model="tun.loopback_address" placeholder="10.7.0.1" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">用于回注或特殊回环流量处理，通常高级场景才需要。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">默认标记 (Default Mark)</label>
                                     <input type="number" v-model.number="settings.default_mark" placeholder="留空则不设置" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-amber-700">可选 fwmark；更偏 Linux 策略路由场景。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由表号 (iproute2 Table Index)</label>
+                                    <input type="number" v-model.number="tun.iproute2_table_index" placeholder="2022" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；自定义 TUN 使用的策略路由表号。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">规则优先级 (iproute2 Rule Index)</label>
+                                    <input type="number" v-model.number="tun.iproute2_rule_index" placeholder="9000" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；策略路由规则优先级。</p>
                                 </div>
                             </div>
 
@@ -1223,6 +1955,42 @@ const TunTab = createInjectedComponent('TunTab', `                <div v-show="c
                                         <span class="block text-xs text-gray-400">{{ opt.desc }}</span>
                                     </div>
                                 </label>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">包含接口 (Include Interfaces)</label>
+                                    <textarea v-model="tun.include_interface" rows="3" placeholder="eth0&#10;en0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1 resize-none"></textarea>
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">每行一个；仅这些接口进入 TUN 处理。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">排除接口 (Exclude Interfaces)</label>
+                                    <textarea v-model="tun.exclude_interface" rows="3" placeholder="docker0&#10;veth*" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1 resize-none"></textarea>
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">每行一个；这些接口不会进入 TUN 处理。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">包含应用 (Include Packages)</label>
+                                    <textarea v-model="tun.include_package" rows="3" placeholder="com.example.app" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1 resize-none"></textarea>
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">移动平台更常见；只让这些包名走 TUN。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">排除应用 (Exclude Packages)</label>
+                                    <textarea v-model="tun.exclude_package" rows="3" placeholder="com.apple.WebKit.Networking" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1 resize-none"></textarea>
+                                    <p class="mt-1 text-[10px] font-medium text-gray-500">移动平台更常见；这些包名不会走 TUN。</p>
+                                </div>
+                            </div>
+
+                            <div v-if="tun.auto_redirect" class="grid grid-cols-2 gap-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50/50">
+                                <div>
+                                    <label class="block text-[10px] font-black text-indigo-500 uppercase mb-1 tracking-wider">输入标记 (auto_redirect_input_mark)</label>
+                                    <input v-model="tun.auto_redirect_input_mark" placeholder="0x2023" class="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-indigo-700">仅在启用 <code>auto_redirect</code> 时有意义。</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-indigo-500 uppercase mb-1 tracking-wider">输出标记 (auto_redirect_output_mark)</label>
+                                    <input v-model="tun.auto_redirect_output_mark" placeholder="0x2024" class="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                    <p class="mt-1 text-[10px] font-medium text-indigo-700">仅在启用 <code>auto_redirect</code> 时有意义。</p>
+                                </div>
                             </div>
 
                             <label class="flex items-center gap-3 cursor-pointer px-4 py-3 rounded-xl border transition-colors"
@@ -1366,16 +2134,65 @@ const AdvancedTab = createInjectedComponent('AdvancedTab', `                <div
                             <div class="stitle mb-0">NTP 时间同步</div>
                             <label class="toggle-switch"><input type="checkbox" v-model="ntp.enabled"><span class="toggle-slider"></span></label>
                         </div>
-                        <div v-if="ntp.enabled" class="grid grid-cols-2 gap-4">
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="ntp.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="ntp.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">同步间隔</label><input v-model="ntp.interval" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站</label>
-                                <select v-model="ntp.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:bg-white focus:ring-1">
-                                    <option value="direct">direct</option>
-                                    <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
-                                </select>
+                        <div v-if="ntp.enabled" class="space-y-4">
+                            <div class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                NTP 通常只需要服务器、端口、同步间隔和出站；下方高级拨号项更偏多网卡、策略路由或 Linux 场景。
                             </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 (Server)</label><input v-model="ntp.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口 (Port)</label><input type="number" v-model.number="ntp.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">同步间隔 (Interval)</label><input v-model="ntp.interval" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站 (Detour)</label>
+                                    <select v-model="ntp.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:bg-white focus:ring-1">
+                                        <option value="direct">direct</option>
+                                        <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <details class="group">
+                                <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
+                                    <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                    <i class="fas fa-network-wired text-emerald-400 mr-0.5"></i>NTP 高级拨号选项
+                                    <span v-if="ntp.bind_interface||ntp.inet4_bind_address||ntp.inet6_bind_address||ntp.routing_mark||ntp.reuse_addr||ntp.netns||ntp.connect_timeout||ntp.tcp_fast_open||ntp.tcp_multi_path||ntp.udp_fragment||ntp.domain_resolver||ntp.network_strategy||ntp.network_type||ntp.fallback_network_type||ntp.fallback_delay||ntp.domain_strategy" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
+                                </summary>
+                                <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时 (Connect Timeout)</label>
+                                            <input v-model="ntp.connect_timeout" placeholder="5s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">限制连接 NTP 服务器的等待时间；这是最常用的高级项之一。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口 (Bind Interface)</label>
+                                            <input v-model="ntp.bind_interface" placeholder="eth0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">多网卡或策略路由场景更常见。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 绑定地址 (IPv4 Bind Address)</label>
+                                            <input v-model="ntp.inet4_bind_address" placeholder="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv4 出口地址。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 绑定地址 (IPv6 Bind Address)</label>
+                                            <input v-model="ntp.inet6_bind_address" placeholder="2001:db8::10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv6 出口地址。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 (Routing Mark)</label>
+                                            <input v-model="ntp.routing_mark" placeholder="255 / 0xff" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；用于 fwmark / policy routing。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间 (NetNS)</label>
+                                            <input v-model="ntp.netns" placeholder="singbox" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；指定网络命名空间。</p>
+                                        </div>
+                                    </div>
+                                    <div class="pt-3 border-t border-gray-200 text-[10px] font-medium text-gray-500 bg-white rounded-lg px-3 py-2">
+                                        更偏平台依赖或低频场景的字段，如 <code>network_strategy</code>、<code>network_type</code>、<code>fallback_*</code>、<code>domain_resolver</code>、<code>domain_strategy</code>、<code>tcp_fast_open</code>、<code>tcp_multi_path</code>、<code>udp_fragment</code>，当前界面暂不突出展示。
+                                    </div>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </div>

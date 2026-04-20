@@ -3,8 +3,9 @@ const { ref, computed } = window.Vue;
 export function createBaseState() {
     const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
 
-    const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http', 'socks', 'anytls'];
+    const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
+    const PROTO_SUPPORT_MULTIPLEX = ['vless', 'vmess', 'trojan', 'shadowsocks'];
+    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http', 'anytls'];
     const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive'];
     const PROTO_SUPPORT_SECRET = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria', 'shadowtls', 'anytls'];
     const PROTO_SUPPORT_USER = ['socks', 'http', 'ssh', 'naive'];
@@ -111,6 +112,10 @@ export function createBaseState() {
         dns_strategy: 'ipv4_only',
         default_domain_resolver: 'remote-dns',
         dns_final: 'remote-dns',
+        dns_disable_cache: false,
+        dns_disable_expire: false,
+        dns_cache_capacity: null,
+        dns_client_subnet: '',
         sniff_enabled: true,
         sniff_override_destination: true,
         sniff_timeout: '300ms',
@@ -121,6 +126,11 @@ export function createBaseState() {
         auto_detect_interface: true,
         default_interface: '',
         default_mark: null,
+        find_process: false,
+        default_network_strategy: '',
+        default_network_type: '',
+        default_fallback_network_type: '',
+        default_fallback_delay: '',
         rule_set_cdn: true,
         rule_set_detour: 'direct',
         store_rdrc: true,
@@ -157,10 +167,20 @@ export function createBaseState() {
         address_v4: '172.19.0.1/30',
         address_v6: '',
         mtu: 9000,
+        loopback_address: '',
         auto_route: true,
         strict_route: true,
         auto_redirect: false,
+        iproute2_table_index: '',
+        iproute2_rule_index: '',
+        auto_redirect_input_mark: '',
+        auto_redirect_output_mark: '',
         endpoint_independent_nat: false,
+        udp_timeout: '',
+        include_interface: '',
+        exclude_interface: '',
+        include_package: '',
+        exclude_package: '',
         non_gateway_mode: false,
         bind_interface: '',
         route_exclude_address: '',
@@ -169,8 +189,8 @@ export function createBaseState() {
     const tunOpts = [
         { key: 'auto_route', label: 'auto_route', desc: '自动配置系统路由' },
         { key: 'strict_route', label: 'strict_route', desc: '严格路由，防泄漏' },
-        { key: 'auto_redirect', label: 'auto_redirect', desc: 'Linux 高性能重定向' },
         { key: 'endpoint_independent_nat', label: 'endpoint_independent_nat', desc: 'Full Cone NAT (UDP)' },
+        { key: 'auto_redirect', label: 'auto_redirect', desc: 'Linux 高性能重定向' },
     ];
 
     const panels = [
@@ -231,7 +251,37 @@ export function createBaseState() {
         return links;
     });
 
-    const ntp = ref({ enabled: false, server: 'time.apple.com', server_port: 123, interval: '30m', detour: 'direct' });
+    const normalizeNtp = (ntp = {}) => {
+        const normalized = {
+            enabled: !!ntp.enabled,
+            server: typeof ntp.server === 'string' && ntp.server ? ntp.server : 'time.apple.com',
+            server_port: Number.isFinite(Number(ntp.server_port)) ? Number(ntp.server_port) : 123,
+            interval: typeof ntp.interval === 'string' && ntp.interval ? ntp.interval : '30m',
+            detour: typeof ntp.detour === 'string' && ntp.detour ? ntp.detour : 'direct',
+            bind_interface: typeof ntp.bind_interface === 'string' ? ntp.bind_interface : '',
+            inet4_bind_address: typeof ntp.inet4_bind_address === 'string' ? ntp.inet4_bind_address : '',
+            inet6_bind_address: typeof ntp.inet6_bind_address === 'string' ? ntp.inet6_bind_address : '',
+            routing_mark: ntp.routing_mark === null || ntp.routing_mark === undefined ? '' : String(ntp.routing_mark),
+            reuse_addr: !!ntp.reuse_addr,
+            netns: typeof ntp.netns === 'string' ? ntp.netns : '',
+            connect_timeout: typeof ntp.connect_timeout === 'string' ? ntp.connect_timeout : '',
+            tcp_fast_open: !!ntp.tcp_fast_open,
+            tcp_multi_path: !!ntp.tcp_multi_path,
+            udp_fragment: !!ntp.udp_fragment,
+            domain_resolver: typeof ntp.domain_resolver === 'string'
+                ? ntp.domain_resolver
+                : (ntp.domain_resolver && typeof ntp.domain_resolver.server === 'string' ? ntp.domain_resolver.server : ''),
+            network_strategy: typeof ntp.network_strategy === 'string' ? ntp.network_strategy : '',
+            network_type: Array.isArray(ntp.network_type) ? ntp.network_type.join(', ') : String(ntp.network_type || ''),
+            fallback_network_type: Array.isArray(ntp.fallback_network_type) ? ntp.fallback_network_type.join(', ') : String(ntp.fallback_network_type || ''),
+            fallback_delay: typeof ntp.fallback_delay === 'string' ? ntp.fallback_delay : '',
+            domain_strategy: typeof ntp.domain_strategy === 'string' ? ntp.domain_strategy : '',
+        };
+
+        return normalized;
+    };
+
+    const ntp = ref(normalizeNtp());
 
     const tproxy = ref({
         enabled: false,
@@ -250,8 +300,9 @@ export function createBaseState() {
         egress_iface: '',
     });
 
-    return {
+        return {
         PROTO_SUPPORT_TRANSPORT,
+        PROTO_SUPPORT_MULTIPLEX,
         PROTO_SUPPORT_TLS,
         PROTO_ALWAYS_TLS,
         PROTO_SUPPORT_SECRET,
@@ -291,6 +342,7 @@ export function createBaseState() {
         pickPanel,
         panelLinks,
         ntp,
+        normalizeNtp,
         tproxy,
     };
 }
