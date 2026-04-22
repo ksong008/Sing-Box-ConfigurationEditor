@@ -121,9 +121,15 @@ export function setupServerConfigCore(ctx) {
                 }
                 if (inbound.type === 'hysteria') {
                     const mapped = {};
-                    if (user.auth_str) mapped.auth_str = user.auth_str;
-                    else if (user.auth) mapped.auth = user.auth;
-                    else return null;
+                    if (user.auth_mode === 'base64') {
+                        if (!user.auth) return null;
+                        mapped.auth = user.auth;
+                    } else if (user.auth_str) {
+                        mapped.auth_str = user.auth_str;
+                    } else if (user.auth) {
+                        mapped.auth = user.auth;
+                    }
+                    if (!mapped.auth && !mapped.auth_str) return null;
                     if (user.name) mapped.name = user.name;
                     return mapped;
                 }
@@ -254,6 +260,41 @@ export function setupServerConfigCore(ctx) {
             if (headers) masquerade.headers = headers;
             if (inbound.hy2_masquerade_content) masquerade.content = inbound.hy2_masquerade_content;
             return Object.keys(masquerade).length > 1 ? masquerade : undefined;
+        }
+        return undefined;
+    };
+
+    const buildRemoteOutboundTransport = (outbound) => {
+        if (!['vless', 'vmess', 'trojan'].includes(outbound.type) || !outbound.transport) return undefined;
+        if (outbound.transport === 'ws') {
+            return {
+                type: 'ws',
+                path: outbound.transport_path || '/',
+                headers: outbound.transport_host ? { Host: outbound.transport_host } : undefined,
+            };
+        }
+        if (outbound.transport === 'grpc') {
+            return {
+                type: 'grpc',
+                service_name: outbound.transport_service_name || outbound.transport_path || '',
+            };
+        }
+        if (outbound.transport === 'http') {
+            return {
+                type: 'http',
+                path: outbound.transport_path || undefined,
+                host: parseList(outbound.transport_host),
+            };
+        }
+        if (outbound.transport === 'httpupgrade') {
+            return {
+                type: 'httpupgrade',
+                path: outbound.transport_path || '/',
+                host: outbound.transport_host || undefined,
+            };
+        }
+        if (outbound.transport === 'quic') {
+            return { type: 'quic' };
         }
         return undefined;
     };
@@ -398,15 +439,159 @@ export function setupServerConfigCore(ctx) {
         return obj;
     };
 
+    const buildRuleSet = (ruleSet) => {
+        if (!ruleSet?.enabled || !ruleSet.tag) return null;
+        const obj = {
+            tag: ruleSet.tag,
+            type: ruleSet.source_type === 'local' ? 'local' : 'remote',
+            format: ruleSet.format || 'binary',
+        };
+        if (obj.type === 'local') {
+            if (!ruleSet.path) return null;
+            obj.path = ruleSet.path;
+        } else {
+            if (!ruleSet.url) return null;
+            obj.url = ruleSet.url;
+            if (ruleSet.download_detour) obj.download_detour = ruleSet.download_detour;
+            if (ruleSet.update_interval) obj.update_interval = ruleSet.update_interval;
+        }
+        return obj;
+    };
+
+    const buildRemoteOutbound = (outbound) => {
+        if (!outbound?.tag || !outbound?.server) return null;
+        const port = parseOptionalInteger(outbound.server_port);
+        const obj = {
+            type: outbound.type,
+            tag: outbound.tag,
+            server: outbound.server,
+            server_port: port === undefined ? 443 : port,
+        };
+
+        if (outbound.type === 'vless') {
+            if (!outbound.uuid) return null;
+            obj.uuid = outbound.uuid;
+            if (outbound.flow) obj.flow = outbound.flow;
+            if (outbound.tls_enabled) {
+                obj.tls = {
+                    enabled: true,
+                };
+                if (outbound.server_name) obj.tls.server_name = outbound.server_name;
+                const alpn = parseList(outbound.alpn);
+                if (alpn.length > 0) obj.tls.alpn = alpn;
+                if (outbound.allow_insecure) obj.tls.insecure = true;
+                if (outbound.reality_public_key) {
+                    obj.tls.reality = {
+                        enabled: true,
+                        public_key: outbound.reality_public_key,
+                        short_id: outbound.reality_short_id || '',
+                    };
+                }
+            }
+        } else if (outbound.type === 'vmess') {
+            if (!outbound.uuid) return null;
+            obj.uuid = outbound.uuid;
+            const alterId = parseOptionalInteger(outbound.alter_id);
+            if (alterId !== undefined) obj.alter_id = alterId;
+            if (outbound.security && outbound.security !== 'auto') obj.security = outbound.security;
+            if (outbound.global_padding) obj.global_padding = true;
+            if (!outbound.authenticated_length) obj.authenticated_length = false;
+            if (outbound.network) obj.network = outbound.network;
+            if (outbound.tls_enabled) {
+                obj.tls = {
+                    enabled: true,
+                };
+                if (outbound.server_name) obj.tls.server_name = outbound.server_name;
+                const alpn = parseList(outbound.alpn);
+                if (alpn.length > 0) obj.tls.alpn = alpn;
+                if (outbound.allow_insecure) obj.tls.insecure = true;
+            }
+        } else if (outbound.type === 'trojan') {
+            if (!outbound.password) return null;
+            obj.password = outbound.password;
+            if (outbound.tls_enabled) {
+                obj.tls = {
+                    enabled: true,
+                };
+                if (outbound.server_name) obj.tls.server_name = outbound.server_name;
+                const alpn = parseList(outbound.alpn);
+                if (alpn.length > 0) obj.tls.alpn = alpn;
+                if (outbound.allow_insecure) obj.tls.insecure = true;
+                if (outbound.reality_public_key) {
+                    obj.tls.reality = {
+                        enabled: true,
+                        public_key: outbound.reality_public_key,
+                        short_id: outbound.reality_short_id || '',
+                    };
+                }
+            }
+        } else if (outbound.type === 'shadowsocks') {
+            if (!outbound.password || !outbound.method) return null;
+            obj.method = outbound.method;
+            obj.password = outbound.password;
+            if (outbound.network) obj.network = outbound.network;
+        } else if (outbound.type === 'hysteria2') {
+            if (!outbound.password) return null;
+            obj.password = outbound.password;
+            if (outbound.network) obj.network = outbound.network;
+            if (outbound.hy2_obfs_type) {
+                obj.obfs = {
+                    type: outbound.hy2_obfs_type,
+                    password: outbound.hy2_obfs_password || '',
+                };
+            }
+            obj.tls = {
+                enabled: true,
+            };
+            if (outbound.server_name) obj.tls.server_name = outbound.server_name;
+            const alpn = parseList(outbound.alpn);
+            if (alpn.length > 0) obj.tls.alpn = alpn;
+            if (outbound.allow_insecure) obj.tls.insecure = true;
+        } else if (outbound.type === 'tuic') {
+            if (!outbound.uuid || !outbound.password) return null;
+            obj.uuid = outbound.uuid;
+            obj.password = outbound.password;
+            if (outbound.network) obj.network = outbound.network;
+            if (outbound.tuic_congestion) obj.congestion_control = outbound.tuic_congestion;
+            if (outbound.tuic_udp_relay_mode) obj.udp_relay_mode = outbound.tuic_udp_relay_mode;
+            if (outbound.tuic_udp_over_stream) obj.udp_over_stream = true;
+            if (outbound.tuic_zero_rtt_handshake) obj.zero_rtt_handshake = true;
+            if (outbound.tuic_heartbeat) obj.heartbeat = outbound.tuic_heartbeat;
+            obj.tls = {
+                enabled: true,
+            };
+            if (outbound.server_name) obj.tls.server_name = outbound.server_name;
+            const alpn = parseList(outbound.alpn);
+            if (alpn.length > 0) obj.tls.alpn = alpn;
+            if (outbound.allow_insecure) obj.tls.insecure = true;
+        } else if (outbound.type === 'wireguard') {
+            if (!outbound.local_address || !outbound.peer_public_key) return null;
+            obj.local_address = parseList(outbound.local_address);
+            obj.peer_public_key = outbound.peer_public_key;
+            if (outbound.pre_shared_key) obj.pre_shared_key = outbound.pre_shared_key;
+            const mtu = parseOptionalInteger(outbound.mtu);
+            if (mtu !== undefined) obj.mtu = mtu;
+            if (outbound.persistent_keepalive_interval) obj.persistent_keepalive_interval = outbound.persistent_keepalive_interval;
+        }
+
+        const transport = buildRemoteOutboundTransport(outbound);
+        if (transport) obj.transport = transport;
+
+        return obj;
+    };
+
     const generatedJson = computed(() => {
         const dnsServers = ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
         const inbounds = ctx.serverInbounds.value.map(buildInbound).filter(Boolean);
+        const ruleSets = ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
         const routeRules = ctx.routeRules.value.map(buildRouteRule).filter(Boolean);
+        const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
         const route = {
             rules: routeRules,
             final: ctx.settings.value.route_final || 'direct',
             auto_detect_interface: !!ctx.settings.value.auto_detect_interface,
         };
+        if (ruleSets.length > 0) route.rule_set = ruleSets;
 
         const config = {
             log: { level: ctx.settings.value.log_level, timestamp: true },
@@ -424,6 +609,7 @@ export function setupServerConfigCore(ctx) {
                 { type: 'direct', tag: 'direct' },
                 { type: 'block', tag: 'block' },
                 { type: 'dns', tag: 'dns-out' },
+                ...customOutbounds,
             ],
             route,
         };
@@ -439,6 +625,8 @@ export function setupServerConfigCore(ctx) {
         _exported: new Date().toISOString(),
         settings: ctx.settings.value,
         dnsList: ctx.dnsList.value,
+        remoteOutbounds: ctx.remoteOutbounds.value,
+        ruleSets: ctx.ruleSets.value,
         serverInbounds: ctx.serverInbounds.value,
         routeRules: ctx.routeRules.value,
     });

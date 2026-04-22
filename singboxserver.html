@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sing-Box Server v1.12 配置生成器</title>
+    <!-- BUILD_VENDOR_ASSETS_START -->
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <!-- BUILD_VENDOR_ASSETS_END -->
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 编辑器和日志区域专属深色滚动条 */
+        .dark-scroll::-webkit-scrollbar-track { background: #1f2937; }
+        .dark-scroll::-webkit-scrollbar-thumb { background: #4b5563; }
+        .dark-scroll::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        .tab-active { border-bottom: 2px solid #4f46e5; color: #4f46e5; font-weight: 700; background: #fff; }
+        .tab-inactive { color: #6b7280; background: #f9fafb; }
+        .tab-inactive:hover { color: #374151; background: #f3f4f6; }
+        [v-cloak] { display: none; }
+        /* 弹窗进场动画 */
+        @keyframes modalIn { from { opacity:0; transform:translateY(-12px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+        .modal-box { animation: modalIn .18s cubic-bezier(.22,1,.36,1) both; }
+        /* 内容延迟淡入 */
+        @keyframes contentFadeIn { from { opacity:0; } to { opacity:1; } }
+        .modal-content-ready { animation: contentFadeIn .15s ease both; }
+
+        .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+        
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #cbd5e1; transition: .3s; border-radius: 24px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input:checked + .toggle-slider { background: #4f46e5; }
+        input:checked + .toggle-slider:before { transform: translateX(20px); }
+        
+        .panel-card { border: 2px solid #e5e7eb; border-radius: 12px; padding: 12px 16px; cursor: pointer; transition: border-color .2s, background-color .2s, box-shadow .2s; background: #f9fafb; }
+        .panel-card:hover { border-color: #a5b4fc; background: #eef2ff; }
+        .panel-card.selected { border-color: #4f46e5; background: #eef2ff; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); }
+        .stitle { font-size: 14px; font-weight: 700; color: #374151; border-left: 4px solid #4f46e5; padding-left: 10px; margin-bottom: 16px; }
+        
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 95%; max-width: 1000px; height: 85vh; display: flex; flex-direction: column; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+        
+        /* 覆盖 Forms 插件默认样式，让输入框更柔和 */
+        [type='text'], [type='number'], select, textarea {
+            border-color: #d1d5db !important; 
+            box-shadow: none !important;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        [type='text']:focus, [type='number']:focus, select:focus, textarea:focus {
+            border-color: #6366f1 !important; 
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+            outline: none !important;
+        }
+        [type='checkbox'], [type='radio'] { border-color: #d1d5db !important; transition: background-color 0.2s, border-color 0.2s; }
+        [type='checkbox']:focus, [type='radio']:focus { box-shadow: none !important; outline: none !important; }
+        [type='checkbox']:checked, [type='radio']:checked { background-color: #4f46e5 !important; border-color: #4f46e5 !important; }
+
+        /* Toast 通知 */
+        #toast-container { position:fixed; top:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+        .toast { display:flex; align-items:center; gap:10px; padding:12px 18px; border-radius:12px; font-size:13px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.18); pointer-events:auto; animation:toastIn .25s cubic-bezier(.34,1.56,.64,1); max-width:360px; }
+        .toast.toast-ok   { background:#ecfdf5; color:#065f46; border:1px solid #6ee7b7; }
+        .toast.toast-err  { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+        .toast.toast-info { background:#eff6ff; color:#1e40af; border:1px solid #93c5fd; }
+        .toast.toast-warn { background:#fffbeb; color:#92400e; border:1px solid #fcd34d; }
+        @keyframes toastIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+        /* 确认对话框 */
+        .confirm-box { background:#fff; border-radius:16px; padding:28px; width:92%; max-width:400px; border:1px solid #e5e7eb; box-shadow:0 8px 20px rgba(0,0,0,.12); }
+        .confirm-box h3 { font-size:16px; font-weight:800; color:#1f2937; margin-bottom:10px; }
+        .confirm-box p  { font-size:13px; color:#6b7280; margin-bottom:24px; line-height:1.6; }
+        .confirm-box .btns { display:flex; gap:10px; justify-content:flex-end; }
+        .confirm-box .btn-cancel { padding:8px 20px; border-radius:8px; border:1px solid #d1d5db; background:#f9fafb; color:#374151; font-size:13px; font-weight:700; cursor:pointer; transition:background-color .2s; }
+        .confirm-box .btn-cancel:hover { background:#f3f4f6; }
+        .confirm-box .btn-ok     { padding:8px 20px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-size:13px; font-weight:700; cursor:pointer; transition:background-color .2s; }
+        .confirm-box .btn-ok:hover { background:#dc2626; }
+        .confirm-box .btn-ok.safe { background:#4f46e5; }
+        .confirm-box .btn-ok.safe:hover { background:#4338ca; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased h-screen flex flex-col overflow-hidden">
+<div id="toast-container"></div>
+<div id="app" v-cloak class="container mx-auto px-4 max-w-[1500px] py-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+
+    <import-export-modal></import-export-modal>
+
+    <app-header></app-header>
+
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 min-h-0">
+        <editor-panel></editor-panel>
+        <json-preview></json-preview>
+    </div>
+</div>
+<script type="module">
+    const appRoot = document.getElementById('app');
+    const CLEARABLE_STORAGE_KEYS = ['singboxserver_web_config_v1_12_testserver', 'singbox_server_config_v1_12_testserver'];
+
+    const clearEditorCache = () => {
+        CLEARABLE_STORAGE_KEYS.forEach((key) => {
+            try {
+                localStorage.removeItem(key);
+            } catch {
+                // ignore localStorage errors
+            }
+        });
+    };
+
+    const renderBootMessage = (title, message, actions = []) => {
+        if (!appRoot) return;
+        appRoot.removeAttribute('v-cloak');
+        appRoot.innerHTML = `
+            <div class="min-h-full flex items-center justify-center">
+                <div class="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-xl p-8">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fas fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h1 class="text-2xl font-black text-gray-900 mb-3">${title}</h1>
+                            <div class="text-sm leading-7 text-gray-600 whitespace-pre-line">${message}</div>
+                            <div class="mt-6 flex flex-wrap gap-3">
+                                ${actions.map((action) => `<button data-boot-action="${action.id}" class="${action.className}">${action.label}</button>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        actions.forEach((action) => {
+            const button = appRoot.querySelector(`[data-boot-action="${action.id}"]`);
+            if (button) button.addEventListener('click', action.onClick);
+        });
+    };
+
+    if (location.protocol === 'file:') {
+        renderBootMessage(
+            '当前文件不能直接双击打开',
+            '这是 testserver 分支的模块化开发版，使用 file:// 本地打开时，浏览器通常会拦截 ES modules，表现就是白屏。\n\n推荐做法：\n1. 在项目目录运行 python3 -m http.server 8000\n2. 浏览器访问 http://127.0.0.1:8000/singboxserver.html\n\n如果你只是想离线直接打开，请使用打包后的单文件发布版。',
+            [
+                {
+                    id: 'reload-http-help',
+                    label: '我知道了',
+                    className: 'px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-sm transition',
+                    onClick: () => {},
+                },
+            ],
+        );
+    } else {
+        import('./main.js').catch((error) => {
+            console.error('[boot] failed to start app:', error);
+            renderBootMessage(
+                '编辑器启动失败',
+                '这通常是脚本加载异常，或者旧缓存把当前页面状态带崩了。\n\n你可以先清理本地缓存再重试；如果仍然失败，再看浏览器控制台里的报错。',
+                [
+                    {
+                        id: 'clear-cache-reload',
+                        label: '清理缓存并重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold shadow-sm transition',
+                        onClick: () => {
+                            clearEditorCache();
+                            location.reload();
+                        },
+                    },
+                    {
+                        id: 'plain-reload',
+                        label: '直接重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-bold shadow-sm transition',
+                        onClick: () => location.reload(),
+                    },
+                ],
+            );
+        });
+    }
+</script>
+</body>
+</html>

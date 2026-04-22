@@ -44,8 +44,12 @@ export const ImportExportModal = {
                 </div>
 
                 <div v-if="importExportTab==='import'" class="flex flex-col gap-4 modal-content-ready">
-                    <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                        <p class="text-sm text-amber-800 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>当前服务端配置器先支持导入本编辑器的面板配置。运行配置导入可以放在后续阶段再补。</p>
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                        <p class="text-sm text-blue-800 font-bold"><i class="fas fa-circle-info mr-2"></i>当前支持导入面板配置和运行配置；会优先自动识别 JSON 结构，识别不到时按下方模式处理。</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button @click="settings.import_mode='panel'" :class="settings.import_mode==='panel' ? 'bg-white text-indigo-600 border-indigo-300 shadow-sm' : 'bg-gray-50 text-gray-500 border-gray-200'" class="py-3 rounded-xl text-sm font-bold border transition"><i class="fas fa-layer-group mr-2"></i>面板配置</button>
+                        <button @click="settings.import_mode='runtime'" :class="settings.import_mode==='runtime' ? 'bg-white text-indigo-600 border-indigo-300 shadow-sm' : 'bg-gray-50 text-gray-500 border-gray-200'" class="py-3 rounded-xl text-sm font-bold border transition"><i class="fas fa-file-code mr-2"></i>运行配置</button>
                     </div>
                     <label class="cursor-pointer group">
                         <div class="bg-indigo-600 group-hover:bg-indigo-500 text-white py-4 rounded-xl text-sm font-bold text-center shadow-sm"><i class="fas fa-folder-open mr-2"></i>选择本地 JSON 文件</div>
@@ -56,8 +60,8 @@ export const ImportExportModal = {
                         <span class="text-xs text-gray-400 font-bold">或粘贴 JSON 文本</span>
                         <div class="flex-1 h-px bg-gray-200"></div>
                     </div>
-                    <textarea v-model="importJsonText" rows="6" placeholder='粘贴服务端面板配置 JSON 内容...' class="w-full px-4 py-3 text-xs border border-gray-300 rounded-xl outline-none font-mono bg-gray-50 focus:bg-white resize-none"></textarea>
-                    <button @click="doImportText" :disabled="!importJsonText.trim()" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i class="fas fa-file-import mr-2"></i>导入面板配置</button>
+                    <textarea v-model="importJsonText" rows="6" :placeholder="settings.import_mode==='runtime' ? '粘贴服务端运行配置 JSON 内容...' : '粘贴服务端面板配置 JSON 内容...'" class="w-full px-4 py-3 text-xs border border-gray-300 rounded-xl outline-none font-mono bg-gray-50 focus:bg-white resize-none"></textarea>
+                    <button @click="doImportText" :disabled="!importJsonText.trim()" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i class="fas fa-file-import mr-2"></i>{{ settings.import_mode==='runtime' ? '导入运行配置' : '导入面板配置' }}</button>
                     <div v-if="importError" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 font-semibold">{{ importError }}</div>
                 </div>
             </template>
