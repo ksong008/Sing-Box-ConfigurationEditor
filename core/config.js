@@ -459,12 +459,7 @@ export function setupConfigCore(ctx) {
         const dnsTagSet = new Set(ctx.dnsList.value.map((dns) => dns.tag));
         const dnsServers = ctx.dnsList.value
             .map((dns) => {
-                if (dns.type === 'fakeip') {
-                    const server = { type: 'fakeip', tag: dns.tag };
-                    if (dns.inet4_range) server.inet4_range = dns.inet4_range;
-                    if (dns.inet6_range) server.inet6_range = dns.inet6_range;
-                    return server;
-                }
+                if (dns.type === 'fakeip') return null;
                 if (dns.type === 'local') return { type: 'local', tag: dns.tag };
                 const server = { type: dns.type, tag: dns.tag };
                 if (dns.server) server.server = dns.server;
@@ -479,7 +474,7 @@ export function setupConfigCore(ctx) {
                 applyDialFields(server, dns, { validDnsTags: dnsTagSet });
                 return server;
             })
-            .filter((server) => server.type === 'fakeip' || server.type === 'local' || server.server);
+            .filter((server) => server && (server.type === 'local' || server.server));
 
         if (ctx.fakeip.value.enabled && !dnsServers.find((server) => server.type === 'fakeip')) {
             const fakeipServer = { type: 'fakeip', tag: ctx.fakeip.value.tag };
