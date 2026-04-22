@@ -4,6 +4,7 @@ export function setupImportExportCore(ctx) {
     const supportsNativeFileSave = typeof window.showSaveFilePicker === 'function';
     let panelFileHandle = null;
     let runtimeFileHandle = null;
+    const RESERVED_RUNTIME_INBOUND_TAGS = new Set(['mixed-in', 'tun-in', 'tproxy-in', 'dns-in']);
 
     const deepClone = (value) => JSON.parse(JSON.stringify(value));
     const defaultSnapshots = {
@@ -49,6 +50,13 @@ export function setupImportExportCore(ctx) {
         return Object.entries(headers)
             .map(([key, value]) => `${key}: ${value}`)
             .join('\n');
+    };
+    const absorbFakeipServer = (server = {}) => {
+        if (!server || server.type !== 'fakeip') return;
+        ctx.fakeip.value.enabled = true;
+        if (server.tag) ctx.fakeip.value.tag = server.tag;
+        if (server.inet4_range) ctx.fakeip.value.inet4_range = server.inet4_range;
+        if (server.inet6_range) ctx.fakeip.value.inet6_range = server.inet6_range;
     };
     const looksLikePanelState = (data) => Object.prototype.toString.call(data) === '[object Object]' && (
         !!data._version
@@ -513,6 +521,7 @@ export function setupImportExportCore(ctx) {
 
     const runtimeInboundToExtra = (inbound = {}) => {
         if (!inbound || !['http', 'socks', 'direct'].includes(inbound.type) || !inbound.tag) return null;
+        if (RESERVED_RUNTIME_INBOUND_TAGS.has(inbound.tag)) return null;
         const mapped = {
             type: inbound.type,
             tag: inbound.tag,
@@ -717,13 +726,21 @@ export function setupImportExportCore(ctx) {
         }
         if (typeof data.corsProxyEnabled === 'boolean') ctx.corsProxyEnabled.value = data.corsProxyEnabled;
         if (data.dnsList) {
-            ctx.dnsList.value = Array.isArray(data.dnsList)
+            const importedDnsList = Array.isArray(data.dnsList)
                 ? data.dnsList.map((dns, index) => (
                     typeof ctx.normalizeDnsServer === 'function'
                         ? ctx.normalizeDnsServer(dns, index)
                         : dns
                 ))
                 : data.dnsList;
+            if (Array.isArray(importedDnsList)) {
+                importedDnsList
+                    .filter((dns) => dns && dns.type === 'fakeip')
+                    .forEach(absorbFakeipServer);
+                ctx.dnsList.value = importedDnsList.filter((dns) => dns && dns.type !== 'fakeip');
+            } else {
+                ctx.dnsList.value = importedDnsList;
+            }
         }
         if (data.providers) ctx.providers.value = data.providers;
         if (data.nodes) ctx.nodes.value = data.nodes.map((node) => ctx.makeNode(node));
@@ -763,20 +780,22 @@ export function setupImportExportCore(ctx) {
             ctx.settings.value.reverse_mapping = !!dns.reverse_mapping;
 
             const dnsServers = Array.isArray(dns.servers) ? dns.servers : [];
-            ctx.dnsList.value = dnsServers.map((server, index) => runtimeDnsServerToPanel(server, index));
+            dnsServers
+                .filter((server) => server && server.type === 'fakeip')
+                .forEach(absorbFakeipServer);
+            ctx.dnsList.value = dnsServers
+                .filter((server) => server && server.type !== 'fakeip')
+                .map((server, index) => runtimeDnsServerToPanel(server, index));
             const dnsRules = Array.isArray(dns.rules) ? dns.rules : [];
             const localDnsRule = dnsRules.find((rule) => rule && Array.isArray(rule.rule_set) && rule.rule_set.includes('geosite-cn') && typeof rule.server === 'string');
             const localTag = localDnsRule?.server
-                || dnsServers.find((server) => server && server.tag === 'local-dns')?.tag
-                || dnsServers.find((server) => server && ['udp', 'tcp', 'local'].includes(server.type))?.tag
+                || dnsServers.find((server) => server && server.type !== 'fakeip' && server.tag === 'local-dns')?.tag
+                || dnsServers.find((server) => server && server.type !== 'fakeip' && ['udp', 'tcp', 'local'].includes(server.type))?.tag
                 || '';
 
             const fakeipServer = dnsServers.find((server) => server && server.type === 'fakeip');
             if (fakeipServer) {
-                ctx.fakeip.value.enabled = true;
-                ctx.fakeip.value.tag = fakeipServer.tag || ctx.fakeip.value.tag;
-                ctx.fakeip.value.inet4_range = fakeipServer.inet4_range || ctx.fakeip.value.inet4_range;
-                ctx.fakeip.value.inet6_range = fakeipServer.inet6_range || ctx.fakeip.value.inet6_range;
+                absorbFakeipServer(fakeipServer);
                 const fakeRule = dnsRules.find((rule) => rule && rule.server === ctx.fakeip.value.tag && Array.isArray(rule.query_type));
                 if (fakeRule) {
                     ctx.fakeip.value.queryA = fakeRule.query_type.includes('A');

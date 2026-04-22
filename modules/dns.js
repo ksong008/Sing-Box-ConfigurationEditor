@@ -47,7 +47,12 @@ export function setupDnsModule(ctx) {
         normalizeDnsServer({ tag: 'local-dns', type: 'udp', server: '223.5.5.5' }, 1),
     ]);
 
-    const allDnsTags = computed(() => dnsList.value.map((dns) => dns.tag).filter(Boolean));
+    const allDnsTags = computed(() => {
+        const tags = dnsList.value.map((dns) => dns.tag).filter(Boolean);
+        const fakeipTag = ctx.fakeip?.value?.enabled ? String(ctx.fakeip.value.tag || '').trim() : '';
+        if (fakeipTag && !tags.includes(fakeipTag)) tags.push(fakeipTag);
+        return tags;
+    });
 
     const addDns = () => {
         dnsList.value.push(normalizeDnsServer({}, dnsList.value.length));
