@@ -137,6 +137,7 @@ export function setupServerImportExportCore(ctx) {
         if (Array.isArray(data.ruleSets)) ctx.ruleSets.value = data.ruleSets.map((item, index) => ctx.normalizeRuleSet(item, index));
         if (Array.isArray(data.serverInbounds)) ctx.serverInbounds.value = data.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
         if (Array.isArray(data.routeRules)) ctx.routeRules.value = data.routeRules.map((item, index) => ctx.normalizeRouteRule(item, index));
+        if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
         if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
         ctx.showImportExport.value = false;
     };
@@ -160,7 +161,7 @@ export function setupServerImportExportCore(ctx) {
 
         const supportedInboundTypes = new Set(['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'hysteria', 'anytls', 'shadowtls']);
         const supportedOutboundTypes = new Set(['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'wireguard']);
-        const builtinOutboundTags = new Set(['direct', 'block', 'dns-out']);
+        const builtinOutboundTags = new Set(['direct', 'block', 'dns', 'dns-out']);
 
         if (Array.isArray(data.inbounds)) {
             ctx.serverInbounds.value = data.inbounds
@@ -232,6 +233,7 @@ export function setupServerImportExportCore(ctx) {
             }
         }
 
+        if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
         if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
         ctx.showImportExport.value = false;
     };
