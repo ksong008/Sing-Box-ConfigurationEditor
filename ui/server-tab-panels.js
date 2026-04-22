@@ -15,7 +15,7 @@ const BasicTab = createInjectedComponent('ServerBasicTab', `                <div
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">基础设置</div>
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
+                            <div @focusin.capture="queueJsonScrollTo('log')" @change.capture="queueJsonScrollTo('log')">
                                 <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">日志级别 (Log Level)</label>
                                 <select v-model="settings.log_level" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none">
                                     <option value="trace">trace</option>
@@ -25,7 +25,7 @@ const BasicTab = createInjectedComponent('ServerBasicTab', `                <div
                                     <option value="error">error</option>
                                 </select>
                             </div>
-                            <div>
+                            <div @focusin.capture="queueJsonScrollTo('route-root')" @change.capture="queueJsonScrollTo('route-root')">
                                 <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认出站 (Final Outbound)</label>
                                 <select v-model="settings.route_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-bold text-indigo-700">
                                     <option value="direct">direct</option>
@@ -44,19 +44,19 @@ const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-s
                             <div class="stitle mb-0">上游 DNS</div>
                             <button @click="addDnsServer" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>新建 DNS</button>
                         </div>
-                        <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="grid grid-cols-2 gap-4 mb-4" @focusin.capture="queueJsonScrollTo('dns-root')" @input.capture="queueJsonScrollTo('dns-root')" @change.capture="queueJsonScrollTo('dns-root')">
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 策略 (DNS Strategy)</label><select v-model="settings.dns_strategy" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none"><option value="prefer_ipv4">prefer_ipv4</option><option value="prefer_ipv6">prefer_ipv6</option><option value="ipv4_only">ipv4_only</option><option value="ipv6_only">ipv6_only</option></select></div>
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">最终 DNS (DNS Final)</label><select v-model="settings.dns_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"><option value="">default</option><option v-for="item in dnsTagOptions(settings.dns_final)" :key="item" :value="item">{{ item }}</option></select></div>
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">客户端子网 (Client Subnet)</label><input v-model="settings.dns_client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"></div>
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">缓存容量 (Cache Capacity)</label><input type="number" v-model.number="settings.dns_cache_capacity" placeholder="1024" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono"></div>
                         </div>
-                        <div class="flex flex-wrap gap-4 mb-4 bg-gray-50 rounded-lg border border-gray-200 px-4 py-3">
+                        <div class="flex flex-wrap gap-4 mb-4 bg-gray-50 rounded-lg border border-gray-200 px-4 py-3" @focusin.capture="queueJsonScrollTo('dns-root')" @change.capture="queueJsonScrollTo('dns-root')">
                             <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="settings.dns_disable_cache" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">disable_cache</span></label>
                             <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="settings.dns_disable_expire" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">disable_expire</span></label>
                         </div>
 
                         <div class="space-y-3">
-                            <div v-for="(dns, idx) in dnsList" :key="dns.id" class="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <div v-for="(dns, idx) in dnsList" :key="dns.id" class="bg-gray-50 border border-gray-200 rounded-xl p-4" @focusin.capture="queueJsonScrollTo('dns-server', dns)" @input.capture="queueJsonScrollTo('dns-server', dns)" @change.capture="queueJsonScrollTo('dns-server', dns)">
                                 <div class="flex justify-between items-center mb-3">
                                     <div class="text-sm font-extrabold text-gray-800">{{ dns.tag }}</div>
                                     <button @click="removeDnsServer(idx)" class="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100 border border-red-200 font-bold transition"><i class="fas fa-trash-alt mr-1"></i>删除</button>
@@ -102,7 +102,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
 
                         <div v-if="serverInbounds.length === 0" class="text-center text-sm font-bold text-gray-400 py-8 border-2 border-dashed border-gray-200 rounded-xl">暂无入站协议，请点击上方按钮添加。</div>
                         <div v-else class="space-y-4">
-                            <div v-for="(inbound, idx) in serverInbounds" :key="inbound.id" class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                            <div v-for="(inbound, idx) in serverInbounds" :key="inbound.id" class="bg-gray-50 p-4 rounded-xl border border-gray-200" @focusin.capture="queueJsonScrollTo('inbound', inbound)" @input.capture="queueJsonScrollTo('inbound', inbound)" @change.capture="queueJsonScrollTo('inbound', inbound)">
                                 <div class="flex justify-between items-center mb-3">
                                     <div class="flex items-center gap-2 flex-wrap">
                                         <span class="text-sm font-extrabold text-gray-800">{{ inbound.tag }}</span>
@@ -431,7 +431,7 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
 const RouteTab = createInjectedComponent('ServerRouteTab', `                <div v-show="currentTab==='route'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle mb-4">路由 / 出站</div>
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="grid grid-cols-2 gap-4 mb-6" @focusin.capture="queueJsonScrollTo('route-root')" @input.capture="queueJsonScrollTo('route-root')" @change.capture="queueJsonScrollTo('route-root')">
                             <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">最终出站 (Final Outbound)</label><select v-model="settings.route_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-bold text-indigo-700"><option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option></select></div>
                             <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">自动探测接口 (Auto Detect Interface)</span></label></div>
                         </div>
@@ -455,7 +455,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
 
                             <div v-if="remoteOutbounds.length === 0" class="text-center text-sm font-bold text-gray-400 py-6 border-2 border-dashed border-gray-200 rounded-xl">暂无远端出站，请点击上方按钮添加。</div>
                             <div v-else class="space-y-3">
-                                <div v-for="(outbound, idx) in remoteOutbounds" :key="outbound.id" class="bg-white border border-gray-200 rounded-xl p-4">
+                                <div v-for="(outbound, idx) in remoteOutbounds" :key="outbound.id" class="bg-white border border-gray-200 rounded-xl p-4" @focusin.capture="queueJsonScrollTo('remote-outbound', outbound)" @input.capture="queueJsonScrollTo('remote-outbound', outbound)" @change.capture="queueJsonScrollTo('remote-outbound', outbound)">
                                     <div class="flex justify-between items-center mb-3">
                                         <div class="flex items-center gap-2">
                                             <span class="text-sm font-extrabold text-gray-800">{{ outbound.tag }}</span>
@@ -555,7 +555,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                         </div>
 
                         <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
-                            <div class="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap gap-4 items-center">
+                            <div class="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap gap-4 items-center" @focusin.capture="queueJsonScrollTo('rule-sets-root')" @change.capture="queueJsonScrollTo('rule-sets-root')">
                                 <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="settings.rule_set_cdn" @change="syncRuleSetUrlsFromCdnPreference()" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-indigo-800">使用 jsDelivr CDN 补全 Rule Set 链接</span></label>
                                 <div class="flex items-center gap-2 ml-auto">
                                     <span class="text-xs text-gray-700 font-bold">全局下载出站:</span>
@@ -600,7 +600,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                             </div>
                             <div v-if="ruleSets.length === 0" class="text-center text-sm font-bold text-gray-400 py-6 border-2 border-dashed border-gray-200 rounded-xl">暂无规则集，请点击上方按钮添加。</div>
                             <div v-else class="space-y-3">
-                                <div v-for="(ruleSet, idx) in ruleSets" :key="ruleSet.id" class="bg-white border border-gray-200 rounded-xl p-4">
+                                <div v-for="(ruleSet, idx) in ruleSets" :key="ruleSet.id" class="bg-white border border-gray-200 rounded-xl p-4" @focusin.capture="queueJsonScrollTo('rule-set', ruleSet)" @input.capture="queueJsonScrollTo('rule-set', ruleSet)" @change.capture="queueJsonScrollTo('rule-set', ruleSet)">
                                     <div class="flex justify-between items-center mb-3">
                                         <div class="flex items-center gap-2">
                                             <span class="text-sm font-extrabold text-gray-800">{{ ruleSet.tag }}</span>
@@ -641,6 +641,9 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                  @dragover.prevent
                                  @drop="onRouteRuleDrop(idx)"
                                  @dragend="onRouteRuleDragEnd"
+                                 @focusin.capture="queueJsonScrollTo('route-rule', rule)"
+                                 @input.capture="queueJsonScrollTo('route-rule', rule)"
+                                 @change.capture="queueJsonScrollTo('route-rule', rule)"
                                  :class="{
                                      'opacity-40 border-dashed border-indigo-400': draggedRouteRuleIndex === idx,
                                      'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverRouteRuleIndex === idx && draggedRouteRuleIndex > idx,
