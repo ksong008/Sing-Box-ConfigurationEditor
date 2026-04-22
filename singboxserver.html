@@ -220,6 +220,11 @@ const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const SHAREABLE_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic'];
 const REMOTE_OUTBOUND_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'wireguard'];
+const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
+    block: 'reject',
+    dns: 'hijack-dns',
+    'dns-out': 'hijack-dns',
+});
 
 const dnsHeadersToText = (headers) => {
     if (!headers || typeof headers !== 'object') return '';
@@ -267,6 +272,29 @@ const bytesToUuidString = (bytes) => {
 
 function createServerState() {
     const generateId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+    const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
+        const rawTag = String(value || '').trim();
+        if (!rawTag) return allowEmpty ? '' : fallback;
+        const tag = rawTag;
+        return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const normalizeRouteActionState = (rule = {}) => {
+        const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
+        const outbound = sanitizeOutboundSelection(rule.outbound, 'direct');
+        if (action === 'route') {
+            const migratedAction = LEGACY_SPECIAL_OUTBOUND_ACTIONS[String(rule.outbound || '').trim()];
+            if (migratedAction) {
+                return {
+                    action: migratedAction,
+                    outbound: 'direct',
+                };
+            }
+        }
+        return {
+            action,
+            outbound,
+        };
+    };
 
     const showToast = (msg, type = 'ok', duration = 2800) => {
         const icons = {
@@ -424,22 +452,25 @@ function createServerState() {
         path: typeof ruleSet.path === 'string' ? ruleSet.path : '',
         url: typeof ruleSet.url === 'string' ? ruleSet.url : '',
         update_interval: typeof ruleSet.update_interval === 'string' ? ruleSet.update_interval : '24h',
-        download_detour: typeof ruleSet.download_detour === 'string' ? ruleSet.download_detour : '',
+        download_detour: sanitizeOutboundSelection(ruleSet.download_detour, 'direct', { allowEmpty: true }),
         enabled: ruleSet.enabled === undefined ? true : !!ruleSet.enabled,
         collapsed: ruleSet.collapsed === undefined ? false : !!ruleSet.collapsed,
     });
 
-    const normalizeRouteRule = (rule = {}, index = 0) => ({
+    const normalizeRouteRule = (rule = {}, index = 0) => {
+        const normalizedRouteAction = normalizeRouteActionState(rule);
+        return {
         id: rule.id || generateId('rule'),
         enabled: rule.enabled === undefined ? true : !!rule.enabled,
         name: typeof rule.name === 'string' && rule.name ? rule.name : `自定义路由 ${index + 1}`,
         match_type: ['protocol', 'port', 'inbound', 'domain_suffix', 'rule_set'].includes(rule.match_type) ? rule.match_type : 'protocol',
         match_value: typeof rule.match_value === 'string' ? rule.match_value : '',
-        action: ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route',
-        outbound: typeof rule.outbound === 'string' && rule.outbound ? rule.outbound : 'direct',
+        action: normalizedRouteAction.action,
+        outbound: normalizedRouteAction.outbound,
         collapsed: rule.collapsed === undefined ? false : !!rule.collapsed,
         draggable: !!rule.draggable,
-    });
+        };
+    };
 
     const isBlankInboundUser = (user) => ![
         user?.name,
@@ -784,6 +815,13 @@ function createServerState() {
     const draggedRouteRuleIndex = ref(null);
     const dragOverRouteRuleIndex = ref(null);
 
+    const sanitizeLegacySpecialOutbounds = () => {
+        settings.value.route_final = sanitizeOutboundSelection(settings.value.route_final, 'direct');
+        settings.value.rule_set_download_detour = sanitizeOutboundSelection(settings.value.rule_set_download_detour, 'direct');
+        ruleSets.value = ruleSets.value.map((item, index) => normalizeRuleSet(item, index));
+        routeRules.value = routeRules.value.map((item, index) => normalizeRouteRule(item, index));
+    };
+
     const addDnsServer = () => {
         dnsList.value.push(normalizeDnsServer({}, dnsList.value.length));
     };
@@ -848,7 +886,7 @@ function createServerState() {
     const addRuleSet = (sourceType = 'remote') => {
         ruleSets.value.push(normalizeRuleSet({
             source_type: sourceType,
-            download_detour: settings.value.rule_set_download_detour || 'direct',
+            download_detour: settings.value.rule_set_download_detour,
         }, ruleSets.value.length));
     };
     const removeRuleSet = (index) => {
@@ -880,7 +918,7 @@ function createServerState() {
     };
     const syncRuleSetDownloadDetours = () => {
         ruleSets.value.forEach((ruleSet) => {
-            if (ruleSet.source_type === 'remote') ruleSet.download_detour = settings.value.rule_set_download_detour || 'direct';
+            if (ruleSet.source_type === 'remote') ruleSet.download_detour = sanitizeOutboundSelection(settings.value.rule_set_download_detour, 'direct');
         });
     };
     const addRuleSetTemplate = (tag) => {
@@ -893,7 +931,7 @@ function createServerState() {
             tag,
             source_type: 'remote',
             format: 'binary',
-            download_detour: settings.value.rule_set_download_detour || 'direct',
+            download_detour: settings.value.rule_set_download_detour,
         }, ruleSets.value.length);
         onRuleSetTagChange(ruleSet);
         ruleSets.value.push(ruleSet);
@@ -984,6 +1022,7 @@ function createServerState() {
         generateUserUuid,
         generateUuidFromName,
         pruneLegacySeededDefaults,
+        sanitizeLegacySpecialOutbounds,
         addRemoteOutbound,
         removeRemoteOutbound,
         toggleRemoteOutboundCollapsed,
@@ -1024,6 +1063,11 @@ const { computed, nextTick, watch } = window.Vue;
 const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const TLS_TYPES = ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'];
+const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
+    block: 'reject',
+    dns: 'hijack-dns',
+    'dns-out': 'hijack-dns',
+});
 
 function setupServerConfigCore(ctx) {
     const parseOptionalInteger = (value) => {
@@ -1038,6 +1082,30 @@ function setupServerConfigCore(ctx) {
         .split(/[\n,]/)
         .map((item) => item.trim())
         .filter(Boolean);
+
+    const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
+        const rawTag = String(value || '').trim();
+        if (!rawTag) return allowEmpty ? '' : fallback;
+        const tag = rawTag;
+        return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const normalizeRouteActionState = (rule = {}) => {
+        const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
+        const outbound = sanitizeOutboundSelection(rule.outbound, 'direct');
+        if (action === 'route') {
+            const migratedAction = LEGACY_SPECIAL_OUTBOUND_ACTIONS[String(rule.outbound || '').trim()];
+            if (migratedAction) {
+                return {
+                    action: migratedAction,
+                    outbound: 'direct',
+                };
+            }
+        }
+        return {
+            action,
+            outbound,
+        };
+    };
 
     const parseHeadersText = (value) => {
         const headers = {};
@@ -1449,13 +1517,14 @@ function setupServerConfigCore(ctx) {
         else if (rule.match_type === 'inbound') obj.inbound = values;
         else if (rule.match_type === 'domain_suffix') obj.domain_suffix = values;
         else if (rule.match_type === 'rule_set') obj.rule_set = values;
-        if (rule.action === 'reject') {
+        const normalizedRouteAction = normalizeRouteActionState(rule);
+        if (normalizedRouteAction.action === 'reject') {
             obj.action = 'reject';
-        } else if (rule.action === 'hijack-dns') {
+        } else if (normalizedRouteAction.action === 'hijack-dns') {
             obj.action = 'hijack-dns';
         } else {
             obj.action = 'route';
-            obj.outbound = rule.outbound || 'direct';
+            obj.outbound = normalizedRouteAction.outbound;
         }
         return obj;
     };
@@ -1473,7 +1542,8 @@ function setupServerConfigCore(ctx) {
         } else {
             if (!ruleSet.url) return null;
             obj.url = ruleSet.url;
-            if (ruleSet.download_detour) obj.download_detour = ruleSet.download_detour;
+            const downloadDetour = sanitizeOutboundSelection(ruleSet.download_detour, 'direct', { allowEmpty: true });
+            if (downloadDetour) obj.download_detour = downloadDetour;
             if (ruleSet.update_interval) obj.update_interval = ruleSet.update_interval;
         }
         return obj;
@@ -1609,7 +1679,7 @@ function setupServerConfigCore(ctx) {
         const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
         const route = {
             rules: routeRules,
-            final: ctx.settings.value.route_final || 'direct',
+            final: sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct'),
             auto_detect_interface: !!ctx.settings.value.auto_detect_interface,
         };
         if (ruleSets.length > 0) route.rule_set = ruleSets;
@@ -1628,8 +1698,6 @@ function setupServerConfigCore(ctx) {
             inbounds,
             outbounds: [
                 { type: 'direct', tag: 'direct' },
-                { type: 'block', tag: 'block' },
-                { type: 'dns', tag: 'dns-out' },
                 ...customOutbounds,
             ],
             route,
@@ -1992,6 +2060,7 @@ function setupServerImportExportCore(ctx) {
         if (Array.isArray(data.ruleSets)) ctx.ruleSets.value = data.ruleSets.map((item, index) => ctx.normalizeRuleSet(item, index));
         if (Array.isArray(data.serverInbounds)) ctx.serverInbounds.value = data.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
         if (Array.isArray(data.routeRules)) ctx.routeRules.value = data.routeRules.map((item, index) => ctx.normalizeRouteRule(item, index));
+        if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
         if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
         ctx.showImportExport.value = false;
     };
@@ -2015,7 +2084,7 @@ function setupServerImportExportCore(ctx) {
 
         const supportedInboundTypes = new Set(['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'hysteria', 'anytls', 'shadowtls']);
         const supportedOutboundTypes = new Set(['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'wireguard']);
-        const builtinOutboundTags = new Set(['direct', 'block', 'dns-out']);
+        const builtinOutboundTags = new Set(['direct', 'block', 'dns', 'dns-out']);
 
         if (Array.isArray(data.inbounds)) {
             ctx.serverInbounds.value = data.inbounds
@@ -2087,6 +2156,7 @@ function setupServerImportExportCore(ctx) {
             }
         }
 
+        if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
         if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
         ctx.showImportExport.value = false;
     };
@@ -2711,6 +2781,7 @@ function setupServerStorageCore(ctx) {
                 if (Array.isArray(state.ruleSets)) ctx.ruleSets.value = state.ruleSets.map((item, index) => ctx.normalizeRuleSet(item, index));
                 if (Array.isArray(state.serverInbounds)) ctx.serverInbounds.value = state.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
                 if (Array.isArray(state.routeRules)) ctx.routeRules.value = state.routeRules.map((item, index) => ctx.normalizeRouteRule(item, index));
+                if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
                 if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
                 if (state._exported) {
                     ctx.lastSavedAt.value = state._exported;
@@ -2950,6 +3021,14 @@ const createInjectedComponent = (name, template, extendSetup = null) => ({
     template,
 });
 
+const createOutboundOptions = (ctx) => computed(() => {
+    const reservedTags = new Set(['direct', 'block', 'dns', 'dns-out']);
+    const custom = ctx.remoteOutbounds.value
+        .map((item) => item.tag)
+        .filter((tag) => tag && !reservedTags.has(tag));
+    return Array.from(new Set(['direct', ...custom]));
+});
+
 const BasicTab = createInjectedComponent('ServerBasicTab', `                <div v-show="currentTab==='basic'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">基础设置</div>
@@ -2967,15 +3046,15 @@ const BasicTab = createInjectedComponent('ServerBasicTab', `                <div
                             <div @focusin.capture="queueJsonScrollTo('route-root')" @change.capture="queueJsonScrollTo('route-root')">
                                 <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认出站 (Final Outbound)</label>
                                 <select v-model="settings.route_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-bold text-indigo-700">
-                                    <option value="direct">direct</option>
-                                    <option value="block">block</option>
-                                    <option value="dns-out">dns-out</option>
+                                    <option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option>
                                 </select>
                             </div>
                         </div>
                     </div>
                 </div>
-`);
+`, (ctx) => ({
+    outboundOptions: createOutboundOptions(ctx),
+}));
 
 const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-show="currentTab==='dns'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -3287,11 +3366,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
         const options = ['Sec-WebSocket-Protocol'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: computed(() => {
-        const builtins = ['direct', 'block', 'dns-out'];
-        const custom = ctx.remoteOutbounds.value.map((item) => item.tag).filter(Boolean);
-        return Array.from(new Set([...builtins, ...custom]));
-    }),
+    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
     inboundTypeOptions: [
         { type: 'vless', label: 'VLESS', buttonClass: 'bg-indigo-600 hover:bg-indigo-500' },
@@ -3499,7 +3574,6 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                 <div class="flex items-center gap-2 ml-auto">
                                     <span class="text-xs text-gray-700 font-bold">全局下载出站:</span>
                                     <select v-model="settings.rule_set_download_detour" @change="syncRuleSetDownloadDetours()" class="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs outline-none font-bold text-indigo-700 shadow-sm">
-                                        <option value="direct">direct</option>
                                         <option v-for="item in outboundOptions" :key="'global-'+item" :value="item">{{ item }}</option>
                                     </select>
                                 </div>
@@ -3744,11 +3818,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
         const options = ['native', 'quic'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: computed(() => {
-        const builtins = ['direct', 'block', 'dns-out'];
-        const custom = ctx.remoteOutbounds.value.map((item) => item.tag).filter(Boolean);
-        return Array.from(new Set([...builtins, ...custom]));
-    }),
+    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
     availableInboundTags: computed(() => ctx.serverInbounds.value.map((item) => item.tag).filter(Boolean)),
     protocolOptions: ['dns', 'http', 'tls', 'quic', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp'],
