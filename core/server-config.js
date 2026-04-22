@@ -1,4 +1,4 @@
-const { computed } = window.Vue;
+const { computed, nextTick, watch } = window.Vue;
 
 const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
@@ -620,6 +620,195 @@ export function setupServerConfigCore(ctx) {
         }, 2);
     });
 
+    let jsonScrollTimer = null;
+
+    const findLineIndex = (lines, matcher) => {
+        if (!matcher) return -1;
+        if (typeof matcher === 'function') return lines.findIndex((line, index) => matcher(line, index, lines));
+        return lines.findIndex((line) => line.includes(matcher));
+    };
+
+    const findFirstMatchingLineIndex = (lines, matchers = []) => {
+        for (const matcher of matchers) {
+            const lineIndex = findLineIndex(lines, matcher);
+            if (lineIndex !== -1) return lineIndex;
+        }
+        return -1;
+    };
+
+    const findNthMatchingLineIndex = (lines, matcher, occurrence = 0) => {
+        let seen = 0;
+        for (let index = 0; index < lines.length; index += 1) {
+            if (!matcher(lines[index], index, lines)) continue;
+            if (seen === occurrence) return index;
+            seen += 1;
+        }
+        return -1;
+    };
+
+    const scrollJsonToLineIndex = async (lineIndex, { offset = 0, align = 0.5 } = {}) => {
+        await nextTick();
+        const el = ctx.jsonContainer.value;
+        const text = ctx.generatedJson?.value;
+        if (!el || !text) return;
+        const lines = text.split('\n');
+        if (lineIndex < 0 || lineIndex >= lines.length) return;
+        const lineHeight = el.scrollHeight / Math.max(lines.length, 1) || 20;
+        const targetLine = Math.max(0, Math.min(lines.length - 1, lineIndex + offset));
+        const rawTop = targetLine * lineHeight - el.clientHeight * align;
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+        el.scrollTo({
+            top: Math.max(0, Math.min(maxTop, rawTop)),
+            behavior: 'smooth',
+        });
+    };
+
+    const firstListValue = (value) => parseList(value)[0] || '';
+
+    const resolveRouteRuleLineIndex = (lines, rule) => {
+        const sourceIndex = ctx.routeRules.value.indexOf(rule);
+        if (sourceIndex === -1) return -1;
+        const builtRules = ctx.routeRules.value.map(buildRouteRule).filter(Boolean);
+        if (!buildRouteRule(rule)) return -1;
+        const occurrence = ctx.routeRules.value
+            .slice(0, sourceIndex + 1)
+            .map(buildRouteRule)
+            .filter(Boolean)
+            .length - 1;
+        if (occurrence < 0 || occurrence >= builtRules.length) return -1;
+        const actionLineIndex = findNthMatchingLineIndex(lines, (line) => line.includes('"action": '), occurrence);
+        return actionLineIndex === -1 ? -1 : Math.max(0, actionLineIndex - 1);
+    };
+
+    const buildJsonScrollRequest = (type, payload = null) => {
+        if (type === 'log') return { matchers: ['"log": {'] };
+        if (type === 'dns-root') return { matchers: ['"dns": {'] };
+        if (type === 'inbounds-root') return { matchers: ['"inbounds": ['] };
+        if (type === 'outbounds-root') return { matchers: ['"outbounds": ['] };
+        if (type === 'route-root') return { matchers: ['"route": {'] };
+        if (type === 'rule-sets-root') return { matchers: ['"rule_set": [', '"route": {'] };
+        if (type === 'route-rules-root') return { matchers: ['"rules": [', '"route": {'] };
+
+        if (type === 'dns-server') {
+            return {
+                matchers: [
+                    payload?.tag ? `"tag": ${JSON.stringify(payload.tag)}` : '',
+                    payload?.server ? `"server": ${JSON.stringify(payload.server)}` : '',
+                ],
+                fallbackMatchers: ['"servers": [', '"dns": {'],
+            };
+        }
+
+        if (type === 'inbound') {
+            return {
+                matchers: [
+                    payload?.tag ? `"tag": ${JSON.stringify(payload.tag)}` : '',
+                ],
+                fallbackMatchers: ['"inbounds": ['],
+            };
+        }
+
+        if (type === 'remote-outbound') {
+            return {
+                matchers: [
+                    payload?.tag ? `"tag": ${JSON.stringify(payload.tag)}` : '',
+                    payload?.server ? `"server": ${JSON.stringify(payload.server)}` : '',
+                ],
+                fallbackMatchers: ['"outbounds": ['],
+            };
+        }
+
+        if (type === 'rule-set') {
+            return {
+                matchers: [
+                    payload?.tag ? `"tag": ${JSON.stringify(payload.tag)}` : '',
+                    payload?.url ? `"url": ${JSON.stringify(payload.url)}` : '',
+                    payload?.path ? `"path": ${JSON.stringify(payload.path)}` : '',
+                ],
+                fallbackMatchers: ['"rule_set": [', '"route": {'],
+            };
+        }
+
+        if (type === 'route-rule') {
+            const firstValue = firstListValue(payload?.match_value);
+            const valueMatcher = firstValue ? JSON.stringify(firstValue) : '';
+            return {
+                lineIndexResolver: (lines) => resolveRouteRuleLineIndex(lines, payload),
+                matchers: [valueMatcher],
+                fallbackMatchers: ['"rules": [', '"route": {'],
+            };
+        }
+
+        return null;
+    };
+
+    const scrollJsonToRequest = async (type, payload = null) => {
+        const request = buildJsonScrollRequest(type, payload);
+        await nextTick();
+        const text = ctx.generatedJson?.value;
+        if (!request || !text) return;
+        const lines = text.split('\n');
+        let lineIndex = typeof request.lineIndexResolver === 'function' ? request.lineIndexResolver(lines) : -1;
+        if (lineIndex === -1) lineIndex = findFirstMatchingLineIndex(lines, request.matchers);
+        if (lineIndex === -1) lineIndex = findFirstMatchingLineIndex(lines, request.fallbackMatchers);
+        if (lineIndex === -1) return;
+        await scrollJsonToLineIndex(lineIndex);
+    };
+
+    const queueJsonScrollTo = (type, payload = null) => {
+        clearTimeout(jsonScrollTimer);
+        jsonScrollTimer = setTimeout(() => {
+            scrollJsonToRequest(type, payload);
+        }, 70);
+    };
+
+    const wrapInsertMethod = (name, resolver) => {
+        if (typeof ctx[name] !== 'function') return;
+        const original = ctx[name];
+        ctx[name] = (...args) => {
+            const result = original(...args);
+            const target = resolver(...args);
+            if (target?.type) queueJsonScrollTo(target.type, target.payload);
+            return result;
+        };
+    };
+
+    wrapInsertMethod('addDnsServer', () => ({
+        type: 'dns-server',
+        payload: ctx.dnsList.value[ctx.dnsList.value.length - 1] || null,
+    }));
+    wrapInsertMethod('addInbound', (_, placement = 'bottom') => ({
+        type: 'inbound',
+        payload: placement === 'top' ? ctx.serverInbounds.value[0] : ctx.serverInbounds.value[ctx.serverInbounds.value.length - 1],
+    }));
+    wrapInsertMethod('addRemoteOutbound', () => ({
+        type: 'remote-outbound',
+        payload: ctx.remoteOutbounds.value[ctx.remoteOutbounds.value.length - 1] || null,
+    }));
+    wrapInsertMethod('addRuleSet', () => ({
+        type: 'rule-set',
+        payload: ctx.ruleSets.value[ctx.ruleSets.value.length - 1] || null,
+    }));
+    wrapInsertMethod('addRuleSetTemplate', (tag) => ({
+        type: 'rule-set',
+        payload: ctx.ruleSets.value.find((item) => item.tag === tag) || null,
+    }));
+    wrapInsertMethod('addRouteRule', () => ({
+        type: 'route-rule',
+        payload: ctx.routeRules.value[ctx.routeRules.value.length - 1] || null,
+    }));
+
+    watch(ctx.currentTab, (tab) => {
+        const tabTargetMap = {
+            basic: 'log',
+            dns: 'dns-root',
+            inbounds: 'inbounds-root',
+            route: 'outbounds-root',
+            share: 'inbounds-root',
+        };
+        if (tabTargetMap[tab]) queueJsonScrollTo(tabTargetMap[tab]);
+    });
+
     const getFullState = () => ({
         _version: '1.12-server',
         _exported: new Date().toISOString(),
@@ -633,6 +822,8 @@ export function setupServerConfigCore(ctx) {
 
     Object.assign(ctx, {
         generatedJson,
+        queueJsonScrollTo,
+        scrollJsonToRequest,
         getFullState,
     });
 }
