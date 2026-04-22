@@ -1,32 +1,18 @@
-import { createBaseState } from './core/state.js';
-import { setupConfigCore } from './core/config.js';
-import { setupImportExportCore } from './core/import-export.js';
-import { setupStorageCore } from './core/storage.js';
-import { setupDnsModule } from './modules/dns.js';
-import { setupGroupsModule } from './modules/groups.js';
-import { setupNodesModule } from './modules/nodes.js';
-import { setupProvidersModule } from './modules/providers.js';
-import { setupRulesModule } from './modules/rules.js';
-import { setupTproxyModule } from './modules/tproxy.js';
-import { setupTunModule } from './modules/tun.js';
-import { registerUIComponents } from './ui/register-components.js';
+import { createServerState } from './core/server-state.js';
+import { setupServerConfigCore } from './core/server-config.js';
+import { setupServerImportExportCore } from './core/server-import-export.js';
+import { setupServerStorageCore } from './core/server-storage.js';
+import { registerServerUIComponents } from './ui/server-register-components.js';
 
 const { createApp, provide } = window.Vue;
 
 const app = createApp({
     setup() {
-        const ctx = createBaseState();
+        const ctx = createServerState();
 
-        setupDnsModule(ctx);
-        setupTunModule(ctx);
-        setupNodesModule(ctx);
-        setupGroupsModule(ctx);
-        setupRulesModule(ctx);
-        setupProvidersModule(ctx);
-        setupTproxyModule(ctx);
-        setupConfigCore(ctx);
-        setupImportExportCore(ctx);
-        setupStorageCore(ctx);
+        setupServerConfigCore(ctx);
+        setupServerImportExportCore(ctx);
+        setupServerStorageCore(ctx);
 
         provide('ctx', ctx);
 
@@ -34,5 +20,5 @@ const app = createApp({
     },
 });
 
-registerUIComponents(app);
+registerServerUIComponents(app);
 app.mount('#app');
