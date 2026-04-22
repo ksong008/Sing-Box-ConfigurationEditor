@@ -8,6 +8,11 @@ const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     dns: 'hijack-dns',
     'dns-out': 'hijack-dns',
 });
+const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
+    '2022-blake3-aes-128-gcm': 16,
+    '2022-blake3-aes-256-gcm': 32,
+    '2022-blake3-chacha20-poly1305': 32,
+});
 
 export function setupServerConfigCore(ctx) {
     const parseOptionalInteger = (value) => {
@@ -45,6 +50,27 @@ export function setupServerConfigCore(ctx) {
             action,
             outbound,
         };
+    };
+    const getShadowsocks2022KeyLength = (method) => SHADOWSOCKS_2022_KEY_BYTES[String(method || '').trim()] || null;
+    const getBase64DecodedLength = (value) => {
+        const source = String(value || '').trim();
+        if (!source) return null;
+        if (!/^[A-Za-z0-9+/=]+$/.test(source)) return null;
+        try {
+            return atob(source).length;
+        } catch {
+            return null;
+        }
+    };
+    const isValidShadowsocks2022Password = (method, password) => {
+        const expectedLength = getShadowsocks2022KeyLength(method);
+        if (!expectedLength) return true;
+        return getBase64DecodedLength(password) === expectedLength;
+    };
+    const buildShadowsocks2022PasswordError = (label, method) => {
+        const expectedLength = getShadowsocks2022KeyLength(method);
+        if (!expectedLength) return '';
+        return `${label} 使用 ${method} 时，password 必须是 ${expectedLength} 字节随机密钥的 Base64 编码`;
     };
 
     const parseHeadersText = (value) => {
@@ -648,6 +674,53 @@ export function setupServerConfigCore(ctx) {
             return value;
         }, 2);
     });
+    const runtimeValidationErrors = computed(() => {
+        const errors = [];
+
+        ctx.serverInbounds.value.forEach((inbound, inboundIndex) => {
+            if (inbound?.type !== 'shadowsocks') return;
+            const inboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
+            const method = inbound.ss_method || '2022-blake3-aes-128-gcm';
+            if (!getShadowsocks2022KeyLength(method)) return;
+
+            if (inbound.ss_mode === 'multi-user') {
+                (Array.isArray(inbound.users) ? inbound.users : []).forEach((user, userIndex) => {
+                    if (!String(user?.password || '').trim()) return;
+                    if (isValidShadowsocks2022Password(method, user.password)) return;
+                    const userLabel = user?.name ? `用户 "${user.name}"` : `用户 #${userIndex + 1}`;
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${userLabel}`, method));
+                });
+                return;
+            }
+
+            if (inbound.ss_mode === 'relay') {
+                (Array.isArray(inbound.ss_destinations) ? inbound.ss_destinations : []).forEach((destination, destinationIndex) => {
+                    if (!String(destination?.password || '').trim()) return;
+                    if (isValidShadowsocks2022Password(method, destination.password)) return;
+                    const destinationLabel = destination?.name ? `目标 "${destination.name}"` : `目标 #${destinationIndex + 1}`;
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${destinationLabel}`, method));
+                });
+                return;
+            }
+
+            if (!String(inbound.ss_password || '').trim()) return;
+            if (!isValidShadowsocks2022Password(method, inbound.ss_password)) {
+                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}"`, method));
+            }
+        });
+
+        ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
+            if (outbound?.type !== 'shadowsocks') return;
+            const method = outbound.method || '2022-blake3-aes-128-gcm';
+            if (!getShadowsocks2022KeyLength(method)) return;
+            if (!String(outbound.password || '').trim()) return;
+            if (isValidShadowsocks2022Password(method, outbound.password)) return;
+            const outboundTag = outbound.tag || `relay-${outboundIndex + 1}`;
+            errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+        });
+
+        return errors;
+    });
 
     let jsonScrollTimer = null;
 
@@ -851,6 +924,7 @@ export function setupServerConfigCore(ctx) {
 
     Object.assign(ctx, {
         generatedJson,
+        runtimeValidationErrors,
         queueJsonScrollTo,
         scrollJsonToRequest,
         getFullState,

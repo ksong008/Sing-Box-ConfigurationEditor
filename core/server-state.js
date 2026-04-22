@@ -12,6 +12,11 @@ const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     dns: 'hijack-dns',
     'dns-out': 'hijack-dns',
 });
+const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
+    '2022-blake3-aes-128-gcm': 16,
+    '2022-blake3-aes-256-gcm': 32,
+    '2022-blake3-chacha20-poly1305': 32,
+});
 
 const dnsHeadersToText = (headers) => {
     if (!headers || typeof headers !== 'object') return '';
@@ -59,6 +64,34 @@ const bytesToUuidString = (bytes) => {
 
 export function createServerState() {
     const generateId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+    const getShadowsocks2022KeyBytes = (method) => SHADOWSOCKS_2022_KEY_BYTES[String(method || '').trim()] || null;
+    const isShadowsocks2022Method = (method) => getShadowsocks2022KeyBytes(method) !== null;
+    const generateShadowsocks2022Key = (method) => {
+        const keyBytes = getShadowsocks2022KeyBytes(method);
+        if (!keyBytes || !crypto?.getRandomValues) return '';
+        const randomBytes = new Uint8Array(keyBytes);
+        crypto.getRandomValues(randomBytes);
+        let binary = '';
+        randomBytes.forEach((byte) => {
+            binary += String.fromCharCode(byte);
+        });
+        return btoa(binary);
+    };
+    const fillGeneratedShadowsocks2022Key = (target, field, method, label = 'SS-2022 密钥') => {
+        const keyBytes = getShadowsocks2022KeyBytes(method);
+        if (!keyBytes) {
+            showToast('当前仅 SS-2022 方法支持一键生成密钥', 'warn');
+            return;
+        }
+        if (!target || typeof target !== 'object') return;
+        const generated = generateShadowsocks2022Key(method);
+        if (!generated) {
+            showToast('当前环境不支持生成随机密钥', 'err');
+            return;
+        }
+        target[field] = generated;
+        showToast(`${label} 已生成（${keyBytes} 字节 Base64）`, 'ok');
+    };
     const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
         const rawTag = String(value || '').trim();
         if (!rawTag) return allowEmpty ? '' : fallback;
@@ -769,6 +802,8 @@ export function createServerState() {
         showToast,
         showConfirm,
         copyToClipboard,
+        isShadowsocks2022Method,
+        fillGeneratedShadowsocks2022Key,
         copyText,
         copyIcon,
         tabs,

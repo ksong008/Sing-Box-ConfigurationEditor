@@ -90,6 +90,13 @@ export function setupServerImportExportCore(ctx) {
         ctx.panelExportFilename.value = 'singbox-server-panel-config.json';
         ctx.runtimeExportFilename.value = 'server-config.json';
     };
+    const ensureRuntimeExportAllowed = ({ reveal = false } = {}) => {
+        const errors = Array.isArray(ctx.runtimeValidationErrors?.value) ? ctx.runtimeValidationErrors.value : [];
+        if (errors.length === 0) return true;
+        ctx.showToast(`运行配置校验未通过：${errors[0]}`, 'err', 5200);
+        if (reveal) openImportExport('export');
+        return false;
+    };
 
     const saveJsonFile = async (content, nameRef, fallbackName, handleType, successMessage) => {
         const filename = sanitizeFilename(nameRef.value, fallbackName);
@@ -299,6 +306,7 @@ export function setupServerImportExportCore(ctx) {
     };
 
     const doExportRuntimeDownload = async () => {
+        if (!ensureRuntimeExportAllowed()) return;
         await saveJsonFile(ctx.generatedJson.value, ctx.runtimeExportFilename, 'server-config.json', 'runtime', supportsNativeFileSave ? '服务端运行配置已保存到本地' : '服务端运行配置已下载');
     };
 
@@ -308,6 +316,7 @@ export function setupServerImportExportCore(ctx) {
     };
 
     const doExportRuntimeCopy = async () => {
+        if (!ensureRuntimeExportAllowed()) return;
         const ok = await ctx.copyToClipboard(ctx.generatedJson.value);
         ctx.showToast(ok ? '服务端运行配置已复制到剪贴板！' : '复制失败，请手动复制', ok ? 'ok' : 'err');
     };
@@ -320,6 +329,7 @@ export function setupServerImportExportCore(ctx) {
         doExportRuntimeCopy,
         doImportFile,
         doImportText,
+        ensureRuntimeExportAllowed,
         supportsNativeFileSave,
         resetExportFilenames,
     });

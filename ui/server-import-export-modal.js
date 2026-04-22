@@ -24,6 +24,12 @@ export const ImportExportModal = {
                             <i :class="supportsNativeFileSave ? 'fas fa-hdd mr-2' : 'fas fa-download mr-2'"></i>{{ supportsNativeFileSave ? '当前浏览器支持直接写入本地文件。首次保存时选择路径，之后同名保存会先确认是否覆盖。' : '当前浏览器不支持直接写入本地文件，将自动回退为普通下载。' }}
                         </p>
                     </div>
+                    <div v-if="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 shrink-0">
+                        <div class="text-sm font-bold text-red-700 mb-2"><i class="fas fa-triangle-exclamation mr-2"></i>运行配置校验未通过</div>
+                        <ul class="list-disc pl-5 space-y-1 text-xs text-red-700 leading-6">
+                            <li v-for="(error, index) in runtimeValidationErrors" :key="index">{{ error }}</li>
+                        </ul>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
                         <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                             <label class="block text-[10px] font-black text-emerald-700 uppercase mb-2 tracking-wider">面板配置文件名</label>
@@ -33,12 +39,12 @@ export const ImportExportModal = {
                         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <label class="block text-[10px] font-black text-blue-700 uppercase mb-2 tracking-wider">运行配置文件名</label>
                             <input v-model="runtimeExportFilename" placeholder="server-config.json" class="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm outline-none font-mono text-blue-700 focus:ring-1 focus:border-blue-400">
-                            <button @click="doExportRuntimeDownload" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i :class="supportsNativeFileSave ? 'fas fa-save mr-2' : 'fas fa-file-code mr-2'"></i>{{ supportsNativeFileSave ? '保存运行配置到本地' : '下载运行配置' }}</button>
+                            <button @click="doExportRuntimeDownload" :disabled="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i :class="supportsNativeFileSave ? 'fas fa-save mr-2' : 'fas fa-file-code mr-2'"></i>{{ supportsNativeFileSave ? '保存运行配置到本地' : '下载运行配置' }}</button>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
                         <button @click="doExportCopy" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制面板配置</button>
-                        <button @click="doExportRuntimeCopy" class="bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制运行配置</button>
+                        <button @click="doExportRuntimeCopy" :disabled="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="bg-sky-50 hover:bg-sky-100 disabled:bg-sky-100/60 disabled:text-sky-400 disabled:cursor-not-allowed border border-sky-200 text-sky-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制运行配置</button>
                     </div>
                     <textarea :value="generatedJson" readonly class="flex-1 w-full p-5 text-[13px] leading-relaxed font-mono bg-[#1e1e1e] text-green-400 border-0 rounded-xl outline-none resize-none dark-scroll shadow-inner"></textarea>
                 </div>
