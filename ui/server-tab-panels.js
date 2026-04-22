@@ -156,7 +156,14 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法 (Method)</label><select v-model="inbound.ss_method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in ssMethodOptions(inbound.ss_method)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="inbound.ss_network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default (tcp+udp)</option><option v-for="item in ssNetworkOptions(inbound.ss_network)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">模式</label><select v-model="inbound.ss_mode" @change="syncShadowsocksMode(inbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="single">single-user</option><option value="multi-user">multi-user</option><option value="relay">relay</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主密码</label><input v-model="inbound.ss_password" placeholder="single/relay 模式常用" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主密码</label>
+                                                <div class="flex gap-2">
+                                                    <input v-model="inbound.ss_password" placeholder="single/relay 模式常用" class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                    <button v-if="isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(inbound, 'ss_password', inbound.ss_method, '主密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成密钥</button>
+                                                </div>
+                                                <div v-if="isShadowsocks2022Method(inbound.ss_method)" class="text-[11px] text-gray-500 mt-1">SS-2022 需要 Base64 编码随机密钥。</div>
+                                            </div>
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.ss_managed" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">托管模式 (Managed)</span></label></div>
                                             <div class="text-[11px] text-gray-500 leading-5">multi-user 使用 users；relay 使用 destinations；single-user 使用主密码。</div>
                                         </div>
@@ -225,7 +232,13 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">名称</label><input v-model="destination.name" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="destination.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="destination.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label><input v-model="destination.password" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                                <div>
+                                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
+                                                    <div class="flex gap-2">
+                                                        <input v-model="destination.password" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                        <button v-if="isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(destination, 'password', inbound.ss_method, '中继目标密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
+                                                    </div>
+                                                </div>
                                                 <div class="col-span-2 flex justify-end"><button @click="removeSsDestination(inbound, dIdx)" class="text-xs bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 border border-red-200 font-bold transition"><i class="fas fa-trash-alt mr-1"></i>删除目标</button></div>
                                             </div>
                                         </div>
@@ -247,7 +260,13 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                                     </div>
                                                     <div class="text-[11px] text-gray-500 mt-1">默认先给随机 UUID；需要时可点击按钮按名称生成稳定 UUID。</div>
                                                 </div>
-                                                <div v-if="['trojan','hysteria2','tuic','anytls','shadowtls','shadowsocks'].includes(inbound.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label><input v-model="user.password" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                                <div v-if="['trojan','hysteria2','tuic','anytls','shadowtls','shadowsocks'].includes(inbound.type)">
+                                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
+                                                    <div class="flex gap-2">
+                                                        <input v-model="user.password" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono">
+                                                        <button v-if="inbound.type==='shadowsocks' && isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(user, 'password', inbound.ss_method, user.name ? `用户 ${user.name} 密码` : '用户密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
+                                                    </div>
+                                                </div>
                                                 <div v-if="inbound.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">流控 (Flow)</label><select v-model="user.flow" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></div>
                                                 <div v-if="inbound.type==='vmess'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">额外 ID (Alter ID)</label><select v-model.number="user.alterId" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option :value="0">0</option><option :value="1">1</option></select></div>
                                                 <div v-if="inbound.type==='hysteria'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证方式</label><select v-model="user.auth_mode" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="plain">auth_str</option><option value="base64">auth</option></select></div>
@@ -511,7 +530,14 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <template v-if="outbound.type==='shadowsocks'">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法 (Method)</label><select v-model="outbound.method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in ssMethodOptions(outbound.method)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default (tcp+udp)</option><option v-for="item in ssNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div class="col-span-2">
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                                <div class="flex gap-2">
+                                                    <input v-model="outbound.password" class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                    <button v-if="isShadowsocks2022Method(outbound.method)" @click="fillGeneratedShadowsocks2022Key(outbound, 'password', outbound.method, outbound.tag ? `${outbound.tag} 密钥` : '远端出站密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成密钥</button>
+                                                </div>
+                                                <div v-if="isShadowsocks2022Method(outbound.method)" class="text-[11px] text-gray-500 mt-1">SS-2022 出站密码需要和远端服务端方法完全对应。</div>
+                                            </div>
                                         </template>
 
                                         <template v-if="outbound.type==='hysteria2'">

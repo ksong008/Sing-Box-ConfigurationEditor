@@ -82,6 +82,7 @@ export function setupServerStorageCore(ctx) {
     };
 
     const copyConfig = async () => {
+        if (ctx.ensureRuntimeExportAllowed && !ctx.ensureRuntimeExportAllowed({ reveal: true })) return;
         ctx.copyIcon.value = 'fas fa-spinner fa-spin';
         ctx.copyText.value = '复制中...';
         const ok = await ctx.copyToClipboard(ctx.generatedJson.value);
