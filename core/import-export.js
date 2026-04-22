@@ -675,6 +675,20 @@ export function setupImportExportCore(ctx) {
         return ctx.migrateRule(panelRule);
     };
 
+    const isGeneratedHijackDnsRule = (rule = {}) => {
+        if (!rule || rule.action !== 'hijack-dns') return false;
+        const inbound = toCsv(rule.inbound);
+        const network = toCsv(rule.network);
+        const protocol = toCsv(rule.protocol);
+        const port = toCsv(rule.port);
+
+        if (protocol === 'dns' && !inbound && !network && !port) return true;
+        if (inbound === 'tun-in' && protocol === 'dns' && !network && !port) return true;
+        if (inbound === 'dns-in' && !protocol && !network && !port) return true;
+        if (inbound === 'tproxy-in' && network === 'tcp, udp' && port === '53' && !protocol) return true;
+        return false;
+    };
+
     const applyImport = (data) => {
         if (!data || typeof data !== 'object') throw new Error('无效的 JSON 格式');
         resetPanelStateToDefaults();
@@ -938,7 +952,7 @@ export function setupImportExportCore(ctx) {
                 ctx.settings.value.sniff_timeout = rule.timeout || ctx.settings.value.sniff_timeout;
                 return;
             }
-            if (rule.action === 'hijack-dns') {
+            if (isGeneratedHijackDnsRule(rule)) {
                 ctx.settings.value.hijack_dns = true;
                 if (Array.isArray(rule.inbound) && rule.inbound.includes('dns-in')) {
                     ctx.tproxy.value.enabled = true;
