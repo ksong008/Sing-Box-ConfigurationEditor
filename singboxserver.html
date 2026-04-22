@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sing-Box Server Entry Redirect</title>
+    <title>Sing-Box Server v1.12 配置生成器</title>
     <!-- BUILD_VENDOR_ASSETS_START -->
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.tailwindcss.com">
@@ -87,31 +87,99 @@
         .confirm-box .btn-ok.safe:hover { background:#4338ca; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans antialiased min-h-screen">
-<div class="container mx-auto px-4 max-w-3xl py-10">
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-xl p-8">
-        <div class="flex items-start gap-4">
-            <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl shrink-0">
-                <i class="fas fa-right-long"></i>
-            </div>
-            <div class="flex-1">
-                <h1 class="text-2xl font-black text-gray-900 mb-3">入口已切换到 <code>singboxserver.html</code></h1>
-                <div class="text-sm leading-7 text-gray-600 whitespace-pre-line">
-                    当前 testserver 分支使用新的服务端入口文件：<code>singboxserver.html</code>。
+<body class="bg-gray-100 text-gray-800 font-sans antialiased h-screen flex flex-col overflow-hidden">
+<div id="toast-container"></div>
+<div id="app" v-cloak class="container mx-auto px-4 max-w-[1500px] py-6 flex flex-col flex-1 min-h-0 overflow-hidden">
 
-                    如果你是本地开发，请访问：
-                    <code>http://127.0.0.1:8000/singboxserver.html</code>
-                </div>
-                <div class="mt-6 flex flex-wrap gap-3">
-                    <a href="./singboxserver.html" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-sm transition">打开 singboxserver.html</a>
-                </div>
-            </div>
-        </div>
+    <import-export-modal></import-export-modal>
+
+    <app-header></app-header>
+
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 min-h-0">
+        <editor-panel></editor-panel>
+        <json-preview></json-preview>
     </div>
 </div>
-<script>
-    if (location.protocol !== 'file:') {
-        location.replace('./singboxserver.html');
+<script type="module">
+    const appRoot = document.getElementById('app');
+    const CLEARABLE_STORAGE_KEYS = ['singboxserver_web_config_v1_12_testserver', 'singbox_server_config_v1_12_testserver'];
+
+    const clearEditorCache = () => {
+        CLEARABLE_STORAGE_KEYS.forEach((key) => {
+            try {
+                localStorage.removeItem(key);
+            } catch {
+                // ignore localStorage errors
+            }
+        });
+    };
+
+    const renderBootMessage = (title, message, actions = []) => {
+        if (!appRoot) return;
+        appRoot.removeAttribute('v-cloak');
+        appRoot.innerHTML = `
+            <div class="min-h-full flex items-center justify-center">
+                <div class="w-full max-w-2xl bg-white border border-gray-200 rounded-2xl shadow-xl p-8">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fas fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h1 class="text-2xl font-black text-gray-900 mb-3">${title}</h1>
+                            <div class="text-sm leading-7 text-gray-600 whitespace-pre-line">${message}</div>
+                            <div class="mt-6 flex flex-wrap gap-3">
+                                ${actions.map((action) => `<button data-boot-action="${action.id}" class="${action.className}">${action.label}</button>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        actions.forEach((action) => {
+            const button = appRoot.querySelector(`[data-boot-action="${action.id}"]`);
+            if (button) button.addEventListener('click', action.onClick);
+        });
+    };
+
+    if (location.protocol === 'file:') {
+        renderBootMessage(
+            '当前文件不能直接双击打开',
+            '这是 testserver 分支的模块化开发版，使用 file:// 本地打开时，浏览器通常会拦截 ES modules，表现就是白屏。\n\n推荐做法：\n1. 在项目目录运行 python3 -m http.server 8000\n2. 浏览器访问 http://127.0.0.1:8000/singboxserver.html\n\n如果你只是想离线直接打开，请使用打包后的单文件发布版。',
+            [
+                {
+                    id: 'reload-http-help',
+                    label: '我知道了',
+                    className: 'px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-sm transition',
+                    onClick: () => {},
+                },
+            ],
+        );
+    } else {
+        import('./main.js').catch((error) => {
+            console.error('[boot] failed to start app:', error);
+            renderBootMessage(
+                '编辑器启动失败',
+                '这通常是脚本加载异常，或者旧缓存把当前页面状态带崩了。\n\n你可以先清理本地缓存再重试；如果仍然失败，再看浏览器控制台里的报错。',
+                [
+                    {
+                        id: 'clear-cache-reload',
+                        label: '清理缓存并重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-bold shadow-sm transition',
+                        onClick: () => {
+                            clearEditorCache();
+                            location.reload();
+                        },
+                    },
+                    {
+                        id: 'plain-reload',
+                        label: '直接重载',
+                        className: 'px-5 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-bold shadow-sm transition',
+                        onClick: () => location.reload(),
+                    },
+                ],
+            );
+        });
     }
 </script>
 </body>

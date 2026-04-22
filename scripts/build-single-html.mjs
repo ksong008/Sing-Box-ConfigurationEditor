@@ -6,10 +6,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const htmlPath = path.join(rootDir, 'singbox.html');
+const entryHtmlName = fs.existsSync(path.join(rootDir, 'singboxserver.html')) ? 'singboxserver.html' : 'singbox.html';
+const htmlPath = path.join(rootDir, entryHtmlName);
 const mainPath = path.join(rootDir, 'main.js');
 const vendorDir = path.join(rootDir, 'vendor');
-const outputPath = path.resolve(process.argv[2] || path.join(rootDir, 'dist', 'singbox.html'));
+const outputPath = path.resolve(process.argv[2] || path.join(rootDir, 'dist', entryHtmlName));
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const mainSource = fs.readFileSync(mainPath, 'utf8');
@@ -195,7 +196,7 @@ const bundledCode = `window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {}
 const bundledScript = `<script>\n${escapeInlineScript(bundledCode)}\n</script>`;
 
 if (!vendorBlockPattern.test(html)) {
-    throw new Error('Failed to find vendor asset block in singbox.html');
+    throw new Error(`Failed to find vendor asset block in ${entryHtmlName}`);
 }
 
 let packedHtml = html.replace(vendorBlockPattern, () => buildVendorBlock());
@@ -204,11 +205,11 @@ if (packedHtml.includes(externalEntryScriptTag)) {
 } else if (inlineEntryScriptPattern.test(packedHtml)) {
     packedHtml = packedHtml.replace(inlineEntryScriptPattern, () => bundledScript);
 } else {
-    throw new Error('Failed to find module entry script in singbox.html');
+    throw new Error(`Failed to find module entry script in ${entryHtmlName}`);
 }
 
 if (packedHtml === html || packedHtml.includes(externalEntryScriptTag) || inlineEntryScriptPattern.test(packedHtml)) {
-    throw new Error('Failed to replace module entry script in singbox.html');
+    throw new Error(`Failed to replace module entry script in ${entryHtmlName}`);
 }
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });

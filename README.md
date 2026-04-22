@@ -1,10 +1,10 @@
-# Sing-Box Configuration Editor
+# Sing-Box Server Configuration Editor
 
-A simple HTML-based configuration editor for `sing-box` settings.
+A simple HTML-based server-side configuration editor for `sing-box` settings.
 
 ## Overview
 
-This repository contains the frontend and supporting files for an editor that helps users create, modify, and export `sing-box` configuration files through a browser-based UI.
+This repository contains the frontend and supporting files for a server-side editor that helps users create, modify, and export `sing-box` configuration files through a browser-based UI.
 
 Current code structure:
 
@@ -30,14 +30,14 @@ ui/
   shared.js
   tab-panels.js
 main.js
-singbox.html
+singboxserver.html
 ```
 
 NOTE：sing-box v1.12 only
 
 ## Features
 
-- Browser-based editor for `sing-box` v1.12
+- Browser-based server-side editor for `sing-box` v1.12
 - Supports importing panel backup JSON and exporting both panel/runtime config JSON
 - Can build a fully self-contained single-file release HTML for offline use
 
@@ -56,11 +56,11 @@ NOTE：sing-box v1.12 only
    python3 -m http.server 8000
    ```
 
-3. Open `http://127.0.0.1:8000/singbox.html` in your browser
+3. Open `http://127.0.0.1:8000/singboxserver.html` in your browser
 
 ## Development
 
-- The page now uses browser ES modules, so opening `singbox.html` directly with `file://` is not recommended during development.
+- The page now uses browser ES modules, so opening `singboxserver.html` directly with `file://` is not recommended during development.
 - Keep shared state and cross-cutting logic in `core/`.
 - Put feature-specific logic in `modules/`.
 - Reusable Vue UI components live in `ui/`.
@@ -71,7 +71,7 @@ NOTE：sing-box v1.12 only
   node scripts/build-single-html.mjs
   ```
 
-- The generated `dist/singbox.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
+- The generated `dist/singboxserver.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
 
 
 ## Usage

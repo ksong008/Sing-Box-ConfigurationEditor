@@ -1,7 +1,9 @@
 const { watch } = window.Vue;
 
 export function setupServerStorageCore(ctx) {
-    const STORAGE_KEY = 'singbox_server_config_v1_12_testserver';
+    const STORAGE_KEY = 'singboxserver_web_config_v1_12_testserver';
+    const LEGACY_STORAGE_KEYS = ['singbox_server_config_v1_12_testserver'];
+    const ALL_STORAGE_KEYS = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
 
     const updateStorageAgo = () => {
         if (!ctx.lastSavedAt.value) return;
@@ -31,19 +33,32 @@ export function setupServerStorageCore(ctx) {
 
     const loadLocalStorage = () => {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return false;
-            const state = JSON.parse(raw);
-            if (!state || typeof state !== 'object') return false;
-            if (state.settings) Object.assign(ctx.settings.value, state.settings);
+            for (const key of ALL_STORAGE_KEYS) {
+                const raw = localStorage.getItem(key);
+                if (!raw) continue;
+                const state = JSON.parse(raw);
+                if (!state || typeof state !== 'object') continue;
+                if (state.settings) Object.assign(ctx.settings.value, state.settings);
             if (Array.isArray(state.dnsList)) ctx.dnsList.value = state.dnsList.map((item, index) => ctx.normalizeDnsServer(item, index));
-            if (Array.isArray(state.serverInbounds)) ctx.serverInbounds.value = state.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
-            if (Array.isArray(state.routeRules)) ctx.routeRules.value = state.routeRules;
-            if (state._exported) {
-                ctx.lastSavedAt.value = state._exported;
-                updateStorageAgo();
+                if (Array.isArray(state.remoteOutbounds)) ctx.remoteOutbounds.value = state.remoteOutbounds.map((item, index) => ctx.normalizeRemoteOutbound(item, index));
+                if (Array.isArray(state.ruleSets)) ctx.ruleSets.value = state.ruleSets.map((item, index) => ctx.normalizeRuleSet(item, index));
+                if (Array.isArray(state.serverInbounds)) ctx.serverInbounds.value = state.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
+                if (Array.isArray(state.routeRules)) ctx.routeRules.value = state.routeRules.map((item, index) => ctx.normalizeRouteRule(item, index));
+                if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
+                if (state._exported) {
+                    ctx.lastSavedAt.value = state._exported;
+                    updateStorageAgo();
+                }
+                if (key !== STORAGE_KEY) {
+                    try {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                    } catch {
+                        // ignore migration errors
+                    }
+                }
+                return true;
             }
-            return true;
+            return false;
         } catch {
             return false;
         }
@@ -51,7 +66,7 @@ export function setupServerStorageCore(ctx) {
 
     const clearLocalStorage = () => {
         ctx.showConfirm('确定要清除本地缓存吗？刷新页面后将恢复默认配置。', () => {
-            localStorage.removeItem(STORAGE_KEY);
+            ALL_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
             ctx.lastSavedAt.value = '';
             ctx.storageSavedAgo.value = '';
             ctx.showToast('本地缓存已清除', 'ok');
@@ -60,7 +75,7 @@ export function setupServerStorageCore(ctx) {
 
     const resetConfig = () => {
         ctx.showConfirm('确定要重置服务端配置吗？此操作将清空当前内容并清除本地缓存。', () => {
-            localStorage.removeItem(STORAGE_KEY);
+            ALL_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
             location.reload();
         }, { title: '重置配置', okText: '重置并刷新' });
     };
@@ -83,6 +98,8 @@ export function setupServerStorageCore(ctx) {
     watch([
         ctx.settings,
         ctx.dnsList,
+        ctx.remoteOutbounds,
+        ctx.ruleSets,
         ctx.serverInbounds,
         ctx.routeRules,
     ], () => {
