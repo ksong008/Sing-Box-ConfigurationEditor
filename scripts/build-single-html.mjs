@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const entryHtmlName = fs.existsSync(path.join(rootDir, 'singboxserver.html')) ? 'singboxserver.html' : 'singbox.html';
+const entryHtmlName = 'singboxserver.html';
 const htmlPath = path.join(rootDir, entryHtmlName);
 const mainPath = path.join(rootDir, 'main.js');
 const vendorDir = path.join(rootDir, 'vendor');
