@@ -225,6 +225,11 @@ const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     dns: 'hijack-dns',
     'dns-out': 'hijack-dns',
 });
+const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
+    '2022-blake3-aes-128-gcm': 16,
+    '2022-blake3-aes-256-gcm': 32,
+    '2022-blake3-chacha20-poly1305': 32,
+});
 
 const dnsHeadersToText = (headers) => {
     if (!headers || typeof headers !== 'object') return '';
@@ -272,6 +277,34 @@ const bytesToUuidString = (bytes) => {
 
 function createServerState() {
     const generateId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+    const getShadowsocks2022KeyBytes = (method) => SHADOWSOCKS_2022_KEY_BYTES[String(method || '').trim()] || null;
+    const isShadowsocks2022Method = (method) => getShadowsocks2022KeyBytes(method) !== null;
+    const generateShadowsocks2022Key = (method) => {
+        const keyBytes = getShadowsocks2022KeyBytes(method);
+        if (!keyBytes || !crypto?.getRandomValues) return '';
+        const randomBytes = new Uint8Array(keyBytes);
+        crypto.getRandomValues(randomBytes);
+        let binary = '';
+        randomBytes.forEach((byte) => {
+            binary += String.fromCharCode(byte);
+        });
+        return btoa(binary);
+    };
+    const fillGeneratedShadowsocks2022Key = (target, field, method, label = 'SS-2022 密钥') => {
+        const keyBytes = getShadowsocks2022KeyBytes(method);
+        if (!keyBytes) {
+            showToast('当前仅 SS-2022 方法支持一键生成密钥', 'warn');
+            return;
+        }
+        if (!target || typeof target !== 'object') return;
+        const generated = generateShadowsocks2022Key(method);
+        if (!generated) {
+            showToast('当前环境不支持生成随机密钥', 'err');
+            return;
+        }
+        target[field] = generated;
+        showToast(`${label} 已生成（${keyBytes} 字节 Base64）`, 'ok');
+    };
     const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
         const rawTag = String(value || '').trim();
         if (!rawTag) return allowEmpty ? '' : fallback;
@@ -982,6 +1015,8 @@ function createServerState() {
         showToast,
         showConfirm,
         copyToClipboard,
+        isShadowsocks2022Method,
+        fillGeneratedShadowsocks2022Key,
         copyText,
         copyIcon,
         tabs,
@@ -1068,6 +1103,11 @@ const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     dns: 'hijack-dns',
     'dns-out': 'hijack-dns',
 });
+const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
+    '2022-blake3-aes-128-gcm': 16,
+    '2022-blake3-aes-256-gcm': 32,
+    '2022-blake3-chacha20-poly1305': 32,
+});
 
 function setupServerConfigCore(ctx) {
     const parseOptionalInteger = (value) => {
@@ -1105,6 +1145,27 @@ function setupServerConfigCore(ctx) {
             action,
             outbound,
         };
+    };
+    const getShadowsocks2022KeyLength = (method) => SHADOWSOCKS_2022_KEY_BYTES[String(method || '').trim()] || null;
+    const getBase64DecodedLength = (value) => {
+        const source = String(value || '').trim();
+        if (!source) return null;
+        if (!/^[A-Za-z0-9+/=]+$/.test(source)) return null;
+        try {
+            return atob(source).length;
+        } catch {
+            return null;
+        }
+    };
+    const isValidShadowsocks2022Password = (method, password) => {
+        const expectedLength = getShadowsocks2022KeyLength(method);
+        if (!expectedLength) return true;
+        return getBase64DecodedLength(password) === expectedLength;
+    };
+    const buildShadowsocks2022PasswordError = (label, method) => {
+        const expectedLength = getShadowsocks2022KeyLength(method);
+        if (!expectedLength) return '';
+        return `${label} 使用 ${method} 时，password 必须是 ${expectedLength} 字节随机密钥的 Base64 编码`;
     };
 
     const parseHeadersText = (value) => {
@@ -1708,6 +1769,53 @@ function setupServerConfigCore(ctx) {
             return value;
         }, 2);
     });
+    const runtimeValidationErrors = computed(() => {
+        const errors = [];
+
+        ctx.serverInbounds.value.forEach((inbound, inboundIndex) => {
+            if (inbound?.type !== 'shadowsocks') return;
+            const inboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
+            const method = inbound.ss_method || '2022-blake3-aes-128-gcm';
+            if (!getShadowsocks2022KeyLength(method)) return;
+
+            if (inbound.ss_mode === 'multi-user') {
+                (Array.isArray(inbound.users) ? inbound.users : []).forEach((user, userIndex) => {
+                    if (!String(user?.password || '').trim()) return;
+                    if (isValidShadowsocks2022Password(method, user.password)) return;
+                    const userLabel = user?.name ? `用户 "${user.name}"` : `用户 #${userIndex + 1}`;
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${userLabel}`, method));
+                });
+                return;
+            }
+
+            if (inbound.ss_mode === 'relay') {
+                (Array.isArray(inbound.ss_destinations) ? inbound.ss_destinations : []).forEach((destination, destinationIndex) => {
+                    if (!String(destination?.password || '').trim()) return;
+                    if (isValidShadowsocks2022Password(method, destination.password)) return;
+                    const destinationLabel = destination?.name ? `目标 "${destination.name}"` : `目标 #${destinationIndex + 1}`;
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${destinationLabel}`, method));
+                });
+                return;
+            }
+
+            if (!String(inbound.ss_password || '').trim()) return;
+            if (!isValidShadowsocks2022Password(method, inbound.ss_password)) {
+                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}"`, method));
+            }
+        });
+
+        ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
+            if (outbound?.type !== 'shadowsocks') return;
+            const method = outbound.method || '2022-blake3-aes-128-gcm';
+            if (!getShadowsocks2022KeyLength(method)) return;
+            if (!String(outbound.password || '').trim()) return;
+            if (isValidShadowsocks2022Password(method, outbound.password)) return;
+            const outboundTag = outbound.tag || `relay-${outboundIndex + 1}`;
+            errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+        });
+
+        return errors;
+    });
 
     let jsonScrollTimer = null;
 
@@ -1911,6 +2019,7 @@ function setupServerConfigCore(ctx) {
 
     Object.assign(ctx, {
         generatedJson,
+        runtimeValidationErrors,
         queueJsonScrollTo,
         scrollJsonToRequest,
         getFullState,
@@ -2012,6 +2121,13 @@ function setupServerImportExportCore(ctx) {
     const resetExportFilenames = () => {
         ctx.panelExportFilename.value = 'singbox-server-panel-config.json';
         ctx.runtimeExportFilename.value = 'server-config.json';
+    };
+    const ensureRuntimeExportAllowed = ({ reveal = false } = {}) => {
+        const errors = Array.isArray(ctx.runtimeValidationErrors?.value) ? ctx.runtimeValidationErrors.value : [];
+        if (errors.length === 0) return true;
+        ctx.showToast(`运行配置校验未通过：${errors[0]}`, 'err', 5200);
+        if (reveal) openImportExport('export');
+        return false;
     };
 
     const saveJsonFile = async (content, nameRef, fallbackName, handleType, successMessage) => {
@@ -2222,6 +2338,7 @@ function setupServerImportExportCore(ctx) {
     };
 
     const doExportRuntimeDownload = async () => {
+        if (!ensureRuntimeExportAllowed()) return;
         await saveJsonFile(ctx.generatedJson.value, ctx.runtimeExportFilename, 'server-config.json', 'runtime', supportsNativeFileSave ? '服务端运行配置已保存到本地' : '服务端运行配置已下载');
     };
 
@@ -2231,6 +2348,7 @@ function setupServerImportExportCore(ctx) {
     };
 
     const doExportRuntimeCopy = async () => {
+        if (!ensureRuntimeExportAllowed()) return;
         const ok = await ctx.copyToClipboard(ctx.generatedJson.value);
         ctx.showToast(ok ? '服务端运行配置已复制到剪贴板！' : '复制失败，请手动复制', ok ? 'ok' : 'err');
     };
@@ -2243,6 +2361,7 @@ function setupServerImportExportCore(ctx) {
         doExportRuntimeCopy,
         doImportFile,
         doImportText,
+        ensureRuntimeExportAllowed,
         supportsNativeFileSave,
         resetExportFilenames,
     });
@@ -2819,6 +2938,7 @@ function setupServerStorageCore(ctx) {
     };
 
     const copyConfig = async () => {
+        if (ctx.ensureRuntimeExportAllowed && !ctx.ensureRuntimeExportAllowed({ reveal: true })) return;
         ctx.copyIcon.value = 'fas fa-spinner fa-spin';
         ctx.copyText.value = '复制中...';
         const ok = await ctx.copyToClipboard(ctx.generatedJson.value);
@@ -2936,6 +3056,12 @@ const ImportExportModal = {
                             <i :class="supportsNativeFileSave ? 'fas fa-hdd mr-2' : 'fas fa-download mr-2'"></i>{{ supportsNativeFileSave ? '当前浏览器支持直接写入本地文件。首次保存时选择路径，之后同名保存会先确认是否覆盖。' : '当前浏览器不支持直接写入本地文件，将自动回退为普通下载。' }}
                         </p>
                     </div>
+                    <div v-if="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 shrink-0">
+                        <div class="text-sm font-bold text-red-700 mb-2"><i class="fas fa-triangle-exclamation mr-2"></i>运行配置校验未通过</div>
+                        <ul class="list-disc pl-5 space-y-1 text-xs text-red-700 leading-6">
+                            <li v-for="(error, index) in runtimeValidationErrors" :key="index">{{ error }}</li>
+                        </ul>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
                         <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                             <label class="block text-[10px] font-black text-emerald-700 uppercase mb-2 tracking-wider">面板配置文件名</label>
@@ -2945,12 +3071,12 @@ const ImportExportModal = {
                         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <label class="block text-[10px] font-black text-blue-700 uppercase mb-2 tracking-wider">运行配置文件名</label>
                             <input v-model="runtimeExportFilename" placeholder="server-config.json" class="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm outline-none font-mono text-blue-700 focus:ring-1 focus:border-blue-400">
-                            <button @click="doExportRuntimeDownload" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i :class="supportsNativeFileSave ? 'fas fa-save mr-2' : 'fas fa-file-code mr-2'"></i>{{ supportsNativeFileSave ? '保存运行配置到本地' : '下载运行配置' }}</button>
+                            <button @click="doExportRuntimeDownload" :disabled="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="mt-3 w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold shadow-sm"><i :class="supportsNativeFileSave ? 'fas fa-save mr-2' : 'fas fa-file-code mr-2'"></i>{{ supportsNativeFileSave ? '保存运行配置到本地' : '下载运行配置' }}</button>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
                         <button @click="doExportCopy" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制面板配置</button>
-                        <button @click="doExportRuntimeCopy" class="bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制运行配置</button>
+                        <button @click="doExportRuntimeCopy" :disabled="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="bg-sky-50 hover:bg-sky-100 disabled:bg-sky-100/60 disabled:text-sky-400 disabled:cursor-not-allowed border border-sky-200 text-sky-700 py-3 rounded-xl text-sm font-bold"><i class="fas fa-copy mr-2"></i>复制运行配置</button>
                     </div>
                     <textarea :value="generatedJson" readonly class="flex-1 w-full p-5 text-[13px] leading-relaxed font-mono bg-[#1e1e1e] text-green-400 border-0 rounded-xl outline-none resize-none dark-scroll shadow-inner"></textarea>
                 </div>
@@ -3000,6 +3126,12 @@ const JsonPreview = {
                 <span class="text-emerald-400 text-xs font-mono font-bold bg-emerald-400/10 px-3 py-1 rounded-md border border-emerald-400/20 shadow-sm"><i class="fas fa-sync-alt fa-spin mr-1.5 opacity-70"></i>实时同步</span>
             </div>
             <div class="flex-1 overflow-y-auto p-6 relative dark-scroll" ref="jsonContainer">
+                <div v-if="runtimeValidationErrors && runtimeValidationErrors.length > 0" class="mb-4 bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-200">
+                    <div class="text-sm font-bold mb-2"><i class="fas fa-triangle-exclamation mr-2"></i>运行配置校验未通过</div>
+                    <ul class="list-disc pl-5 space-y-1 text-xs leading-6">
+                        <li v-for="(error, index) in runtimeValidationErrors" :key="index">{{ error }}</li>
+                    </ul>
+                </div>
                 <pre class="text-[#d4d4d4] font-mono text-[13px] leading-relaxed whitespace-pre-wrap break-words">{{ generatedJson }}</pre>
             </div>
         </div>`,
@@ -3166,7 +3298,14 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法 (Method)</label><select v-model="inbound.ss_method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in ssMethodOptions(inbound.ss_method)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="inbound.ss_network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default (tcp+udp)</option><option v-for="item in ssNetworkOptions(inbound.ss_network)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">模式</label><select v-model="inbound.ss_mode" @change="syncShadowsocksMode(inbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="single">single-user</option><option value="multi-user">multi-user</option><option value="relay">relay</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主密码</label><input v-model="inbound.ss_password" placeholder="single/relay 模式常用" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主密码</label>
+                                                <div class="flex gap-2">
+                                                    <input v-model="inbound.ss_password" placeholder="single/relay 模式常用" class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                    <button v-if="isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(inbound, 'ss_password', inbound.ss_method, '主密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成密钥</button>
+                                                </div>
+                                                <div v-if="isShadowsocks2022Method(inbound.ss_method)" class="text-[11px] text-gray-500 mt-1">SS-2022 需要 Base64 编码随机密钥。</div>
+                                            </div>
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.ss_managed" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">托管模式 (Managed)</span></label></div>
                                             <div class="text-[11px] text-gray-500 leading-5">multi-user 使用 users；relay 使用 destinations；single-user 使用主密码。</div>
                                         </div>
@@ -3235,7 +3374,13 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">名称</label><input v-model="destination.name" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="destination.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="destination.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label><input v-model="destination.password" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                                <div>
+                                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
+                                                    <div class="flex gap-2">
+                                                        <input v-model="destination.password" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                        <button v-if="isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(destination, 'password', inbound.ss_method, '中继目标密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
+                                                    </div>
+                                                </div>
                                                 <div class="col-span-2 flex justify-end"><button @click="removeSsDestination(inbound, dIdx)" class="text-xs bg-red-50 text-red-600 px-3 py-2 rounded-lg hover:bg-red-100 border border-red-200 font-bold transition"><i class="fas fa-trash-alt mr-1"></i>删除目标</button></div>
                                             </div>
                                         </div>
@@ -3257,7 +3402,13 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                                     </div>
                                                     <div class="text-[11px] text-gray-500 mt-1">默认先给随机 UUID；需要时可点击按钮按名称生成稳定 UUID。</div>
                                                 </div>
-                                                <div v-if="['trojan','hysteria2','tuic','anytls','shadowtls','shadowsocks'].includes(inbound.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label><input v-model="user.password" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                                <div v-if="['trojan','hysteria2','tuic','anytls','shadowtls','shadowsocks'].includes(inbound.type)">
+                                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
+                                                    <div class="flex gap-2">
+                                                        <input v-model="user.password" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono">
+                                                        <button v-if="inbound.type==='shadowsocks' && isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(user, 'password', inbound.ss_method, user.name ? `用户 ${user.name} 密码` : '用户密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
+                                                    </div>
+                                                </div>
                                                 <div v-if="inbound.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">流控 (Flow)</label><select v-model="user.flow" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></div>
                                                 <div v-if="inbound.type==='vmess'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">额外 ID (Alter ID)</label><select v-model.number="user.alterId" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option :value="0">0</option><option :value="1">1</option></select></div>
                                                 <div v-if="inbound.type==='hysteria'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证方式</label><select v-model="user.auth_mode" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="plain">auth_str</option><option value="base64">auth</option></select></div>
@@ -3521,7 +3672,14 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <template v-if="outbound.type==='shadowsocks'">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法 (Method)</label><select v-model="outbound.method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in ssMethodOptions(outbound.method)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default (tcp+udp)</option><option v-for="item in ssNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div class="col-span-2">
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                                <div class="flex gap-2">
+                                                    <input v-model="outbound.password" class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono">
+                                                    <button v-if="isShadowsocks2022Method(outbound.method)" @click="fillGeneratedShadowsocks2022Key(outbound, 'password', outbound.method, outbound.tag ? `${outbound.tag} 密钥` : '远端出站密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成密钥</button>
+                                                </div>
+                                                <div v-if="isShadowsocks2022Method(outbound.method)" class="text-[11px] text-gray-500 mt-1">SS-2022 出站密码需要和远端服务端方法完全对应。</div>
+                                            </div>
                                         </template>
 
                                         <template v-if="outbound.type==='hysteria2'">
