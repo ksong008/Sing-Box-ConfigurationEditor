@@ -11,6 +11,14 @@ const createInjectedComponent = (name, template, extendSetup = null) => ({
     template,
 });
 
+const createOutboundOptions = (ctx) => computed(() => {
+    const reservedTags = new Set(['direct', 'block', 'dns', 'dns-out']);
+    const custom = ctx.remoteOutbounds.value
+        .map((item) => item.tag)
+        .filter((tag) => tag && !reservedTags.has(tag));
+    return Array.from(new Set(['direct', ...custom]));
+});
+
 const BasicTab = createInjectedComponent('ServerBasicTab', `                <div v-show="currentTab==='basic'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">基础设置</div>
@@ -28,15 +36,15 @@ const BasicTab = createInjectedComponent('ServerBasicTab', `                <div
                             <div @focusin.capture="queueJsonScrollTo('route-root')" @change.capture="queueJsonScrollTo('route-root')">
                                 <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认出站 (Final Outbound)</label>
                                 <select v-model="settings.route_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-bold text-indigo-700">
-                                    <option value="direct">direct</option>
-                                    <option value="block">block</option>
-                                    <option value="dns-out">dns-out</option>
+                                    <option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option>
                                 </select>
                             </div>
                         </div>
                     </div>
                 </div>
-`);
+`, (ctx) => ({
+    outboundOptions: createOutboundOptions(ctx),
+}));
 
 const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-show="currentTab==='dns'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -348,11 +356,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
         const options = ['Sec-WebSocket-Protocol'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: computed(() => {
-        const builtins = ['direct', 'block', 'dns-out'];
-        const custom = ctx.remoteOutbounds.value.map((item) => item.tag).filter(Boolean);
-        return Array.from(new Set([...builtins, ...custom]));
-    }),
+    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
     inboundTypeOptions: [
         { type: 'vless', label: 'VLESS', buttonClass: 'bg-indigo-600 hover:bg-indigo-500' },
@@ -560,7 +564,6 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                 <div class="flex items-center gap-2 ml-auto">
                                     <span class="text-xs text-gray-700 font-bold">全局下载出站:</span>
                                     <select v-model="settings.rule_set_download_detour" @change="syncRuleSetDownloadDetours()" class="px-3 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs outline-none font-bold text-indigo-700 shadow-sm">
-                                        <option value="direct">direct</option>
                                         <option v-for="item in outboundOptions" :key="'global-'+item" :value="item">{{ item }}</option>
                                     </select>
                                 </div>
@@ -805,11 +808,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
         const options = ['native', 'quic'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: computed(() => {
-        const builtins = ['direct', 'block', 'dns-out'];
-        const custom = ctx.remoteOutbounds.value.map((item) => item.tag).filter(Boolean);
-        return Array.from(new Set([...builtins, ...custom]));
-    }),
+    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
     availableInboundTags: computed(() => ctx.serverInbounds.value.map((item) => item.tag).filter(Boolean)),
     protocolOptions: ['dns', 'http', 'tls', 'quic', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp'],

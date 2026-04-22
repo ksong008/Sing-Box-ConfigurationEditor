@@ -44,6 +44,7 @@ export function setupServerStorageCore(ctx) {
                 if (Array.isArray(state.ruleSets)) ctx.ruleSets.value = state.ruleSets.map((item, index) => ctx.normalizeRuleSet(item, index));
                 if (Array.isArray(state.serverInbounds)) ctx.serverInbounds.value = state.serverInbounds.map((item, index) => ctx.normalizeInbound(item, index));
                 if (Array.isArray(state.routeRules)) ctx.routeRules.value = state.routeRules.map((item, index) => ctx.normalizeRouteRule(item, index));
+                if (ctx.sanitizeLegacySpecialOutbounds) ctx.sanitizeLegacySpecialOutbounds();
                 if (ctx.pruneLegacySeededDefaults) ctx.pruneLegacySeededDefaults();
                 if (state._exported) {
                     ctx.lastSavedAt.value = state._exported;

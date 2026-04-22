@@ -7,6 +7,11 @@ const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const SHAREABLE_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic'];
 const REMOTE_OUTBOUND_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'wireguard'];
+const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
+    block: 'reject',
+    dns: 'hijack-dns',
+    'dns-out': 'hijack-dns',
+});
 
 const dnsHeadersToText = (headers) => {
     if (!headers || typeof headers !== 'object') return '';
@@ -54,6 +59,29 @@ const bytesToUuidString = (bytes) => {
 
 export function createServerState() {
     const generateId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
+    const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
+        const rawTag = String(value || '').trim();
+        if (!rawTag) return allowEmpty ? '' : fallback;
+        const tag = rawTag;
+        return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const normalizeRouteActionState = (rule = {}) => {
+        const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
+        const outbound = sanitizeOutboundSelection(rule.outbound, 'direct');
+        if (action === 'route') {
+            const migratedAction = LEGACY_SPECIAL_OUTBOUND_ACTIONS[String(rule.outbound || '').trim()];
+            if (migratedAction) {
+                return {
+                    action: migratedAction,
+                    outbound: 'direct',
+                };
+            }
+        }
+        return {
+            action,
+            outbound,
+        };
+    };
 
     const showToast = (msg, type = 'ok', duration = 2800) => {
         const icons = {
@@ -211,22 +239,25 @@ export function createServerState() {
         path: typeof ruleSet.path === 'string' ? ruleSet.path : '',
         url: typeof ruleSet.url === 'string' ? ruleSet.url : '',
         update_interval: typeof ruleSet.update_interval === 'string' ? ruleSet.update_interval : '24h',
-        download_detour: typeof ruleSet.download_detour === 'string' ? ruleSet.download_detour : '',
+        download_detour: sanitizeOutboundSelection(ruleSet.download_detour, 'direct', { allowEmpty: true }),
         enabled: ruleSet.enabled === undefined ? true : !!ruleSet.enabled,
         collapsed: ruleSet.collapsed === undefined ? false : !!ruleSet.collapsed,
     });
 
-    const normalizeRouteRule = (rule = {}, index = 0) => ({
+    const normalizeRouteRule = (rule = {}, index = 0) => {
+        const normalizedRouteAction = normalizeRouteActionState(rule);
+        return {
         id: rule.id || generateId('rule'),
         enabled: rule.enabled === undefined ? true : !!rule.enabled,
         name: typeof rule.name === 'string' && rule.name ? rule.name : `自定义路由 ${index + 1}`,
         match_type: ['protocol', 'port', 'inbound', 'domain_suffix', 'rule_set'].includes(rule.match_type) ? rule.match_type : 'protocol',
         match_value: typeof rule.match_value === 'string' ? rule.match_value : '',
-        action: ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route',
-        outbound: typeof rule.outbound === 'string' && rule.outbound ? rule.outbound : 'direct',
+        action: normalizedRouteAction.action,
+        outbound: normalizedRouteAction.outbound,
         collapsed: rule.collapsed === undefined ? false : !!rule.collapsed,
         draggable: !!rule.draggable,
-    });
+        };
+    };
 
     const isBlankInboundUser = (user) => ![
         user?.name,
@@ -571,6 +602,13 @@ export function createServerState() {
     const draggedRouteRuleIndex = ref(null);
     const dragOverRouteRuleIndex = ref(null);
 
+    const sanitizeLegacySpecialOutbounds = () => {
+        settings.value.route_final = sanitizeOutboundSelection(settings.value.route_final, 'direct');
+        settings.value.rule_set_download_detour = sanitizeOutboundSelection(settings.value.rule_set_download_detour, 'direct');
+        ruleSets.value = ruleSets.value.map((item, index) => normalizeRuleSet(item, index));
+        routeRules.value = routeRules.value.map((item, index) => normalizeRouteRule(item, index));
+    };
+
     const addDnsServer = () => {
         dnsList.value.push(normalizeDnsServer({}, dnsList.value.length));
     };
@@ -635,7 +673,7 @@ export function createServerState() {
     const addRuleSet = (sourceType = 'remote') => {
         ruleSets.value.push(normalizeRuleSet({
             source_type: sourceType,
-            download_detour: settings.value.rule_set_download_detour || 'direct',
+            download_detour: settings.value.rule_set_download_detour,
         }, ruleSets.value.length));
     };
     const removeRuleSet = (index) => {
@@ -667,7 +705,7 @@ export function createServerState() {
     };
     const syncRuleSetDownloadDetours = () => {
         ruleSets.value.forEach((ruleSet) => {
-            if (ruleSet.source_type === 'remote') ruleSet.download_detour = settings.value.rule_set_download_detour || 'direct';
+            if (ruleSet.source_type === 'remote') ruleSet.download_detour = sanitizeOutboundSelection(settings.value.rule_set_download_detour, 'direct');
         });
     };
     const addRuleSetTemplate = (tag) => {
@@ -680,7 +718,7 @@ export function createServerState() {
             tag,
             source_type: 'remote',
             format: 'binary',
-            download_detour: settings.value.rule_set_download_detour || 'direct',
+            download_detour: settings.value.rule_set_download_detour,
         }, ruleSets.value.length);
         onRuleSetTagChange(ruleSet);
         ruleSets.value.push(ruleSet);
@@ -771,6 +809,7 @@ export function createServerState() {
         generateUserUuid,
         generateUuidFromName,
         pruneLegacySeededDefaults,
+        sanitizeLegacySpecialOutbounds,
         addRemoteOutbound,
         removeRemoteOutbound,
         toggleRemoteOutboundCollapsed,

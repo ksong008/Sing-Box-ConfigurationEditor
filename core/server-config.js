@@ -3,6 +3,11 @@ const { computed, nextTick, watch } = window.Vue;
 const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const TLS_TYPES = ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'];
+const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
+    block: 'reject',
+    dns: 'hijack-dns',
+    'dns-out': 'hijack-dns',
+});
 
 export function setupServerConfigCore(ctx) {
     const parseOptionalInteger = (value) => {
@@ -17,6 +22,30 @@ export function setupServerConfigCore(ctx) {
         .split(/[\n,]/)
         .map((item) => item.trim())
         .filter(Boolean);
+
+    const sanitizeOutboundSelection = (value, fallback = 'direct', { allowEmpty = false } = {}) => {
+        const rawTag = String(value || '').trim();
+        if (!rawTag) return allowEmpty ? '' : fallback;
+        const tag = rawTag;
+        return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const normalizeRouteActionState = (rule = {}) => {
+        const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
+        const outbound = sanitizeOutboundSelection(rule.outbound, 'direct');
+        if (action === 'route') {
+            const migratedAction = LEGACY_SPECIAL_OUTBOUND_ACTIONS[String(rule.outbound || '').trim()];
+            if (migratedAction) {
+                return {
+                    action: migratedAction,
+                    outbound: 'direct',
+                };
+            }
+        }
+        return {
+            action,
+            outbound,
+        };
+    };
 
     const parseHeadersText = (value) => {
         const headers = {};
@@ -428,13 +457,14 @@ export function setupServerConfigCore(ctx) {
         else if (rule.match_type === 'inbound') obj.inbound = values;
         else if (rule.match_type === 'domain_suffix') obj.domain_suffix = values;
         else if (rule.match_type === 'rule_set') obj.rule_set = values;
-        if (rule.action === 'reject') {
+        const normalizedRouteAction = normalizeRouteActionState(rule);
+        if (normalizedRouteAction.action === 'reject') {
             obj.action = 'reject';
-        } else if (rule.action === 'hijack-dns') {
+        } else if (normalizedRouteAction.action === 'hijack-dns') {
             obj.action = 'hijack-dns';
         } else {
             obj.action = 'route';
-            obj.outbound = rule.outbound || 'direct';
+            obj.outbound = normalizedRouteAction.outbound;
         }
         return obj;
     };
@@ -452,7 +482,8 @@ export function setupServerConfigCore(ctx) {
         } else {
             if (!ruleSet.url) return null;
             obj.url = ruleSet.url;
-            if (ruleSet.download_detour) obj.download_detour = ruleSet.download_detour;
+            const downloadDetour = sanitizeOutboundSelection(ruleSet.download_detour, 'direct', { allowEmpty: true });
+            if (downloadDetour) obj.download_detour = downloadDetour;
             if (ruleSet.update_interval) obj.update_interval = ruleSet.update_interval;
         }
         return obj;
@@ -588,7 +619,7 @@ export function setupServerConfigCore(ctx) {
         const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
         const route = {
             rules: routeRules,
-            final: ctx.settings.value.route_final || 'direct',
+            final: sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct'),
             auto_detect_interface: !!ctx.settings.value.auto_detect_interface,
         };
         if (ruleSets.length > 0) route.rule_set = ruleSets;
@@ -607,8 +638,6 @@ export function setupServerConfigCore(ctx) {
             inbounds,
             outbounds: [
                 { type: 'direct', tag: 'direct' },
-                { type: 'block', tag: 'block' },
-                { type: 'dns', tag: 'dns-out' },
                 ...customOutbounds,
             ],
             route,
