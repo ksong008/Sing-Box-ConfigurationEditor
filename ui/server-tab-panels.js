@@ -264,7 +264,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                                     <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码</label>
                                                     <div class="flex gap-2">
                                                         <input v-model="user.password" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono">
-                                                        <button v-if="inbound.type==='shadowsocks' && isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(user, 'password', inbound.ss_method, user.name ? `用户 ${user.name} 密码` : '用户密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
+                                                        <button v-if="inbound.type==='shadowsocks' && isShadowsocks2022Method(inbound.ss_method)" @click="fillGeneratedShadowsocks2022Key(user, 'password', inbound.ss_method, user.name ? ('用户 ' + user.name + ' 密码') : '用户密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成</button>
                                                     </div>
                                                 </div>
                                                 <div v-if="inbound.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">流控 (Flow)</label><select v-model="user.flow" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option value="xtls-rprx-vision">xtls-rprx-vision</option></select></div>
@@ -530,14 +530,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <template v-if="outbound.type==='shadowsocks'">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法 (Method)</label><select v-model="outbound.method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in ssMethodOptions(outbound.method)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default (tcp+udp)</option><option v-for="item in ssNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div class="col-span-2">
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
-                                                <div class="flex gap-2">
-                                                    <input v-model="outbound.password" class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono">
-                                                    <button v-if="isShadowsocks2022Method(outbound.method)" @click="fillGeneratedShadowsocks2022Key(outbound, 'password', outbound.method, outbound.tag ? `${outbound.tag} 密钥` : '远端出站密码')" type="button" class="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 whitespace-nowrap">生成密钥</button>
-                                                </div>
-                                                <div v-if="isShadowsocks2022Method(outbound.method)" class="text-[11px] text-gray-500 mt-1">SS-2022 出站密码需要和远端服务端方法完全对应。</div>
-                                            </div>
+                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         </template>
 
                                         <template v-if="outbound.type==='hysteria2'">
