@@ -12,24 +12,24 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">基础设置</div>
                         <div class="grid grid-cols-2 gap-4">
-                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mixed 代理端口</label><input type="number" v-model.number="settings.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none"></div>
-                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">日志级别</label>
+                            <div @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'mixed-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'mixed-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'mixed-in' }, $event)"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mixed 代理端口</label><input type="number" v-model.number="settings.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none"></div>
+                            <div @focusin.capture="queueJsonScrollToTarget('log-root', null, $event)" @change.capture="queueJsonScrollToTarget('log-root', null, $event)"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">日志级别</label>
                                 <select v-model="settings.log_level" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none">
                                     <option value="trace">Trace</option><option value="debug">Debug</option><option value="info">Info</option><option value="warn">Warn</option><option value="error">Error</option>
                                 </select>
                             </div>
-                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 策略</label>
+                            <div @focusin.capture="queueJsonScrollToTarget('dns-root', null, $event)" @change.capture="queueJsonScrollToTarget('dns-root', null, $event)"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 策略</label>
                                 <select v-model="settings.dns_strategy" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none">
                                     <option value="ipv4_only">仅 IPv4</option><option value="ipv6_only">仅 IPv6</option><option value="prefer_ipv4">优先 IPv4</option><option value="prefer_ipv6">优先 IPv6</option>
                                 </select>
                             </div>
-                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认域名解析 <span class="text-indigo-400 normal-case font-normal">(route)</span></label>
+                            <div @focusin.capture="queueJsonScrollToTarget('route-root', null, $event)" @change.capture="queueJsonScrollToTarget('route-root', null, $event)"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">默认域名解析 <span class="text-indigo-400 normal-case font-normal">(route)</span></label>
                                 <select v-model="settings.default_domain_resolver" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-indigo-700">
                                     <option value="">不指定</option>
                                     <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
                                 </select>
                             </div>
-                            <div><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 最终解析器 <span class="text-violet-400 normal-case font-normal">(dns.final)</span></label>
+                            <div @focusin.capture="queueJsonScrollToTarget('dns-root', null, $event)" @change.capture="queueJsonScrollToTarget('dns-root', null, $event)"><label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">DNS 最终解析器 <span class="text-violet-400 normal-case font-normal">(dns.final)</span></label>
                                 <select v-model="settings.dns_final" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-semibold text-violet-700">
                                     <option value="">不指定</option>
                                     <option v-for="tag in allDnsTags" :value="tag">{{ tag }}</option>
@@ -67,6 +67,9 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                         <div
                             v-for="(inb, idx) in extraInbounds"
                             :key="inb.id"
+                            @focusin.capture="queueJsonScrollToTarget('inbound', inb, $event)"
+                            @input.capture="queueJsonScrollToTarget('inbound', inb, $event)"
+                            @change.capture="queueJsonScrollToTarget('inbound', inb, $event)"
                             class="bg-gray-50 p-4 rounded-xl border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm mb-4 last:mb-0"
                         >
                             <div class="flex justify-between items-center mb-4">
@@ -273,7 +276,7 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                                 <div class="col-span-1 text-[10px] font-bold text-gray-500 uppercase tracking-wider">端口</div>
                                 <div class="col-span-1"></div>
                             </div>
-                            <div v-for="(dns,idx) in dnsList" :key="idx" class="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors">
+                            <div v-for="(dns,idx) in dnsList" :key="idx" @focusin.capture="queueJsonScrollToTarget('dns-server', dns, $event)" @input.capture="queueJsonScrollToTarget('dns-server', dns, $event)" @change.capture="queueJsonScrollToTarget('dns-server', dns, $event)" class="bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors">
                                 <div class="grid grid-cols-12 gap-2 items-center">
                                     <input v-model="dns.tag" placeholder="标签" class="col-span-2 px-2.5 py-1.5 text-xs border rounded-md outline-none bg-white font-bold text-indigo-700">
                                     <select v-model="dns.type" class="col-span-2 px-1.5 py-1.5 text-xs border rounded-md outline-none bg-white font-semibold text-gray-700">
@@ -529,6 +532,9 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                     </div>
 
                     <div v-for="(node,idx) in nodes" :key="idx" :id="\`node-card-\${idx}\`"
+                         @focusin.capture="queueJsonScrollToTarget('node', node, $event)"
+                         @input.capture="queueJsonScrollToTarget('node', node, $event)"
+                         @change.capture="queueJsonScrollToTarget('node', node, $event)"
                          :draggable="node.draggable || false"
                          @dragstart="onNodeDragStart(idx, $event)"
                          @dragenter.prevent="onNodeDragEnter(idx)"
@@ -1277,6 +1283,9 @@ const GroupsTab = createInjectedComponent('GroupsTab', `                <div v-s
                     </div>
                     
                     <div v-for="(group,gIdx) in groups" :key="group.id" 
+                         @focusin.capture="queueJsonScrollToTarget('group', group, $event)"
+                         @input.capture="queueJsonScrollToTarget('group', group, $event)"
+                         @change.capture="queueJsonScrollToTarget('group', group, $event)"
                          :data-group-card-id="group.id"
                          :draggable="group.draggable || false"
                          @dragstart="onGroupDragStart(gIdx, $event)"
@@ -1356,7 +1365,7 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                             <button @click="addRuleSet" class="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 font-bold shadow-md transition"><i class="fas fa-plus mr-1.5"></i>添加规则集</button>
                         </div>
                         <div class="space-y-3 max-h-[360px] overflow-y-auto pr-2" ref="ruleSetContainer">
-                            <div v-for="(rs, idx) in ruleSets" :key="rs.id" class="grid grid-cols-12 gap-2 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
+                            <div v-for="(rs, idx) in ruleSets" :key="rs.id" @focusin.capture="queueJsonScrollToTarget('rule-set', rs, $event)" @input.capture="queueJsonScrollToTarget('rule-set', rs, $event)" @change.capture="queueJsonScrollToTarget('rule-set', rs, $event)" class="grid grid-cols-12 gap-2 items-center bg-gray-50 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors shadow-sm">
                                 <input type="text" v-model="rs.tag" placeholder="标签(如 geosite-cn)" @change="onRuleSetTagChange(rs)" class="col-span-2 px-2 py-2 text-xs font-bold border border-gray-300 rounded-lg outline-none text-indigo-700 focus:bg-white focus:ring-1">
                                 <select v-model="rs.format" @change="onRuleSetFormatChange(rs)" class="col-span-2 px-2 py-2 text-xs font-bold text-gray-700 border border-gray-300 rounded-lg outline-none focus:bg-white focus:ring-1">
                                     <option value="binary">binary</option>
@@ -1469,6 +1478,9 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
 
                         <div class="space-y-3">
                             <div v-for="(rule,rIdx) in routeRules" :key="rule.id" 
+                                 @focusin.capture="queueJsonScrollToTarget('route-rule', rule, $event)"
+                                 @input.capture="queueJsonScrollToTarget('route-rule', rule, $event)"
+                                 @change.capture="queueJsonScrollToTarget('route-rule', rule, $event)"
                                  :id="'route-rule-' + rule.id"
                                  :draggable="rule.draggable || false"
                                  @dragstart="onRuleDragStart(rIdx, $event)"
@@ -1877,7 +1889,7 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                 </div>
 `);
 const TunTab = createInjectedComponent('TunTab', `                <div v-show="currentTab==='tun'" class="space-y-5">
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm" @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                             <div class="flex items-center gap-2">
                                 <div class="stitle mb-0">TUN 模式</div>
@@ -2051,7 +2063,7 @@ const TunTab = createInjectedComponent('TunTab', `                <div v-show="c
 `);
 const AdvancedTab = createInjectedComponent('AdvancedTab', `                <div v-show="currentTab==='advanced'" class="space-y-5">
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm" @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
                             <div class="flex items-center gap-2">
                                 <div class="stitle mb-0">Clash API + Web 面板</div>
