@@ -35,6 +35,23 @@ export function setupConfigCore(ctx) {
         return Object.keys(headers).length > 0 ? headers : undefined;
     };
 
+    const parseKeyValueText = (value) => {
+        const mapping = {};
+        String(value || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .forEach((line) => {
+                const idx = line.indexOf('=');
+                if (idx === -1) return;
+                const key = line.slice(0, idx).trim();
+                const mappedValue = line.slice(idx + 1).trim();
+                if (!key || !mappedValue) return;
+                mapping[key] = mappedValue;
+            });
+        return Object.keys(mapping).length > 0 ? mapping : undefined;
+    };
+
     const parsePortHoppingList = (value) => parseList(value).filter(Boolean);
 
     const buildUdpOverTcp = (enabled, version) => {
@@ -45,8 +62,34 @@ export function setupConfigCore(ctx) {
         return payload;
     };
 
+    const applySharedQuicFields = (target, source) => {
+        if (!target || !source) return;
+        const initialPacketSize = parseOptionalInteger(source.quic_initial_packet_size);
+        if (initialPacketSize !== undefined && initialPacketSize > 0) target.initial_packet_size = initialPacketSize;
+        if (source.quic_disable_path_mtu_discovery) target.disable_path_mtu_discovery = true;
+        if (source.quic_idle_timeout) target.idle_timeout = source.quic_idle_timeout;
+        if (source.quic_keep_alive_period) target.keep_alive_period = source.quic_keep_alive_period;
+        const streamReceiveWindow = parseOptionalInteger(source.quic_stream_receive_window);
+        if (streamReceiveWindow !== undefined && streamReceiveWindow > 0) target.stream_receive_window = streamReceiveWindow;
+        const connectionReceiveWindow = parseOptionalInteger(source.quic_connection_receive_window);
+        if (connectionReceiveWindow !== undefined && connectionReceiveWindow > 0) target.connection_receive_window = connectionReceiveWindow;
+        const maxConcurrentStreams = parseOptionalInteger(source.quic_max_concurrent_streams);
+        if (maxConcurrentStreams !== undefined && maxConcurrentStreams > 0) target.max_concurrent_streams = maxConcurrentStreams;
+    };
+
+    const sanitizeNodeNetworkValue = (node = {}, rawValue = '') => {
+        const value = String(rawValue || '').trim();
+        if (!value) return '';
+        if (typeof ctx.getNodeAvailableNetworkOptions !== 'function') return value;
+        const allowedValues = ctx.getNodeAvailableNetworkOptions(node)
+            .map((item) => item.value)
+            .filter(Boolean);
+        return allowedValues.includes(value) ? value : '';
+    };
+
     const buildMultiplex = (node) => {
         if (!node.mux_enabled) return undefined;
+        if (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(node)) return undefined;
         if (node.type === 'shadowsocks' && node.ss_udp_over_tcp) return undefined;
         const multiplex = {
             enabled: true,
@@ -281,6 +324,7 @@ export function setupConfigCore(ctx) {
         if (matches(['override_port'])) return 'override_port';
         if (matches(['启用tls', 'tls'])) return 'tls';
         if (matches(['证书路径'])) return 'certificate_path';
+        if (payload?.type === 'ssh' && matches(['私钥路径'])) return 'private_key_path';
         if (matches(['私钥路径'])) return 'key_path';
         if (matches(['sni'])) return 'server_name';
         if (matches(['alpn'])) return 'alpn';
@@ -305,9 +349,17 @@ export function setupConfigCore(ctx) {
         if (matches(['认证长度'])) return 'authenticated_length';
         if (matches(['上行带宽'])) return 'up_mbps';
         if (matches(['下行带宽'])) return 'down_mbps';
+        if (matches(['上行格式值'])) return 'up';
+        if (matches(['下行格式值'])) return 'down';
         if (matches(['obfs类型', '混淆类型', 'obfs密钥', 'obfs密码', '混淆密码'])) return 'obfs';
         if (matches(['跳跃端口'])) return 'server_ports';
         if (matches(['跳跃间隔'])) return 'hop_interval';
+        if (matches(['最大跳跃间隔'])) return 'hop_interval_max';
+        if (matches(['bbrprofile'])) return 'bbr_profile';
+        if (matches(['brutaldebug'])) return 'brutal_debug';
+        if (matches(['连接接收窗'])) return 'recv_window_conn';
+        if (matches(['流接收窗'])) return 'recv_window';
+        if (matches(['禁用mtu探测'])) return 'disable_mtu_discovery';
         if (matches(['本地地址'])) return 'local_address';
         if (matches(['对端公钥'])) return 'public_key';
         if (matches(['预共享密钥'])) return 'pre_shared_key';
@@ -335,6 +387,8 @@ export function setupConfigCore(ctx) {
         if (matches(['tcp快速打开'])) return 'tcp_fast_open';
         if (matches(['tcp多路径'])) return 'tcp_multi_path';
         if (matches(['udp分片'])) return 'udp_fragment';
+        if (matches(['初始包大小'])) return 'initial_packet_size';
+        if (matches(['禁用路径mtu探测'])) return 'disable_path_mtu_discovery';
         if (matches(['default_network_strategy'])) return 'default_network_strategy';
         if (matches(['default_network_type'])) return 'default_network_type';
         if (matches(['default_fallback_network_type'])) return 'default_fallback_network_type';
@@ -348,6 +402,19 @@ export function setupConfigCore(ctx) {
         if (matches(['嗅探超时'])) return 'sniff_timeout';
         if (matches(['私有ip直连'])) return 'ip_is_private';
         if (matches(['拦截dns解析'])) return 'hijack_dns';
+        if (matches(['认证值'])) return payload?.type === 'hysteria' && payload?.hy_auth_type === 'base64' ? 'auth' : 'auth_str';
+        if (matches(['空闲连接检查间隔'])) return 'idle_session_check_interval';
+        if (matches(['空闲会话超时'])) return 'idle_session_timeout';
+        if (matches(['最小空闲会话数'])) return 'min_idle_session';
+        if (matches(['不安全并发'])) return 'insecure_concurrency';
+        if (matches(['额外请求头'])) return 'extra_headers';
+        if (matches(['启用quic'])) return 'quic';
+        if (matches(['quic拥塞控制'])) return 'quic_congestion_control';
+        if (matches(['私钥口令'])) return 'private_key_passphrase';
+        if (matches(['主机公钥'])) return 'host_key';
+        if (matches(['主机密钥算法'])) return 'host_key_algorithms';
+        if (matches(['客户端版本'])) return 'client_version';
+        if (matches(['torrc'])) return 'torrc';
         return '';
     };
 
@@ -405,9 +472,16 @@ export function setupConfigCore(ctx) {
             authenticated_length: () => ['"authenticated_length": false'],
             up_mbps: () => ['"up_mbps":'],
             down_mbps: () => ['"down_mbps":'],
+            up: () => ['"up":'],
+            down: () => ['"down":'],
             obfs: () => ['"obfs":'],
             server_ports: () => ['"server_ports":'],
             hop_interval: () => ['"hop_interval":'],
+            hop_interval_max: () => ['"hop_interval_max":'],
+            bbr_profile: () => ['"bbr_profile":'],
+            brutal_debug: () => ['"brutal_debug": true'],
+            recv_window_conn: () => ['"recv_window_conn":'],
+            recv_window: () => ['"recv_window":'],
             local_address: () => ['"local_address":'],
             pre_shared_key: () => ['"pre_shared_key":'],
             interface_name: () => ['"interface_name":'],
@@ -434,6 +508,8 @@ export function setupConfigCore(ctx) {
             tcp_fast_open: () => ['"tcp_fast_open": true'],
             tcp_multi_path: () => ['"tcp_multi_path": true'],
             udp_fragment: () => ['"udp_fragment": true'],
+            initial_packet_size: () => ['"initial_packet_size":'],
+            disable_path_mtu_discovery: () => ['"disable_path_mtu_discovery": true'],
             default_network_strategy: () => ['"default_network_strategy":'],
             default_network_type: () => ['"default_network_type":'],
             default_fallback_network_type: () => ['"default_fallback_network_type":'],
@@ -447,6 +523,21 @@ export function setupConfigCore(ctx) {
             sniff_timeout: () => ['"sniff_timeout":', '"timeout":'],
             ip_is_private: () => ['"ip_is_private": true'],
             hijack_dns: () => ['"action": "hijack-dns"'],
+            auth: () => ['"auth":'],
+            auth_str: () => ['"auth_str":'],
+            idle_session_check_interval: () => ['"idle_session_check_interval":'],
+            idle_session_timeout: () => ['"idle_session_timeout":'],
+            min_idle_session: () => ['"min_idle_session":'],
+            insecure_concurrency: () => ['"insecure_concurrency":'],
+            extra_headers: () => ['"extra_headers":'],
+            quic: () => ['"quic": true'],
+            quic_congestion_control: () => ['"quic_congestion_control":'],
+            private_key_path: () => ['"private_key_path":'],
+            private_key_passphrase: () => ['"private_key_passphrase":'],
+            host_key: () => ['"host_key":'],
+            host_key_algorithms: () => ['"host_key_algorithms":'],
+            client_version: () => ['"client_version":'],
+            torrc: () => ['"torrc":'],
         };
         return builders[fieldKey] ? builders[fieldKey]() : [];
     };
@@ -633,7 +724,8 @@ export function setupConfigCore(ctx) {
                 if (node.wg_interface_name) outbound.interface_name = node.wg_interface_name;
                 const wgWorkers = parseOptionalInteger(node.wg_workers);
                 if (wgWorkers !== undefined && wgWorkers > 0) outbound.workers = wgWorkers;
-                if (node.wg_network) outbound.network = node.wg_network;
+                const wgNetwork = sanitizeNodeNetworkValue(node, node.wg_network);
+                if (wgNetwork) outbound.network = wgNetwork;
                 applyNodeDialFields();
                 outbounds.push(outbound);
                 return;
@@ -645,6 +737,13 @@ export function setupConfigCore(ctx) {
                 outbound.user = node.username;
                 if (node.ssh_auth_type === 'key') outbound.private_key = node.secret;
                 else outbound.password = node.secret;
+                if (node.ssh_private_key_path) outbound.private_key_path = node.ssh_private_key_path;
+                if (node.ssh_private_key_passphrase) outbound.private_key_passphrase = node.ssh_private_key_passphrase;
+                const hostKey = parseList(node.ssh_host_key_text);
+                if (hostKey.length > 0) outbound.host_key = hostKey;
+                const hostKeyAlgorithms = parseList(node.ssh_host_key_algorithms);
+                if (hostKeyAlgorithms.length > 0) outbound.host_key_algorithms = hostKeyAlgorithms;
+                if (node.ssh_client_version) outbound.client_version = node.ssh_client_version;
                 applyNodeDialFields();
                 outbounds.push(outbound);
                 return;
@@ -673,6 +772,8 @@ export function setupConfigCore(ctx) {
                     const args = node.tor_extra_args.trim().split(/\s+/).filter(Boolean);
                     if (args.length) outbound.extra_args = args;
                 }
+                const torrc = parseKeyValueText(node.tor_torrc_text);
+                if (torrc) outbound.torrc = torrc;
                 applyNodeDialFields();
                 outbounds.push(outbound);
                 return;
@@ -689,7 +790,8 @@ export function setupConfigCore(ctx) {
                 outbound.version = node.socks_version || '5';
                 if (node.username) outbound.username = node.username;
                 if (node.secret) outbound.password = node.secret;
-                if (node.socks_network) outbound.network = node.socks_network;
+                const socksNetwork = sanitizeNodeNetworkValue(node, node.socks_network);
+                if (socksNetwork) outbound.network = socksNetwork;
                 const udpOverTcp = buildUdpOverTcp(node.socks_udp_over_tcp, node.socks_udp_over_tcp_version);
                 if (udpOverTcp) outbound.udp_over_tcp = udpOverTcp;
                 applyNodeDialFields();
@@ -722,7 +824,8 @@ export function setupConfigCore(ctx) {
                 else if (node.type === 'shadowsocks') {
                     outbound.method = node.ss_method || 'chacha20-ietf-poly1305';
                     outbound.password = node.secret;
-                    if (node.network) outbound.network = node.network;
+                    const ssNetwork = sanitizeNodeNetworkValue(node, node.network);
+                    if (ssNetwork) outbound.network = ssNetwork;
                     if (node.ss_plugin) {
                         outbound.plugin = node.ss_plugin;
                         if (node.ss_plugin_opts) outbound.plugin_opts = node.ss_plugin_opts;
@@ -744,10 +847,17 @@ export function setupConfigCore(ctx) {
                         delete outbound.server_port;
                     }
                     if (node.hy2_hop_interval) outbound.hop_interval = node.hy2_hop_interval;
-                    if (node.hy2_network) outbound.network = node.hy2_network;
+                    if (node.hy2_hop_interval_max) outbound.hop_interval_max = node.hy2_hop_interval_max;
+                    const hy2Network = sanitizeNodeNetworkValue(node, node.hy2_network);
+                    if (hy2Network) outbound.network = hy2Network;
+                    if (node.hy2_bbr_profile) outbound.bbr_profile = node.hy2_bbr_profile;
+                    if (node.hy2_brutal_debug) outbound.brutal_debug = true;
+                    applySharedQuicFields(outbound, node);
                 } else if (node.type === 'hysteria') {
-                    outbound.up_mbps = node.hy_up_mbps || 100;
-                    outbound.down_mbps = node.hy_down_mbps || 100;
+                    if (node.hy_up_text) outbound.up = node.hy_up_text;
+                    else outbound.up_mbps = node.hy_up_mbps || 100;
+                    if (node.hy_down_text) outbound.down = node.hy_down_text;
+                    else outbound.down_mbps = node.hy_down_mbps || 100;
                     if (node.secret) {
                         if (node.hy_auth_type === 'base64') outbound.auth = node.secret;
                         else outbound.auth_str = node.secret;
@@ -759,31 +869,54 @@ export function setupConfigCore(ctx) {
                         delete outbound.server_port;
                     }
                     if (node.hy_hop_interval) outbound.hop_interval = node.hy_hop_interval;
-                    if (node.hy_network) outbound.network = node.hy_network;
+                    const recvWindowConn = parseOptionalInteger(node.hy_recv_window_conn);
+                    if (recvWindowConn !== undefined && recvWindowConn > 0) outbound.recv_window_conn = recvWindowConn;
+                    const recvWindow = parseOptionalInteger(node.hy_recv_window);
+                    if (recvWindow !== undefined && recvWindow > 0) outbound.recv_window = recvWindow;
+                    if (node.hy_disable_mtu_discovery) outbound.disable_mtu_discovery = true;
+                    const hyNetwork = sanitizeNodeNetworkValue(node, node.hy_network);
+                    if (hyNetwork) outbound.network = hyNetwork;
+                    applySharedQuicFields(outbound, node);
                 } else if (node.type === 'tuic') {
                     outbound.uuid = node.secret;
                     outbound.password = node.tuic_password;
                     outbound.congestion_control = node.tuic_congestion || 'cubic';
-                    if (node.tuic_network) outbound.network = node.tuic_network;
+                    const tuicNetwork = sanitizeNodeNetworkValue(node, node.tuic_network);
+                    if (tuicNetwork) outbound.network = tuicNetwork;
                     if (node.tuic_udp_over_stream) outbound.udp_over_stream = true;
                     else outbound.udp_relay_mode = node.tuic_udp_relay_mode || 'native';
                     if (node.tuic_zero_rtt_handshake) outbound.zero_rtt_handshake = true;
                     if (node.tuic_heartbeat) outbound.heartbeat = node.tuic_heartbeat;
+                    applySharedQuicFields(outbound, node);
                 } else if (node.type === 'anytls') {
                     outbound.password = node.secret;
                     if (node.anytls_idle_session_check_interval) {
                         outbound.idle_session_check_interval = node.anytls_idle_session_check_interval;
                     }
+                    if (node.anytls_idle_session_timeout) outbound.idle_session_timeout = node.anytls_idle_session_timeout;
+                    const minIdleSession = parseOptionalInteger(node.anytls_min_idle_session);
+                    if (minIdleSession !== undefined && minIdleSession >= 0) outbound.min_idle_session = minIdleSession;
                 } else if (node.type === 'naive') {
                     outbound.username = node.username;
                     outbound.password = node.secret;
                     outbound.tls = { enabled: true };
-                    if (node.insecure) outbound.tls.insecure = true;
                     if (node.sni) outbound.tls.server_name = node.sni;
-                    if (node.alpn) {
-                        const alpn = node.alpn.split(',').map((item) => item.trim()).filter(Boolean);
-                        if (alpn.length) outbound.tls.alpn = alpn;
+                    if (node.ech_enabled) {
+                        const ech = { enabled: true };
+                        if (node.ech_config) {
+                            const echConfig = node.ech_config.split('\n').map((item) => item.trim()).filter(Boolean);
+                            if (echConfig.length) ech.config = echConfig;
+                        }
+                        outbound.tls.ech = ech;
                     }
+                    const insecureConcurrency = parseOptionalInteger(node.naive_insecure_concurrency);
+                    if (insecureConcurrency !== undefined && insecureConcurrency >= 0) outbound.insecure_concurrency = insecureConcurrency;
+                    const extraHeaders = parseHeadersText(node.naive_extra_headers_text);
+                    if (extraHeaders) outbound.extra_headers = extraHeaders;
+                    const udpOverTcp = buildUdpOverTcp(node.naive_udp_over_tcp, node.naive_udp_over_tcp_version);
+                    if (udpOverTcp) outbound.udp_over_tcp = udpOverTcp;
+                    if (node.naive_quic) outbound.quic = true;
+                    if (node.naive_quic_congestion_control) outbound.quic_congestion_control = node.naive_quic_congestion_control;
                     applyNodeDialFields();
                     outbounds.push(outbound);
                     return;
@@ -792,9 +925,11 @@ export function setupConfigCore(ctx) {
                 if (node.type === 'vless' && node.flow) outbound.flow = node.flow;
             }
 
-            const needTls = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'anytls'].includes(node.type)
-                ? (node.tls !== false)
-                : (['naive'].includes(node.type) ? true : (node.type === 'http' ? node.tls : false));
+            const optionalTlsProtocols = ['vless', 'vmess', 'trojan', 'http'];
+            const requiredTlsProtocols = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
+            const needTls = requiredTlsProtocols.includes(node.type)
+                ? true
+                : (optionalTlsProtocols.includes(node.type) ? node.tls !== false : false);
             if (needTls) {
                 const isQuicTlsContext = ['hysteria', 'hysteria2', 'tuic'].includes(node.type) || node.transport === 'quic';
                 outbound.tls = { enabled: true };
@@ -880,7 +1015,8 @@ export function setupConfigCore(ctx) {
             }
 
             if (node.network && ['vless', 'vmess', 'trojan'].includes(node.type)) {
-                outbound.network = node.network;
+                const v2rayNetwork = sanitizeNodeNetworkValue(node, node.network);
+                if (v2rayNetwork) outbound.network = v2rayNetwork;
             }
 
             if (['vless', 'vmess'].includes(node.type)) {
@@ -1364,10 +1500,15 @@ export function setupConfigCore(ctx) {
             if (cleanNode.type !== 'hysteria') {
                 delete cleanNode.hy_up_mbps;
                 delete cleanNode.hy_down_mbps;
+                delete cleanNode.hy_up_text;
+                delete cleanNode.hy_down_text;
                 delete cleanNode.hy_obfs;
                 delete cleanNode.hy_auth_type;
                 delete cleanNode.hy_server_ports;
                 delete cleanNode.hy_hop_interval;
+                delete cleanNode.hy_recv_window_conn;
+                delete cleanNode.hy_recv_window;
+                delete cleanNode.hy_disable_mtu_discovery;
                 delete cleanNode.hy_network;
             }
             if (cleanNode.type !== 'hysteria2') {
@@ -1377,7 +1518,10 @@ export function setupConfigCore(ctx) {
                 delete cleanNode.hy2_obfs_password;
                 delete cleanNode.hy2_server_ports;
                 delete cleanNode.hy2_hop_interval;
+                delete cleanNode.hy2_hop_interval_max;
                 delete cleanNode.hy2_network;
+                delete cleanNode.hy2_bbr_profile;
+                delete cleanNode.hy2_brutal_debug;
             }
             if (cleanNode.type !== 'wireguard') {
                 delete cleanNode.wg_private_key;
@@ -1401,18 +1545,38 @@ export function setupConfigCore(ctx) {
                 delete cleanNode.http_path;
                 delete cleanNode.http_headers_text;
             }
-            if (cleanNode.type !== 'ssh') delete cleanNode.ssh_auth_type;
+            if (cleanNode.type !== 'ssh') {
+                delete cleanNode.ssh_auth_type;
+                delete cleanNode.ssh_private_key_path;
+                delete cleanNode.ssh_private_key_passphrase;
+                delete cleanNode.ssh_host_key_text;
+                delete cleanNode.ssh_host_key_algorithms;
+                delete cleanNode.ssh_client_version;
+            }
             if (cleanNode.type !== 'shadowtls') {
                 delete cleanNode.shadowtls_version;
                 delete cleanNode.shadowtls_password;
                 delete cleanNode.shadowtls_handshake_server;
                 delete cleanNode.shadowtls_handshake_port;
             }
-            if (cleanNode.type !== 'anytls') delete cleanNode.anytls_idle_session_check_interval;
+            if (cleanNode.type !== 'anytls') {
+                delete cleanNode.anytls_idle_session_check_interval;
+                delete cleanNode.anytls_idle_session_timeout;
+                delete cleanNode.anytls_min_idle_session;
+            }
+            if (cleanNode.type !== 'naive') {
+                delete cleanNode.naive_insecure_concurrency;
+                delete cleanNode.naive_extra_headers_text;
+                delete cleanNode.naive_udp_over_tcp;
+                delete cleanNode.naive_udp_over_tcp_version;
+                delete cleanNode.naive_quic;
+                delete cleanNode.naive_quic_congestion_control;
+            }
             if (cleanNode.type !== 'tor') {
                 delete cleanNode.tor_executable_path;
                 delete cleanNode.tor_extra_args;
                 delete cleanNode.tor_data_directory;
+                delete cleanNode.tor_torrc_text;
             }
             if (!ctx.PROTO_SUPPORT_USER.includes(cleanNode.type)) delete cleanNode.username;
             if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(cleanNode.type)) {
@@ -1427,7 +1591,7 @@ export function setupConfigCore(ctx) {
                 delete cleanNode.transport_early_data_header_name;
                 delete cleanNode.transport_permit_without_stream;
             }
-            if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(cleanNode.type)) {
+            if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(cleanNode.type) || (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(cleanNode))) {
                 delete cleanNode.mux_enabled;
                 delete cleanNode.mux_protocol;
                 delete cleanNode.mux_max_connections;
@@ -1441,6 +1605,15 @@ export function setupConfigCore(ctx) {
             if (cleanNode.type !== 'vless') delete cleanNode.flow;
             if (cleanNode.network === 'tcp') delete cleanNode.packet_encoding;
             if (cleanNode.type === 'shadowsocks' && cleanNode.ss_udp_over_tcp) cleanNode.mux_enabled = false;
+            if (!['hysteria', 'hysteria2', 'tuic'].includes(cleanNode.type)) {
+                delete cleanNode.quic_initial_packet_size;
+                delete cleanNode.quic_disable_path_mtu_discovery;
+                delete cleanNode.quic_idle_timeout;
+                delete cleanNode.quic_keep_alive_period;
+                delete cleanNode.quic_stream_receive_window;
+                delete cleanNode.quic_connection_receive_window;
+                delete cleanNode.quic_max_concurrent_streams;
+            }
 
             if (!cleanNode.reality) {
                 delete cleanNode.reality_pubkey;
@@ -1462,6 +1635,8 @@ export function setupConfigCore(ctx) {
             }
             if (!cleanNode.ss_udp_over_tcp) delete cleanNode.ss_udp_over_tcp_version;
             if (!cleanNode.socks_udp_over_tcp) delete cleanNode.socks_udp_over_tcp_version;
+            if (!cleanNode.naive_udp_over_tcp) delete cleanNode.naive_udp_over_tcp_version;
+            if (!cleanNode.naive_quic) delete cleanNode.naive_quic_congestion_control;
             if (!['ws', 'http', 'httpupgrade', 'grpc'].includes(cleanNode.transport)) delete cleanNode.path;
             if (!['ws', 'http', 'httpupgrade'].includes(cleanNode.transport)) delete cleanNode.ws_host;
             if (cleanNode.transport !== 'ws') {
@@ -1493,6 +1668,22 @@ export function setupConfigCore(ctx) {
                 delete cleanNode.alpn;
                 delete cleanNode.utls_fingerprint;
                 delete cleanNode.sni;
+            }
+            if (cleanNode.type === 'naive') {
+                delete cleanNode.insecure;
+                delete cleanNode.alpn;
+                delete cleanNode.utls_fingerprint;
+                delete cleanNode.disable_sni;
+                delete cleanNode.tls_min_version;
+                delete cleanNode.tls_max_version;
+                delete cleanNode.cipher_suites;
+                delete cleanNode.tls_fragment;
+                delete cleanNode.tls_fragment_fallback_delay;
+                delete cleanNode.tls_record_fragment;
+            }
+            if (['tor', 'dns'].includes(cleanNode.type)) {
+                delete cleanNode.server;
+                delete cleanNode.port;
             }
 
             return cleanNode;

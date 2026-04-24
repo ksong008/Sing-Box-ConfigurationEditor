@@ -5,8 +5,8 @@ export function createBaseState() {
 
     const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
     const PROTO_SUPPORT_MULTIPLEX = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http', 'anytls'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive'];
+    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http'];
+    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
     const PROTO_SUPPORT_SECRET = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria', 'shadowtls', 'anytls'];
     const PROTO_SUPPORT_USER = ['socks', 'http', 'ssh', 'naive'];
 
