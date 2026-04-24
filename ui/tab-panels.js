@@ -601,9 +601,12 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                             </optgroup>
                                         </select>
                                     </div>
-                                    <div class="col-span-4 grid grid-cols-3 gap-2">
+                                    <div v-if="!['tor','dns'].includes(node.type)" class="col-span-4 grid grid-cols-3 gap-2">
                                         <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                                    </div>
+                                    <div v-else class="col-span-4 flex items-end justify-end">
+                                        <div class="text-[10px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">当前协议不使用 server / port</div>
                                     </div>
                                 </div>
                             </div>
@@ -616,10 +619,10 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
 
                         <div v-if="!node.collapsed" class="ml-12">
 
-                        <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2','hysteria'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
+                        <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ ['vless','vmess','tuic'].includes(node.type)?'UUID':'密码 (Password)' }}</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                            <div v-show="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
-                            <div v-show="['hysteria2','hysteria'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div v-show="isNodeTlsContext(node) && ['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div v-show="isNodeTlsContext(node) && ['hysteria2','hysteria'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
                         </div>
 
                         <div v-if="node.type==='shadowsocks'" class="grid grid-cols-2 gap-3 mb-3">
@@ -636,8 +639,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
-                                <select v-model="node.network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                <select v-model="node.network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'ss-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">插件 (Plugin)</label>
@@ -678,8 +681,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <p class="mt-1 text-[10px] font-medium text-amber-700">仅在未启用 <code>udp_over_stream</code> 时有效。</p>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
-                                <select v-model="node.tuic_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                <select v-model="node.tuic_network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'tuic-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                 </select>
                                 <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
                             </div>
@@ -694,8 +697,12 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         </div>
 
                         <div v-if="node.type==='hysteria'" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ node.hy_auth_type === 'base64' ? '认证值 (auth)' : '认证值 (auth_str)' }}</label><input type="text" v-model="node.secret" :placeholder="node.hy_auth_type === 'base64' ? 'Base64 auth' : 'Plain auth string'" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_up_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Mbps)</label><input type="number" v-model.number="node.hy_down_mbps" placeholder="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行格式值 (up)</label><input type="text" v-model="node.hy_up_text" placeholder="100 Mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行格式值 (down)</label><input type="text" v-model="node.hy_down_text" placeholder="100 Mbps" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥 (OBFS Password)</label><input type="text" v-model="node.hy_obfs" placeholder="salamander" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">用于混淆流量；仅配置对应服务端时才需要。</p></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">认证类型 (Auth Type)</label>
                                 <select v-model="node.hy_auth_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
@@ -705,12 +712,15 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃端口 (Server Ports)</label><input type="text" v-model="node.hy_server_ports" placeholder="2080:3000,4000:5000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-amber-700">启用端口跳跃时使用；可填多个端口或端口范围。</p></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃间隔 (Hop Interval)</label><input type="text" v-model="node.hy_hop_interval" placeholder="30s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">控制端口跳跃切换频率。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接接收窗 (recv_window_conn)</label><input type="number" v-model.number="node.hy_recv_window_conn" placeholder="15728640" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">流接收窗 (recv_window)</label><input type="number" v-model.number="node.hy_recv_window" placeholder="67108864" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
-                                <select v-model="node.hy_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                <select v-model="node.hy_network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'hy-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                 </select>
                                 <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
                             </div>
+                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.hy_disable_mtu_discovery" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">禁用 MTU 探测 (disable_mtu_discovery)</span></label></div>
                             <div class="col-span-2 text-[10px] font-medium text-gray-500">支持填写多个跳跃端口或端口范围，使用逗号分隔，例如 <code>2080:3000,4000:5000</code>。</div>
                         </div>
 
@@ -726,24 +736,27 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             <div v-if="node.hy2_obfs_type"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">OBFS 密钥 (OBFS Password)</label><input type="text" v-model="node.hy2_obfs_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">与上面的混淆类型配套使用。</p></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃端口 (Server Ports)</label><input type="text" v-model="node.hy2_server_ports" placeholder="2080:3000,4000:5000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-amber-700">启用端口跳跃时使用；可填多个端口或端口范围。</p></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">跳跃间隔 (Hop Interval)</label><input type="text" v-model="node.hy2_hop_interval" placeholder="30s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"><p class="mt-1 text-[10px] font-medium text-gray-500">控制端口跳跃切换频率。</p></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大跳跃间隔 (Hop Interval Max)</label><input type="text" v-model="node.hy2_hop_interval_max" placeholder="2m" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">BBR Profile</label><select v-model="node.hy2_bbr_profile" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"><option value="">default</option><option value="conservative">conservative</option><option value="standard">standard</option><option value="aggressive">aggressive</option></select></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
-                                <select v-model="node.hy2_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                <select v-model="node.hy2_network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'hy2-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                 </select>
                                 <p class="mt-1 text-[10px] font-medium text-gray-500">限制本节点允许的底层网络类型。</p>
                             </div>
+                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.hy2_brutal_debug" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Brutal Debug</span></label></div>
                             <div class="col-span-2 text-[10px] font-medium text-gray-500">支持填写多个跳跃端口或端口范围，使用逗号分隔，例如 <code>2080:3000,4000:5000</code>。</div>
                         </div>
 
                         <div v-if="node.type==='socks'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本</label>
-                                <select v-model="node.socks_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                <select v-model="node.socks_version" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="5">SOCKS5</option><option value="4a">SOCKS4a</option><option value="4">SOCKS4</option>
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
-                                <select v-model="node.socks_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                    <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                <select v-model="node.socks_network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'socks-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
@@ -765,10 +778,9 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         <div v-if="node.type==='http'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">用户名 (可选)</label><input type="text" v-model="node.username" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (可选)</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                            <div v-if="isNodeTlsContext(node)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input type="text" v-model="node.http_path" placeholder="/" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求头 (Headers)</label><textarea v-model="node.http_headers_text" rows="3" placeholder="User-Agent: sing-box&#10;X-Proxy: corp" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea></div>
-                            <div class="col-span-2"><label class="flex items-center gap-2 cursor-pointer bg-gray-50 p-2 rounded-lg border border-gray-200"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 TLS</span></label></div>
                         </div>
 
                         <div v-if="node.type==='wireguard'" class="grid grid-cols-1 gap-3 mb-3">
@@ -782,8 +794,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Interface Name</label><input type="text" v-model="node.wg_interface_name" placeholder="wg0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Workers</label><input type="number" v-model.number="node.wg_workers" min="1" placeholder="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network</label>
-                                    <select v-model="node.wg_network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                        <option value="">默认 (TCP + UDP)</option><option value="tcp">tcp</option><option value="udp">udp</option>
+                                    <select v-model="node.wg_network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                        <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'wg-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
                                 <div class="flex items-end pb-2">
@@ -807,6 +819,11 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <textarea v-if="node.ssh_auth_type==='key'" v-model="node.secret" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
                                 <input v-else type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
                             </div>
+                            <div v-if="node.ssh_auth_type==='key'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">私钥路径 (private_key_path)</label><input type="text" v-model="node.ssh_private_key_path" placeholder="/home/user/.ssh/id_ed25519" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div v-if="node.ssh_auth_type==='key'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">私钥口令 (private_key_passphrase)</label><input type="text" v-model="node.ssh_private_key_passphrase" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机公钥 (host_key，每行一条)</label><textarea v-model="node.ssh_host_key_text" rows="3" placeholder="ssh-ed25519 AAAA..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机密钥算法 (host_key_algorithms)</label><input type="text" v-model="node.ssh_host_key_algorithms" placeholder="ssh-ed25519,rsa-sha2-512" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端版本 (client_version)</label><input type="text" v-model="node.ssh_client_version" placeholder="SSH-2.0-OpenSSH_9.0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                         </div>
 
                         <!-- ShadowTLS -->
@@ -843,6 +860,12 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲连接检查间隔 <span class="normal-case font-normal text-gray-400">(idle_session_check_interval)</span></label>
                                 <input type="text" v-model="node.anytls_idle_session_check_interval" placeholder="30s (留空使用默认)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
                             </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲会话超时 <span class="normal-case font-normal text-gray-400">(idle_session_timeout)</span></label>
+                                <input type="text" v-model="node.anytls_idle_session_timeout" placeholder="15m" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最小空闲会话数 <span class="normal-case font-normal text-gray-400">(min_idle_session)</span></label>
+                                <input type="number" v-model.number="node.anytls_min_idle_session" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
                         </div>
 
                         <!-- NaiveProxy -->
@@ -856,12 +879,56 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI</label>
                                 <input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
                             </div>
-                            <div class="flex items-center gap-2 pt-5">
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">不安全并发 <span class="normal-case font-normal text-gray-400">(insecure_concurrency)</span></label>
+                                <input type="number" v-model.number="node.naive_insecure_concurrency" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.naive_quic" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">启用 QUIC</span></label></div>
+                            <div v-if="node.naive_quic"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">QUIC 拥塞控制 <span class="normal-case font-normal text-gray-400">(quic_congestion_control)</span></label>
+                                <select v-model="node.naive_quic_congestion_control" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="">默认</option>
+                                    <option value="bbr">bbr</option>
+                                    <option value="bbr2">bbr2</option>
+                                    <option value="cubic">cubic</option>
+                                    <option value="new_reno">new_reno</option>
+                                    <option value="reno">reno</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.naive_udp_over_tcp" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP over TCP</span></label></div>
+                            <div v-if="node.naive_udp_over_tcp"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP over TCP 版本</label>
+                                <select v-model="node.naive_udp_over_tcp_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="2">2 (默认)</option>
+                                    <option value="1">1</option>
+                                </select>
+                            </div>
+                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">额外请求头 <span class="normal-case font-normal text-gray-400">(extra_headers)</span></label>
+                                <textarea v-model="node.naive_extra_headers_text" rows="3" placeholder="User-Agent: naive&#10;X-Test: 1" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
                             </div>
                             <div class="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                                <p class="text-xs text-amber-700"><i class="fas fa-info-circle mr-1.5"></i><strong>NaiveProxy</strong> 强制使用 TLS（HTTPS），利用真实 Chrome 网络栈抗 TLS 指纹探测。<code class="bg-amber-100 px-1 rounded">ALPN</code> 通常设为 <code class="bg-amber-100 px-1 rounded">h2</code> 或 <code class="bg-amber-100 px-1 rounded">http/1.1</code>。</p>
+                                <p class="text-xs text-amber-700"><i class="fas fa-info-circle mr-1.5"></i><strong>NaiveProxy</strong> 强制使用 TLS（HTTPS）。当前按官方文档仅突出保留它自己的关键字段，如 <code class="bg-amber-100 px-1 rounded">server_name</code>、<code class="bg-amber-100 px-1 rounded">ECH</code>、<code class="bg-amber-100 px-1 rounded">QUIC</code> 和额外请求头。</p>
                             </div>
+                        </div>
+
+                        <div v-if="isNodeQuicFieldSupported(node)" class="grid grid-cols-2 gap-3 mb-3">
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">初始包大小 <span class="normal-case font-normal text-gray-400">(initial_packet_size)</span></label>
+                                <input type="number" v-model.number="node.quic_initial_packet_size" min="0" placeholder="1200" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.quic_disable_path_mtu_discovery" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">禁用路径 MTU 探测</span></label></div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时 <span class="normal-case font-normal text-gray-400">(idle_timeout)</span></label>
+                                <input type="text" v-model="node.quic_idle_timeout" placeholder="30s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">保活周期 <span class="normal-case font-normal text-gray-400">(keep_alive_period)</span></label>
+                                <input type="text" v-model="node.quic_keep_alive_period" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">流接收窗 <span class="normal-case font-normal text-gray-400">(stream_receive_window)</span></label>
+                                <input type="number" v-model.number="node.quic_stream_receive_window" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接接收窗 <span class="normal-case font-normal text-gray-400">(connection_receive_window)</span></label>
+                                <input type="number" v-model.number="node.quic_connection_receive_window" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大并发流 <span class="normal-case font-normal text-gray-400">(max_concurrent_streams)</span></label>
+                                <input type="number" v-model.number="node.quic_max_concurrent_streams" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            </div>
+                            <div class="col-span-2 text-[10px] font-medium text-gray-500">适用于原生 QUIC 协议场景（如 Hysteria / Hysteria2 / TUIC）。</div>
                         </div>
 
                         <!-- Tor -->
@@ -878,6 +945,9 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">附加参数 <span class="normal-case font-normal">(extra_args · 空格分隔)</span></label>
                                         <input type="text" v-model="node.tor_extra_args" placeholder="--SOCKSPort 9050" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
                                     </div>
+                                    <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Torrc 覆盖项 <span class="normal-case font-normal">(torrc · 每行 key=value)</span></label>
+                                        <textarea v-model="node.tor_torrc_text" rows="3" placeholder="UseBridges=1&#10;ClientTransportPlugin=..." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -892,7 +962,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
                             <div class="grid grid-cols-3 gap-3 mb-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
-                                    <select v-model="node.transport" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
+                                    <select v-model="node.transport" @change="syncNodeNetworkConstraints(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
                                         <option value="">TCP (默认)</option>
                                         <option value="ws">WebSocket</option>
                                         <option value="grpc">gRPC</option>
@@ -933,10 +1003,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             <!-- network + packet_encoding 行 -->
                             <div class="grid grid-cols-3 gap-3 mt-2">
                                 <div v-if="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
-                                    <select v-model="node.network" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
-                                        <option value="">TCP + UDP (默认)</option>
-                                        <option value="tcp">仅 TCP</option>
-                                        <option value="udp">仅 UDP</option>
+                                    <select v-model="node.network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                        <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'v2ray-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
                                 <div v-if="['vless','vmess'].includes(node.type) && node.network !== 'tcp'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
@@ -972,7 +1040,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                         </div>
 
-                        <div v-if="PROTO_SUPPORT_MULTIPLEX.includes(node.type)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div v-if="isNodeMultiplexSupported(node)" class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                             <label class="flex items-center gap-2 cursor-pointer mb-3">
                                 <input type="checkbox" v-model="node.mux_enabled" :disabled="node.type==='shadowsocks' && node.ss_udp_over_tcp" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-40">
                                 <span class="text-sm font-bold text-gray-700">启用多路复用 (Multiplex / Mux)</span>
@@ -996,10 +1064,10 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','http','anytls','naive'].includes(node.type)" class="flex flex-wrap gap-4 mt-2">
-                            <label v-if="['vless','vmess','trojan','http','anytls'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
-                            <template v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)">
-                                <label v-if="!['naive'].includes(node.type)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
+                        <div v-if="isNodeTlsSupported(node)" class="flex flex-wrap gap-4 mt-2">
+                            <label v-if="isNodeTlsToggleVisible(node)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.tls" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">TLS</span></label>
+                            <template v-if="isNodeTlsContext(node)">
+                                <label v-if="isNodeTlsInsecureSupported(node)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.insecure" class="w-4 h-4 text-yellow-600 rounded"><span class="text-sm font-bold text-gray-700">跳过证书验证</span></label>
                                 <label v-if="isNodeRealitySupported(node)" class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.reality" class="w-4 h-4 text-purple-600 rounded"><span class="text-sm font-bold text-gray-700">REALITY</span></label>
                                 <!-- uTLS + ALPN 网格：仅对支持的协议显示对应控件 -->
                                 <div class="w-full mt-1 grid grid-cols-2 gap-3">
@@ -1020,7 +1088,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                         <p class="mt-1 text-[10px] font-medium text-amber-700">官方标注为 <code>Not Recommended</code>；仅在明确需要伪装 TLS 指纹时再启用。</p>
                                     </div>
                                     <!-- ALPN：对支持 TLS 且 ALPN 有实际意义的协议显示 -->
-                                    <div v-if="['vless','vmess','trojan','hysteria2','hysteria','tuic','anytls','naive'].includes(node.type)">
+                                    <div v-if="isNodeTlsAlpnSupported(node)">
                                         <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">ALPN</label>
                                         <select v-if="!node.alpn_custom" v-model="node.alpn" @change="if(node.alpn==='__custom__'){node.alpn_custom=true;node.alpn=''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
                                             <option value="">不指定（默认）</option>
@@ -1046,7 +1114,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                         </div>
 
                         <!-- ── 高级 TLS 选项 ── -->
-                        <div v-if="node.tls || ['hysteria2','hysteria','tuic','naive'].includes(node.type)" class="mt-3">
+                        <div v-if="isNodeTlsContext(node)" class="mt-3">
                             <details class="group">
                                 <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
                                     <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
@@ -1056,7 +1124,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
 
                                     <!-- SNI 控制：标准 TLS 字段，TCP / QUIC TLS 均可配置 -->
-                                    <div v-if="isNodeTlsContext(node)" class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
+                                    <div v-if="isNodeTlsDisableSniSupported(node)" class="flex flex-wrap gap-4 items-center pb-2 border-b border-gray-200">
                                         <label class="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" v-model="node.disable_sni" class="w-4 h-4 text-orange-600 rounded">
                                             <span class="text-xs font-bold text-gray-700">禁用 SNI <span class="text-gray-400 font-normal">(disable_sni)</span></span>
@@ -1065,7 +1133,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     </div>
 
                                     <!-- TLS 版本：通用 TLS 字段；cipher_suites 仅 TCP TLS 1.0–1.2 有意义 -->
-                                    <div v-if="isNodeTlsContext(node)" class="grid grid-cols-2 gap-3">
+                                    <div v-if="isNodeTlsVersionSupported(node)" class="grid grid-cols-2 gap-3">
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低 TLS 版本 <span class="normal-case font-normal text-gray-300">(min_version)</span></label>
                                             <select v-model="node.tls_min_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
@@ -1109,7 +1177,7 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     </div>
 
                                     <!-- 握手分片：仅 TCP TLS 协议有效，QUIC 无效 -->
-                                    <div v-if="isNodeTcpTlsContext(node)" class="pt-2 border-t border-gray-200">
+                                    <div v-if="isNodeTlsFragmentSupported(node)" class="pt-2 border-t border-gray-200">
                                         <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">握手分片（绕过简单防火墙）</div>
                                         <div class="flex flex-wrap gap-4 items-start">
                                             <label class="flex items-center gap-2 cursor-pointer">

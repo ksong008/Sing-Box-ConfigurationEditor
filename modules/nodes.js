@@ -8,11 +8,11 @@ export function setupNodesModule(ctx) {
     const UDP_DIAL_FIELDS = ['udp_fragment'];
     const PROTO_DIAL_FIELD_MATRIX = {
         http: { common: true, domain: true, tcp: true },
-        socks: { common: true, domain: true, tcp: true },
+        socks: { common: true, domain: true, tcp: true, udp: true },
         ssh: { common: true, domain: true, tcp: true },
         shadowtls: { common: true, domain: true, tcp: true },
         anytls: { common: true, domain: true, tcp: true },
-        naive: { common: true, domain: true, tcp: true },
+        naive: { common: true, domain: true, tcp: true, udp: true },
         tor: { common: true, tcp: true },
         wireguard: { common: true, domain: true, udp: true },
         hysteria: { common: true, domain: true, udp: true },
@@ -37,7 +37,7 @@ export function setupNodesModule(ctx) {
 
     const makeNode = (overrides = {}) => {
         const type = overrides.type || 'vless';
-        const tlsDefault = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls'].includes(type);
+        const tlsDefault = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'].includes(type);
         const node = {
             tag: '',
             type: 'vless',
@@ -102,10 +102,15 @@ export function setupNodesModule(ctx) {
             tuic_heartbeat: '',
             hy_up_mbps: 100,
             hy_down_mbps: 100,
+            hy_up_text: '',
+            hy_down_text: '',
             hy_obfs: '',
             hy_auth_type: 'str',
             hy_server_ports: '',
             hy_hop_interval: '',
+            hy_recv_window_conn: '',
+            hy_recv_window: '',
+            hy_disable_mtu_discovery: false,
             hy_network: '',
             hy2_up: '',
             hy2_down: '',
@@ -113,12 +118,17 @@ export function setupNodesModule(ctx) {
             hy2_obfs_password: '',
             hy2_server_ports: '',
             hy2_hop_interval: '',
+            hy2_hop_interval_max: '',
             hy2_network: '',
+            hy2_bbr_profile: '',
+            hy2_brutal_debug: false,
             shadowtls_version: '3',
             shadowtls_password: '',
             shadowtls_handshake_server: '',
             shadowtls_handshake_port: 443,
             anytls_idle_session_check_interval: '',
+            anytls_idle_session_timeout: '',
+            anytls_min_idle_session: '',
             username: '',
             socks_version: '5',
             socks_network: '',
@@ -126,6 +136,12 @@ export function setupNodesModule(ctx) {
             socks_udp_over_tcp_version: '2',
             http_path: '',
             http_headers_text: '',
+            naive_insecure_concurrency: '',
+            naive_extra_headers_text: '',
+            naive_udp_over_tcp: false,
+            naive_udp_over_tcp_version: '2',
+            naive_quic: false,
+            naive_quic_congestion_control: '',
             wg_private_key: '',
             wg_peer_pubkey: '',
             wg_local_address: '',
@@ -137,9 +153,22 @@ export function setupNodesModule(ctx) {
             wg_workers: '',
             wg_network: '',
             ssh_auth_type: 'password',
+            ssh_private_key_path: '',
+            ssh_private_key_passphrase: '',
+            ssh_host_key_text: '',
+            ssh_host_key_algorithms: '',
+            ssh_client_version: '',
             tor_executable_path: '',
             tor_extra_args: '',
             tor_data_directory: '',
+            tor_torrc_text: '',
+            quic_initial_packet_size: '',
+            quic_disable_path_mtu_discovery: false,
+            quic_idle_timeout: '',
+            quic_keep_alive_period: '',
+            quic_stream_receive_window: '',
+            quic_connection_receive_window: '',
+            quic_max_concurrent_streams: '',
             dns_tag: '',
             detour: '',
             bind_interface: '',
@@ -236,12 +265,70 @@ export function setupNodesModule(ctx) {
         onNodeDragEnd();
     };
 
-    const PROTO_TLS_DEFAULT_ON = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive'];
+    const PROTO_TLS_OPTIONAL = ['vless', 'vmess', 'trojan', 'http'];
+    const PROTO_TLS_DEFAULT_ON = [...PROTO_TLS_OPTIONAL, 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
+    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
+    const PROTO_MULTIPLEX_STREAM_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
+    const DEFAULT_NETWORK_OPTIONS = [
+        { value: '', label: '默认 (TCP + UDP)' },
+        { value: 'tcp', label: 'tcp' },
+        { value: 'udp', label: 'udp' },
+    ];
+    const TCP_ONLY_NETWORK_OPTIONS = [
+        { value: 'tcp', label: '仅 TCP' },
+    ];
+    const UDP_ONLY_NETWORK_OPTIONS = [
+        { value: 'udp', label: '仅 UDP' },
+    ];
+
+    const getNodeTransportNetwork = (node = {}) => {
+        if (!node) return '';
+        if (node.type === 'socks') return node.socks_network || '';
+        if (node.type === 'tuic') return node.tuic_network || '';
+        if (node.type === 'hysteria') return node.hy_network || '';
+        if (node.type === 'hysteria2') return node.hy2_network || '';
+        if (node.type === 'wireguard') return node.wg_network || '';
+        return node.network || '';
+    };
+
+    const isUdpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'udp';
+    const isTcpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'tcp';
+    const isNodeNativeQuicProtocol = (node = {}) => ['hysteria', 'hysteria2', 'tuic'].includes(node.type || '');
+
+    const isNodeStreamTransport = (node = {}) => {
+        const type = node.type || '';
+        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return false;
+        if (type === 'naive') return !node.naive_quic;
+        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport !== 'quic' && !isUdpOnlyTransportNetwork(node);
+        if (type === 'shadowsocks') return !isUdpOnlyTransportNetwork(node) || !!node.ss_udp_over_tcp;
+        if (type === 'socks') return !isUdpOnlyTransportNetwork(node);
+        if (['http', 'ssh', 'shadowtls', 'anytls', 'naive', 'tor'].includes(type)) return true;
+        return false;
+    };
+
+    const isNodeDatagramTransport = (node = {}) => {
+        const type = node.type || '';
+        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return !isTcpOnlyTransportNetwork(node);
+        if (type === 'naive') return !!node.naive_quic;
+        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport === 'quic';
+        if (type === 'shadowsocks') return !isTcpOnlyTransportNetwork(node) && !node.ss_udp_over_tcp;
+        if (type === 'socks') return !isTcpOnlyTransportNetwork(node);
+        return false;
+    };
+
+    const isNodeTlsSupported = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '') || PROTO_ALWAYS_TLS.includes(node.type || '');
+    const isNodeTlsToggleVisible = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '');
+    const isNodeMultiplexSupported = (node = {}) => PROTO_MULTIPLEX_STREAM_TYPES.includes(node.type || '') && isNodeStreamTransport(node);
+    const isNodeQuicFieldSupported = (node = {}) => isNodeNativeQuicProtocol(node);
+    const isNodeTlsInsecureSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
+    const isNodeTlsAlpnSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
+    const isNodeTlsDisableSniSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
+    const isNodeTlsVersionSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
+    const isNodeTlsFragmentSupported = (node = {}) => isNodeTcpTlsContext(node) && node.type !== 'naive';
 
     const isNodeTlsContext = (node = {}) => {
         if (!node) return false;
-        return !!(node.tls || PROTO_ALWAYS_TLS.includes(node.type || ''));
+        return !!(PROTO_ALWAYS_TLS.includes(node.type || '') || (PROTO_TLS_OPTIONAL.includes(node.type || '') && node.tls));
     };
 
     const isNodeQuicTlsContext = (node = {}) => {
@@ -267,17 +354,18 @@ export function setupNodesModule(ctx) {
         if (preset) {
             if (preset.common) add(COMMON_DIAL_FIELDS);
             if (preset.domain && shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            if (preset.tcp) add(TCP_DIAL_FIELDS);
-            if (preset.udp) add(UDP_DIAL_FIELDS);
+            if (preset.tcp && isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
+            if (preset.udp && isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
         } else if (type === 'shadowsocks' || ['vless', 'vmess', 'trojan'].includes(type)) {
             add(COMMON_DIAL_FIELDS);
             if (shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            if (usesQuicTransport) add(UDP_DIAL_FIELDS);
-            else add(TCP_DIAL_FIELDS);
+            if (usesQuicTransport || isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
+            if (isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
         } else {
             add(COMMON_DIAL_FIELDS);
             if (shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            add(TCP_DIAL_FIELDS);
+            if (isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
+            if (isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
         }
 
         [...COMMON_DIAL_FIELDS, ...DOMAIN_DIAL_FIELDS, ...TCP_DIAL_FIELDS, ...UDP_DIAL_FIELDS].forEach((field) => {
@@ -298,12 +386,13 @@ export function setupNodesModule(ctx) {
 
     const hasNodeTlsAdvancedConfig = (node = {}) => {
         if (!isNodeTlsContext(node)) return false;
+        const supportsClassicTlsAdvanced = node.type !== 'naive';
         return !!(
-            node.disable_sni
-            || node.tls_min_version
-            || node.tls_max_version
-            || (isNodeCipherSuitesMeaningful(node) && node.cipher_suites)
-            || (isNodeTcpTlsContext(node) && (node.tls_fragment || node.tls_record_fragment || node.tls_fragment_fallback_delay))
+            (supportsClassicTlsAdvanced && node.disable_sni)
+            || (supportsClassicTlsAdvanced && node.tls_min_version)
+            || (supportsClassicTlsAdvanced && node.tls_max_version)
+            || (supportsClassicTlsAdvanced && isNodeCipherSuitesMeaningful(node) && node.cipher_suites)
+            || (supportsClassicTlsAdvanced && isNodeTcpTlsContext(node) && (node.tls_fragment || node.tls_record_fragment || node.tls_fragment_fallback_delay))
             || node.ech_enabled
         );
     };
@@ -331,6 +420,59 @@ export function setupNodesModule(ctx) {
         return false;
     };
 
+    const getNodeAvailableNetworkOptions = (node = {}) => {
+        const type = node.type || '';
+        if (['vless', 'vmess', 'trojan'].includes(type)) {
+            if (node.transport === 'quic') return UDP_ONLY_NETWORK_OPTIONS;
+            if (['ws', 'http', 'grpc', 'httpupgrade'].includes(node.transport)) return TCP_ONLY_NETWORK_OPTIONS;
+            return DEFAULT_NETWORK_OPTIONS;
+        }
+        if (type === 'socks') {
+            if (String(node.socks_version || '5') !== '5') return TCP_ONLY_NETWORK_OPTIONS;
+            return DEFAULT_NETWORK_OPTIONS;
+        }
+        if (['shadowsocks', 'hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return DEFAULT_NETWORK_OPTIONS;
+        return [];
+    };
+
+    const getNodeCurrentNetworkValue = (node = {}) => {
+        const type = node.type || '';
+        if (type === 'socks') return node.socks_network || '';
+        if (type === 'tuic') return node.tuic_network || '';
+        if (type === 'hysteria') return node.hy_network || '';
+        if (type === 'hysteria2') return node.hy2_network || '';
+        if (type === 'wireguard') return node.wg_network || '';
+        return node.network || '';
+    };
+
+    const setNodeCurrentNetworkValue = (node = {}, value = '') => {
+        const type = node.type || '';
+        if (type === 'socks') node.socks_network = value;
+        else if (type === 'tuic') node.tuic_network = value;
+        else if (type === 'hysteria') node.hy_network = value;
+        else if (type === 'hysteria2') node.hy2_network = value;
+        else if (type === 'wireguard') node.wg_network = value;
+        else node.network = value;
+    };
+
+    const syncNodeNetworkConstraints = (node = {}) => {
+        const options = getNodeAvailableNetworkOptions(node);
+        if (options.length === 0) return;
+        const allowedValues = options.map((item) => item.value);
+        const current = getNodeCurrentNetworkValue(node);
+        if (!allowedValues.includes(current)) {
+            const nextValue = allowedValues.includes('') ? '' : (allowedValues[0] || '');
+            setNodeCurrentNetworkValue(node, nextValue);
+        }
+        if (['vless', 'vmess'].includes(node.type) && !allowedValues.includes('udp')) {
+            node.packet_encoding = '';
+        }
+        if (node.type === 'socks' && String(node.socks_version || '5') !== '5') {
+            node.socks_udp_over_tcp = false;
+            node.socks_udp_over_tcp_version = '2';
+        }
+    };
+
     const onNodeTypeChange = (node) => {
         if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) node.transport = '';
         if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) {
@@ -344,9 +486,16 @@ export function setupNodesModule(ctx) {
             node.transport_early_data_header_name = '';
             node.transport_permit_without_stream = false;
         }
-        if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(node.type)) node.mux_enabled = false;
+        if (['tor', 'dns'].includes(node.type)) {
+            node.server = '';
+            node.port = 0;
+        } else if (!node.port) {
+            node.port = 443;
+        }
+        if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(node.type) || !isNodeMultiplexSupported(node)) node.mux_enabled = false;
         if (PROTO_TLS_DEFAULT_ON.includes(node.type)) node.tls = true;
         else node.tls = false;
+        syncNodeNetworkConstraints(node);
     };
 
     const removeNode = (index) => {
@@ -393,17 +542,30 @@ export function setupNodesModule(ctx) {
         getNodeDialVisibleFields,
         hasNodeDialOptions,
         isNodeDialFieldVisible,
+        isNodeTlsSupported,
+        isNodeTlsToggleVisible,
         isNodeCipherSuitesMeaningful,
         isNodeTlsContext,
         isNodeQuicTlsContext,
         isNodeTcpTlsContext,
         isNodeUtlsSupported,
         isNodeRealitySupported,
+        isNodeMultiplexSupported,
+        isNodeQuicFieldSupported,
+        isNodeTlsInsecureSupported,
+        isNodeTlsAlpnSupported,
+        isNodeTlsDisableSniSupported,
+        isNodeTlsVersionSupported,
+        isNodeTlsFragmentSupported,
         hasNodeTlsAdvancedConfig,
         hasNodeDialConfig,
         nodeHasDetourOverride,
         nodeHasBindingOverride,
         isNodeDialFieldEffectivelyMuted,
+        getNodeAvailableNetworkOptions,
+        getNodeCurrentNetworkValue,
+        setNodeCurrentNetworkValue,
+        syncNodeNetworkConstraints,
         onNodeTypeChange,
         removeNode,
         clearNodes,
