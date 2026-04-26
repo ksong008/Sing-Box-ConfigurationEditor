@@ -17,6 +17,84 @@ const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
     '2022-blake3-aes-256-gcm': 32,
     '2022-blake3-chacha20-poly1305': 32,
 });
+const TRANSPORT_FIELD_KEYS = Object.freeze([
+    'transport_path',
+    'transport_host',
+    'transport_headers_text',
+    'transport_method',
+    'transport_idle_timeout',
+    'transport_ping_timeout',
+    'transport_service_name',
+    'transport_early_data',
+    'transport_early_data_header_name',
+    'transport_permit_without_stream',
+]);
+const TRANSPORT_FIELD_DEFAULTS = Object.freeze({
+    transport_path: '',
+    transport_host: '',
+    transport_headers_text: '',
+    transport_method: '',
+    transport_idle_timeout: '',
+    transport_ping_timeout: '',
+    transport_service_name: '',
+    transport_early_data: '',
+    transport_early_data_header_name: '',
+    transport_permit_without_stream: false,
+});
+const TRANSPORT_FIELD_SPEC = Object.freeze({
+    ws: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text', 'transport_early_data', 'transport_early_data_header_name']),
+    grpc: Object.freeze(['transport_service_name', 'transport_idle_timeout', 'transport_ping_timeout', 'transport_permit_without_stream']),
+    http: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text', 'transport_method', 'transport_idle_timeout', 'transport_ping_timeout']),
+    httpupgrade: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text']),
+    quic: Object.freeze([]),
+});
+const INBOUND_PROTOCOL_SPEC = Object.freeze({
+    vless: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    vmess: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: false }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    trojan: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    shadowsocks: Object.freeze({
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    hysteria2: Object.freeze({
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    tuic: Object.freeze({
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    hysteria: Object.freeze({
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    anytls: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    shadowtls: Object.freeze({
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+});
 
 const dnsHeadersToText = (headers) => {
     if (!headers || typeof headers !== 'object') return '';
@@ -363,6 +441,92 @@ export function createServerState() {
         return ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'].includes(type);
     };
     const inboundUsesDestinations = (type, inbound) => type === 'shadowsocks' && inbound.ss_mode === 'relay';
+    const getInboundProtocolSpec = (type) => INBOUND_PROTOCOL_SPEC[type] || INBOUND_PROTOCOL_SPEC.vless;
+    const resolveInboundCapabilities = (inbound = {}) => {
+        const spec = getInboundProtocolSpec(inbound.type);
+        const allowedTransports = spec.transport?.allowed || [];
+        const activeTransport = allowedTransports.includes(inbound.transport) ? inbound.transport : '';
+        const shadowTlsVersion = ['1', '2', '3'].includes(String(inbound.shadowtls_version || '3')) ? String(inbound.shadowtls_version || '3') : '3';
+
+        return {
+            supportsTls: !!spec.tls?.supported,
+            requiresTls: !!spec.tls?.required,
+            supportsReality: !!spec.tls?.reality,
+            supportsTransport: !!spec.transport?.supported,
+            allowedTransports,
+            activeTransport,
+            visibleTransportFields: TRANSPORT_FIELD_SPEC[activeTransport] || [],
+            supportsMultiplex: !!spec.multiplex?.supported,
+            shadowtls: inbound.type === 'shadowtls' ? {
+                version: shadowTlsVersion,
+                allowPassword: shadowTlsVersion === '2',
+                allowUsers: shadowTlsVersion === '3',
+                allowHandshakeForServerName: shadowTlsVersion === '2' || shadowTlsVersion === '3',
+                allowStrictMode: shadowTlsVersion === '3',
+                allowWildcardSni: shadowTlsVersion === '3',
+            } : null,
+            hysteria2: inbound.type === 'hysteria2' ? {
+                showBandwidthFields: !inbound.hy2_ignore_client_bandwidth,
+            } : null,
+        };
+    };
+    const inboundTransportOptions = (inbound = {}) => resolveInboundCapabilities(inbound).allowedTransports;
+    const inboundTransportFieldVisible = (inbound, field) => resolveInboundCapabilities(inbound).visibleTransportFields.includes(field);
+    const inboundTlsRequired = (inbound = {}) => !!resolveInboundCapabilities(inbound).requiresTls;
+    const inboundRealitySupported = (inbound = {}) => !!resolveInboundCapabilities(inbound).supportsReality;
+    const inboundRealityVisible = (inbound = {}) => inboundRealitySupported(inbound) && !!inbound.tls_enabled;
+    const inboundShadowTlsFieldVisible = (inbound, field) => {
+        const caps = resolveInboundCapabilities(inbound).shadowtls;
+        if (!caps) return false;
+        const mapping = {
+            shadowtls_password: caps.allowPassword,
+            shadowtls_handshake_for_server_name_text: caps.allowHandshakeForServerName,
+            shadowtls_strict_mode: caps.allowStrictMode,
+            shadowtls_wildcard_sni: caps.allowWildcardSni,
+        };
+        return !!mapping[field];
+    };
+    const inboundHysteria2BandwidthFieldsVisible = (inbound) => !!resolveInboundCapabilities(inbound).hysteria2?.showBandwidthFields;
+    const clearInboundTransportFields = (inbound, allowedFields = []) => {
+        const allowed = new Set(allowedFields);
+        TRANSPORT_FIELD_KEYS.forEach((field) => {
+            if (allowed.has(field)) return;
+            inbound[field] = TRANSPORT_FIELD_DEFAULTS[field];
+        });
+    };
+    const sanitizeInboundByCapabilities = (inbound = {}) => {
+        const caps = resolveInboundCapabilities(inbound);
+
+        if (!caps.supportsTls) {
+            inbound.tls_enabled = false;
+            inbound.reality_enabled = false;
+        } else if (caps.requiresTls) {
+            inbound.tls_enabled = true;
+        }
+
+        if (!caps.supportsReality || !inbound.tls_enabled) inbound.reality_enabled = false;
+
+        if (!caps.supportsTransport || !caps.allowedTransports.includes(inbound.transport)) {
+            inbound.transport = '';
+        }
+        clearInboundTransportFields(inbound, caps.activeTransport ? caps.visibleTransportFields : []);
+
+        if (!caps.supportsMultiplex) inbound.mux_enabled = false;
+
+        if (caps.shadowtls) {
+            if (!caps.shadowtls.allowPassword) inbound.shadowtls_password = '';
+            if (!caps.shadowtls.allowHandshakeForServerName) inbound.shadowtls_handshake_for_server_name_text = '';
+            if (!caps.shadowtls.allowStrictMode) inbound.shadowtls_strict_mode = false;
+            if (!caps.shadowtls.allowWildcardSni) inbound.shadowtls_wildcard_sni = 'off';
+        }
+
+        if (caps.hysteria2 && !caps.hysteria2.showBandwidthFields) {
+            inbound.hy2_up_mbps = '';
+            inbound.hy2_down_mbps = '';
+        }
+
+        return ensureInboundCollections(inbound);
+    };
 
     const ensureInboundCollections = (inbound) => {
         if (!Array.isArray(inbound.users)) inbound.users = [];
@@ -395,7 +559,7 @@ export function createServerState() {
         if (inbound.type === 'shadowtls' && !inbound.shadowtls_password && String(inbound.shadowtls_version) === '2') {
             inbound.shadowtls_password = '';
         }
-        return ensureInboundCollections(inbound);
+        return sanitizeInboundByCapabilities(inbound);
     };
 
     const normalizeDnsServer = (dns = {}, index = 0) => {
@@ -684,6 +848,18 @@ export function createServerState() {
     const syncShadowsocksMode = (inbound) => {
         applyInboundTypeDefaults(inbound);
     };
+    const syncInboundTransport = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncInboundTlsState = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncInboundRealityState = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncHysteria2BandwidthMode = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
     const generateUserUuid = async (inbound, user) => {
         if (!String(user.name || '').trim()) {
             showToast('请先填写用户名称，再生成 UUID', 'warn');
@@ -841,6 +1017,10 @@ export function createServerState() {
         syncInboundType,
         syncShadowTlsVersion,
         syncShadowsocksMode,
+        syncInboundTransport,
+        syncInboundTlsState,
+        syncInboundRealityState,
+        syncHysteria2BandwidthMode,
         generateUserUuid,
         generateUuidFromName,
         pruneLegacySeededDefaults,
@@ -862,6 +1042,15 @@ export function createServerState() {
         inboundUsesUsers,
         inboundUsesDestinations,
         inboundSupportsShareLinks,
+        resolveInboundCapabilities,
+        inboundTransportOptions,
+        inboundTransportFieldVisible,
+        inboundTlsRequired,
+        inboundRealitySupported,
+        inboundRealityVisible,
+        inboundShadowTlsFieldVisible,
+        inboundHysteria2BandwidthFieldsVisible,
+        sanitizeInboundByCapabilities,
         REMOTE_OUTBOUND_TYPES,
         routeRules,
         addRouteRule,

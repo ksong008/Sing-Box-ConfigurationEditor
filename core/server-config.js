@@ -15,6 +15,14 @@ const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
 });
 
 export function setupServerConfigCore(ctx) {
+    const cloneState = (value) => {
+        if (typeof globalThis.structuredClone === 'function') return globalThis.structuredClone(value);
+        return JSON.parse(JSON.stringify(value));
+    };
+    const sanitizeInboundForExport = (inbound) => {
+        if (!inbound || typeof ctx.sanitizeInboundByCapabilities !== 'function') return inbound;
+        return ctx.sanitizeInboundByCapabilities(cloneState(inbound));
+    };
     const parseOptionalInteger = (value) => {
         if (value === null || value === undefined) return undefined;
         const source = String(value).trim();
@@ -639,7 +647,7 @@ export function setupServerConfigCore(ctx) {
 
     const generatedJson = computed(() => {
         const dnsServers = ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
-        const inbounds = ctx.serverInbounds.value.map(buildInbound).filter(Boolean);
+        const inbounds = ctx.serverInbounds.value.map((inbound) => buildInbound(sanitizeInboundForExport(inbound))).filter(Boolean);
         const ruleSets = ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
         const routeRules = ctx.routeRules.value.map(buildRouteRule).filter(Boolean);
         const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
@@ -678,8 +686,56 @@ export function setupServerConfigCore(ctx) {
         const errors = [];
 
         ctx.serverInbounds.value.forEach((inbound, inboundIndex) => {
+            const inboundTag = inbound?.tag || `inbound-${inboundIndex + 1}`;
+            const sanitizedInbound = sanitizeInboundForExport(inbound);
+            const capabilities = typeof ctx.resolveInboundCapabilities === 'function' ? ctx.resolveInboundCapabilities(sanitizedInbound) : null;
+            const builtUsers = buildUsers(sanitizedInbound);
+
+            if (capabilities?.requiresTls && !sanitizedInbound?.tls_enabled) {
+                errors.push(`入站 "${inboundTag}" 的协议要求启用 TLS`);
+            }
+            if (inbound?.reality_enabled && !capabilities?.supportsReality) {
+                errors.push(`入站 "${inboundTag}" 当前协议不支持 Reality`);
+            }
+            if (capabilities?.activeTransport === 'grpc' && !String(sanitizedInbound?.transport_service_name || '').trim()) {
+                errors.push(`入站 "${inboundTag}" 使用 gRPC transport 时建议填写 service_name，当前导出会生成空 service_name`);
+            }
+            if (sanitizedInbound?.reality_enabled) {
+                if (!String(sanitizedInbound?.reality_private_key || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 private_key`);
+                }
+                if (!String(sanitizedInbound?.reality_short_id || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 short_id`);
+                }
+            }
+            if (['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'].includes(sanitizedInbound?.type) && builtUsers.length === 0) {
+                errors.push(`入站 "${inboundTag}" 缺少有效用户配置`);
+            }
+            if (sanitizedInbound?.type === 'hysteria') {
+                if (!String(sanitizedInbound?.hy_up_mbps || '').trim() || !String(sanitizedInbound?.hy_down_mbps || '').trim()) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 缺少 up_mbps/down_mbps`);
+                }
+            }
+            if (sanitizedInbound?.type === 'shadowtls') {
+                const shadowTlsCaps = capabilities?.shadowtls;
+                const wildcardAll = shadowTlsCaps?.allowWildcardSni && String(sanitizedInbound?.shadowtls_wildcard_sni || 'off') === 'all';
+                if (!wildcardAll && !String(sanitizedInbound?.shadowtls_handshake_server || '').trim()) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 缺少 handshake server；仅 wildcard_sni=all 时可省略`);
+                }
+                if (shadowTlsCaps?.version === '2' && !String(sanitizedInbound?.shadowtls_password || '').trim()) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 在 v2 模式下缺少 password`);
+                }
+                if (shadowTlsCaps?.version === '3' && builtUsers.length === 0) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 在 v3 模式下缺少有效用户配置`);
+                }
+            }
+            if (inbound?.type === 'hysteria2' && inbound?.hy2_ignore_client_bandwidth) {
+                if (String(inbound?.hy2_up_mbps || '').trim() || String(inbound?.hy2_down_mbps || '').trim()) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 开启 ignore_client_bandwidth 时，不应继续填写 up_mbps/down_mbps`);
+                }
+            }
             if (inbound?.type !== 'shadowsocks') return;
-            const inboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
+            const shadowsocksInboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
             const method = inbound.ss_method || '2022-blake3-aes-128-gcm';
             if (!getShadowsocks2022KeyLength(method)) return;
 
@@ -688,7 +744,7 @@ export function setupServerConfigCore(ctx) {
                     if (!String(user?.password || '').trim()) return;
                     if (isValidShadowsocks2022Password(method, user.password)) return;
                     const userLabel = user?.name ? `用户 "${user.name}"` : `用户 #${userIndex + 1}`;
-                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${userLabel}`, method));
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}" 的${userLabel}`, method));
                 });
                 return;
             }
@@ -698,14 +754,14 @@ export function setupServerConfigCore(ctx) {
                     if (!String(destination?.password || '').trim()) return;
                     if (isValidShadowsocks2022Password(method, destination.password)) return;
                     const destinationLabel = destination?.name ? `目标 "${destination.name}"` : `目标 #${destinationIndex + 1}`;
-                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${destinationLabel}`, method));
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}" 的${destinationLabel}`, method));
                 });
                 return;
             }
 
             if (!String(inbound.ss_password || '').trim()) return;
             if (!isValidShadowsocks2022Password(method, inbound.ss_password)) {
-                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}"`, method));
+                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}"`, method));
             }
         });
 
