@@ -228,6 +228,17 @@ export function setupServerRemoteImportCore(ctx) {
                 ctx.showToast('当前仅支持导入 VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC 远端出站', 'warn');
                 return;
             }
+            if (typeof ctx.normalizeRemoteOutbound === 'function') {
+                const index = Array.isArray(ctx.remoteOutbounds?.value)
+                    ? ctx.remoteOutbounds.value.findIndex((item) => item === outbound || item?.id === outbound?.id)
+                    : -1;
+                const normalized = ctx.normalizeRemoteOutbound({
+                    ...outbound,
+                    id: outbound.id,
+                    collapsed: outbound.collapsed,
+                }, index >= 0 ? index : 0);
+                Object.assign(outbound, normalized);
+            }
             ctx.showToast('远端出站已根据订阅链接自动填充', 'ok');
         } catch (error) {
             ctx.showToast(`导入失败：${error.message || error}`, 'err');

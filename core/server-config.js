@@ -3,6 +3,8 @@ const { computed, nextTick, watch } = window.Vue;
 const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const TLS_TYPES = ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'];
+const INBOUND_TYPES_WITH_REQUIRED_USERS = ['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'];
+const BUILTIN_OUTBOUND_TAGS = new Set(['direct', 'block', 'dns', 'dns-out']);
 const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     block: 'reject',
     dns: 'hijack-dns',
@@ -15,20 +17,59 @@ const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
 });
 
 export function setupServerConfigCore(ctx) {
+    const INTEGER_PATTERN = /^-?\d+$/;
+    const HYSTERIA_BANDWIDTH_PATTERN = /^(0|[1-9]\d*)\s*(?:bps|Bps|Kbps|KBps|Mbps|MBps|Gbps|GBps|Tbps|TBps)$/;
     const cloneState = (value) => {
-        if (typeof globalThis.structuredClone === 'function') return globalThis.structuredClone(value);
+        if (typeof globalThis.structuredClone === 'function') {
+            try {
+                return globalThis.structuredClone(value);
+            } catch {
+                // Vue reactive proxies are not always structured-cloneable.
+            }
+        }
         return JSON.parse(JSON.stringify(value));
     };
     const sanitizeInboundForExport = (inbound) => {
         if (!inbound || typeof ctx.sanitizeInboundByCapabilities !== 'function') return inbound;
         return ctx.sanitizeInboundByCapabilities(cloneState(inbound));
     };
+    const sanitizeRemoteOutboundForExport = (outbound) => {
+        if (!outbound || typeof ctx.sanitizeRemoteOutboundByCapabilities !== 'function') return outbound;
+        return ctx.sanitizeRemoteOutboundByCapabilities(cloneState(outbound));
+    };
     const parseOptionalInteger = (value) => {
         if (value === null || value === undefined) return undefined;
         const source = String(value).trim();
         if (!source) return undefined;
+        if (!INTEGER_PATTERN.test(source)) return undefined;
         const parsed = parseInt(source, 10);
         return Number.isInteger(parsed) ? parsed : undefined;
+    };
+    const parsePositiveInteger = (value) => {
+        const parsed = parseOptionalInteger(value);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    };
+    const parseNonNegativeInteger = (value) => {
+        const parsed = parseOptionalInteger(value);
+        return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+    };
+    const hasTextValue = (value) => String(value === null || value === undefined ? '' : value).trim() !== '';
+    const isValidHysteriaBandwidth = (value) => HYSTERIA_BANDWIDTH_PATTERN.test(String(value || '').trim());
+    const parseRoutingMark = (value) => {
+        if (value === null || value === undefined) return { empty: true, valid: true, value: undefined };
+        const source = String(value).trim();
+        if (!source) return { empty: true, valid: true, value: undefined };
+        if (/^0x[0-9a-f]+$/i.test(source)) return { empty: false, valid: true, value: source.toLowerCase() };
+        if (/^\d+$/.test(source)) return { empty: false, valid: true, value: parseInt(source, 10) };
+        return { empty: false, valid: false, value: undefined };
+    };
+    const parseOptionalBoolean = (value) => {
+        if (value === true || value === false) return value;
+        if (value === null || value === undefined) return undefined;
+        const source = String(value).trim().toLowerCase();
+        if (source === 'true') return true;
+        if (source === 'false') return false;
+        return undefined;
     };
 
     const parseList = (value) => String(value || '')
@@ -41,6 +82,59 @@ export function setupServerConfigCore(ctx) {
         if (!rawTag) return allowEmpty ? '' : fallback;
         const tag = rawTag;
         return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const hasExportableOutboundTag = (value, exportableOutboundTags = null) => {
+        const tag = sanitizeOutboundSelection(value, '', { allowEmpty: true });
+        if (!tag) return false;
+        if (!(exportableOutboundTags instanceof Set)) return true;
+        return exportableOutboundTags.has(tag);
+    };
+    const collectDuplicateTags = (items = [], resolveTag = (item) => item?.tag) => {
+        const counts = new Map();
+        items.forEach((item) => {
+            const tag = String(resolveTag(item) || '').trim();
+            if (!tag) return;
+            counts.set(tag, (counts.get(tag) || 0) + 1);
+        });
+        return Array.from(counts.entries())
+            .filter(([, count]) => count > 1)
+            .map(([tag]) => tag);
+    };
+    const isLikelyIpLiteral = (value) => {
+        const source = String(value || '').trim();
+        if (!source) return false;
+        if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(source)) {
+            return source.split('.').every((part) => {
+                const valuePart = Number(part);
+                return Number.isInteger(valuePart) && valuePart >= 0 && valuePart <= 255;
+            });
+        }
+        const normalized = source.startsWith('[') && source.endsWith(']') ? source.slice(1, -1) : source;
+        return normalized.includes(':') && /^[0-9a-f:]+$/i.test(normalized);
+    };
+    const buildInboundTagMap = () => new Map(
+        ctx.serverInbounds.value
+            .map((item) => {
+                const tag = String(item?.tag || '').trim();
+                if (!tag) return null;
+                return [tag, item?.type || ''];
+            })
+            .filter(Boolean),
+    );
+    const supportsInjectableInbound = (type) => {
+        if (typeof ctx.inboundSupportsDetourTarget === 'function') return !!ctx.inboundSupportsDetourTarget({ type });
+        if (typeof ctx.resolveInboundCapabilities !== 'function') return true;
+        return !!ctx.resolveInboundCapabilities({ type }).injectable;
+    };
+    const sanitizeInboundDetour = (value, currentTag = '', availableInboundTags = null) => {
+        const detour = String(value || '').trim();
+        const ownTag = String(currentTag || '').trim();
+        if (!detour || detour === ownTag) return '';
+        if (availableInboundTags instanceof Map) {
+            const detourType = String(availableInboundTags.get(detour) || '').trim();
+            if (!detourType || !supportsInjectableInbound(detourType)) return '';
+        }
+        return detour;
     };
     const normalizeRouteActionState = (rule = {}) => {
         const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
@@ -142,16 +236,17 @@ export function setupServerConfigCore(ctx) {
 
     const buildDnsServer = (dns) => {
         if (!dns || !dns.tag) return null;
-        if (dns.type === 'local') return { type: 'local', tag: dns.tag };
+        const usesServerAddress = dns.type !== 'local';
+        const usesHttpFields = ['https', 'h3'].includes(dns.type);
         const server = { type: dns.type, tag: dns.tag };
-        if (dns.server) server.server = dns.server;
+        if (usesServerAddress && dns.server) server.server = dns.server;
         const serverPort = parseOptionalInteger(dns.server_port);
-        if (serverPort !== undefined && serverPort > 0) server.server_port = serverPort;
+        if (usesServerAddress && serverPort !== undefined && serverPort > 0) server.server_port = serverPort;
         if (dns.detour) server.detour = dns.detour;
-        if (dns.domain_resolver) server.domain_resolver = dns.domain_resolver;
-        if (dns.path && ['https', 'h3'].includes(dns.type)) server.path = dns.path;
+        if (usesServerAddress && dns.domain_resolver) server.domain_resolver = dns.domain_resolver;
+        if (usesHttpFields && dns.path) server.path = dns.path;
         const headers = parseHeadersText(dns.headers_text);
-        if (headers && ['https', 'h3'].includes(dns.type)) server.headers = headers;
+        if (usesHttpFields && headers) server.headers = headers;
         if (dns.client_subnet) server.client_subnet = dns.client_subnet;
         if (dns.connect_timeout) server.connect_timeout = dns.connect_timeout;
         return server;
@@ -206,16 +301,21 @@ export function setupServerConfigCore(ctx) {
             })
             .filter(Boolean);
     };
+    const shouldPreserveUsersArray = (inbound) => {
+        if (!inbound) return false;
+        if (INBOUND_TYPES_WITH_REQUIRED_USERS.includes(inbound.type)) return true;
+        if (inbound.type === 'shadowtls' && String(inbound.shadowtls_version || '3') === '3') return true;
+        if (inbound.type === 'shadowsocks' && inbound.ss_mode === 'multi-user') return true;
+        return false;
+    };
 
     const buildTransport = (inbound) => {
         if (!TRANSPORT_TYPES.includes(inbound.type) || !inbound.transport) return undefined;
         const headers = parseHeadersText(inbound.transport_headers_text);
         if (inbound.transport === 'ws') {
-            const transport = {
-                type: 'ws',
-                path: inbound.transport_path || '/',
-                headers,
-            };
+            const transport = { type: 'ws' };
+            if (inbound.transport_path) transport.path = inbound.transport_path;
+            if (headers) transport.headers = headers;
             if (inbound.transport_host) {
                 transport.headers = {
                     ...(transport.headers || {}),
@@ -250,12 +350,11 @@ export function setupServerConfigCore(ctx) {
             return transport;
         }
         if (inbound.transport === 'httpupgrade') {
-            return {
-                type: 'httpupgrade',
-                host: inbound.transport_host || undefined,
-                path: inbound.transport_path || '/',
-                headers,
-            };
+            const transport = { type: 'httpupgrade' };
+            if (inbound.transport_host) transport.host = inbound.transport_host;
+            if (inbound.transport_path) transport.path = inbound.transport_path;
+            if (headers) transport.headers = headers;
+            return transport;
         }
         if (inbound.transport === 'quic') {
             return { type: 'quic' };
@@ -267,14 +366,22 @@ export function setupServerConfigCore(ctx) {
         if (!MULTIPLEX_TYPES.includes(inbound.type) || !inbound.mux_enabled) return undefined;
         const multiplex = { enabled: true };
         if (inbound.mux_padding) multiplex.padding = true;
-        if (inbound.mux_brutal_enabled) multiplex.brutal = {};
+        if (inbound.mux_brutal_enabled) {
+            multiplex.brutal = { enabled: true };
+            const brutalUp = parsePositiveInteger(inbound.mux_brutal_up_mbps);
+            const brutalDown = parsePositiveInteger(inbound.mux_brutal_down_mbps);
+            if (brutalUp !== undefined) multiplex.brutal.up_mbps = brutalUp;
+            if (brutalDown !== undefined) multiplex.brutal.down_mbps = brutalDown;
+        }
         return multiplex;
     };
 
     const buildTls = (inbound) => {
         if (!TLS_TYPES.includes(inbound.type) || !inbound.tls_enabled) return undefined;
         const tls = { enabled: true };
+        if (inbound.tls_certificate) tls.certificate = inbound.tls_certificate;
         if (inbound.tls_cert_path) tls.certificate_path = inbound.tls_cert_path;
+        if (inbound.tls_key) tls.key = inbound.tls_key;
         if (inbound.tls_key_path) tls.key_path = inbound.tls_key_path;
         if (inbound.tls_server_name) tls.server_name = inbound.tls_server_name;
         const alpn = parseList(inbound.tls_alpn);
@@ -283,15 +390,15 @@ export function setupServerConfigCore(ctx) {
         if (inbound.tls_max_version) tls.max_version = inbound.tls_max_version;
         if (inbound.tls_handshake_timeout) tls.handshake_timeout = inbound.tls_handshake_timeout;
         if (inbound.reality_enabled) {
-            tls.reality = {
-                enabled: true,
-                handshake: {
-                    server: inbound.reality_server || 'www.cloudflare.com',
+            tls.reality = { enabled: true };
+            if (inbound.reality_server) {
+                tls.reality.handshake = {
+                    server: inbound.reality_server,
                     server_port: parseOptionalInteger(inbound.reality_server_port) || 443,
-                },
-                private_key: inbound.reality_private_key || '',
-                short_id: inbound.reality_short_id || '',
-            };
+                };
+            }
+            if (inbound.reality_private_key) tls.reality.private_key = inbound.reality_private_key;
+            if (inbound.reality_short_id) tls.reality.short_id = inbound.reality_short_id;
             if (inbound.reality_max_time_difference) {
                 tls.reality.max_time_difference = inbound.reality_max_time_difference;
             }
@@ -330,11 +437,10 @@ export function setupServerConfigCore(ctx) {
     const buildRemoteOutboundTransport = (outbound) => {
         if (!['vless', 'vmess', 'trojan'].includes(outbound.type) || !outbound.transport) return undefined;
         if (outbound.transport === 'ws') {
-            return {
-                type: 'ws',
-                path: outbound.transport_path || '/',
-                headers: outbound.transport_host ? { Host: outbound.transport_host } : undefined,
-            };
+            const transport = { type: 'ws' };
+            if (outbound.transport_path) transport.path = outbound.transport_path;
+            if (outbound.transport_host) transport.headers = { Host: outbound.transport_host };
+            return transport;
         }
         if (outbound.transport === 'grpc') {
             return {
@@ -350,11 +456,10 @@ export function setupServerConfigCore(ctx) {
             };
         }
         if (outbound.transport === 'httpupgrade') {
-            return {
-                type: 'httpupgrade',
-                path: outbound.transport_path || '/',
-                host: outbound.transport_host || undefined,
-            };
+            const transport = { type: 'httpupgrade' };
+            if (outbound.transport_path) transport.path = outbound.transport_path;
+            if (outbound.transport_host) transport.host = outbound.transport_host;
+            return transport;
         }
         if (outbound.transport === 'quic') {
             return { type: 'quic' };
@@ -362,7 +467,7 @@ export function setupServerConfigCore(ctx) {
         return undefined;
     };
 
-    const buildInbound = (inbound) => {
+    const buildInbound = (inbound, availableInboundTags = null) => {
         if (!inbound || !inbound.tag) return null;
         const listenPort = parseOptionalInteger(inbound.listen_port);
         const obj = {
@@ -371,10 +476,25 @@ export function setupServerConfigCore(ctx) {
             listen: inbound.listen || '::',
             listen_port: listenPort === undefined ? 443 : listenPort,
         };
+        const routingMark = parseRoutingMark(inbound.routing_mark);
+        const reuseAddr = parseOptionalBoolean(inbound.reuse_addr);
+        const tcpFastOpen = parseOptionalBoolean(inbound.tcp_fast_open);
+        const tcpMultiPath = parseOptionalBoolean(inbound.tcp_multi_path);
+        const udpFragment = parseOptionalBoolean(inbound.udp_fragment);
+        if (inbound.bind_interface) obj.bind_interface = inbound.bind_interface;
+        if (routingMark.valid && routingMark.value !== undefined) obj.routing_mark = routingMark.value;
+        if (reuseAddr !== undefined) obj.reuse_addr = reuseAddr;
+        if (inbound.netns) obj.netns = inbound.netns;
+        if (tcpFastOpen !== undefined) obj.tcp_fast_open = tcpFastOpen;
+        if (tcpMultiPath !== undefined) obj.tcp_multi_path = tcpMultiPath;
+        if (udpFragment !== undefined) obj.udp_fragment = udpFragment;
+        if (inbound.udp_timeout) obj.udp_timeout = inbound.udp_timeout;
+        const detour = sanitizeInboundDetour(inbound.detour, inbound.tag, availableInboundTags);
+        if (detour) obj.detour = detour;
 
         if (['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'].includes(inbound.type)) {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
         }
 
         if (inbound.type === 'shadowsocks') {
@@ -384,7 +504,7 @@ export function setupServerConfigCore(ctx) {
             if (inbound.ss_managed) obj.managed = true;
             if (inbound.ss_mode === 'multi-user') {
                 const users = buildUsers(inbound);
-                if (users.length > 0) obj.users = users;
+                obj.users = users;
             }
             if (inbound.ss_mode === 'relay' && Array.isArray(inbound.ss_destinations) && inbound.ss_destinations.length > 0) {
                 obj.destinations = inbound.ss_destinations
@@ -403,20 +523,29 @@ export function setupServerConfigCore(ctx) {
         }
 
         if (inbound.type === 'hysteria') {
-            if (inbound.hy_up_mbps) obj.up_mbps = parseOptionalInteger(inbound.hy_up_mbps) || inbound.hy_up_mbps;
-            if (inbound.hy_down_mbps) obj.down_mbps = parseOptionalInteger(inbound.hy_down_mbps) || inbound.hy_down_mbps;
+            if (inbound.hy_up) obj.up = inbound.hy_up;
+            if (inbound.hy_down) obj.down = inbound.hy_down;
+            const hyUpMbps = parsePositiveInteger(inbound.hy_up_mbps);
+            const hyDownMbps = parsePositiveInteger(inbound.hy_down_mbps);
+            const hyRecvWindowConn = parseNonNegativeInteger(inbound.hy_recv_window_conn);
+            const hyRecvWindowClient = parseNonNegativeInteger(inbound.hy_recv_window_client);
+            const hyMaxConnClient = parseNonNegativeInteger(inbound.hy_max_conn_client);
+            if (hyUpMbps !== undefined) obj.up_mbps = hyUpMbps;
+            if (hyDownMbps !== undefined) obj.down_mbps = hyDownMbps;
             if (inbound.hy_obfs) obj.obfs = inbound.hy_obfs;
-            if (inbound.hy_recv_window_conn) obj.recv_window_conn = parseOptionalInteger(inbound.hy_recv_window_conn) || inbound.hy_recv_window_conn;
-            if (inbound.hy_recv_window_client) obj.recv_window_client = parseOptionalInteger(inbound.hy_recv_window_client) || inbound.hy_recv_window_client;
-            if (inbound.hy_max_conn_client) obj.max_conn_client = parseOptionalInteger(inbound.hy_max_conn_client) || inbound.hy_max_conn_client;
+            if (hyRecvWindowConn !== undefined) obj.recv_window_conn = hyRecvWindowConn;
+            if (hyRecvWindowClient !== undefined) obj.recv_window_client = hyRecvWindowClient;
+            if (hyMaxConnClient !== undefined) obj.max_conn_client = hyMaxConnClient;
             if (inbound.hy_disable_mtu_discovery) obj.disable_mtu_discovery = true;
         }
 
         if (inbound.type === 'hysteria2') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
-            if (inbound.hy2_up_mbps) obj.up_mbps = parseOptionalInteger(inbound.hy2_up_mbps) || inbound.hy2_up_mbps;
-            if (inbound.hy2_down_mbps) obj.down_mbps = parseOptionalInteger(inbound.hy2_down_mbps) || inbound.hy2_down_mbps;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
+            const hy2UpMbps = parsePositiveInteger(inbound.hy2_up_mbps);
+            const hy2DownMbps = parsePositiveInteger(inbound.hy2_down_mbps);
+            if (hy2UpMbps !== undefined) obj.up_mbps = hy2UpMbps;
+            if (hy2DownMbps !== undefined) obj.down_mbps = hy2DownMbps;
             if (inbound.hy2_obfs_type) obj.obfs = { type: inbound.hy2_obfs_type, password: inbound.hy2_obfs_password || '' };
             if (inbound.hy2_ignore_client_bandwidth) obj.ignore_client_bandwidth = true;
             const masquerade = buildMasquerade(inbound);
@@ -425,7 +554,7 @@ export function setupServerConfigCore(ctx) {
 
         if (inbound.type === 'tuic') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             if (inbound.tuic_congestion) obj.congestion_control = inbound.tuic_congestion;
             if (inbound.tuic_auth_timeout) obj.auth_timeout = inbound.tuic_auth_timeout;
             if (inbound.tuic_zero_rtt_handshake) obj.zero_rtt_handshake = true;
@@ -434,7 +563,7 @@ export function setupServerConfigCore(ctx) {
 
         if (inbound.type === 'anytls') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             const paddingScheme = parseList(inbound.anytls_padding_scheme_text);
             if (paddingScheme.length > 0) obj.padding_scheme = paddingScheme;
         }
@@ -444,7 +573,7 @@ export function setupServerConfigCore(ctx) {
             if (String(obj.version) === '2' && inbound.shadowtls_password) obj.password = inbound.shadowtls_password;
             if (String(obj.version) === '3') {
                 const users = buildUsers(inbound);
-                if (users.length > 0) obj.users = users;
+                if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             }
             if (inbound.shadowtls_handshake_server) {
                 obj.handshake = {
@@ -630,8 +759,9 @@ export function setupServerConfigCore(ctx) {
             if (alpn.length > 0) obj.tls.alpn = alpn;
             if (outbound.allow_insecure) obj.tls.insecure = true;
         } else if (outbound.type === 'wireguard') {
-            if (!outbound.local_address || !outbound.peer_public_key) return null;
+            if (!outbound.local_address || !outbound.private_key || !outbound.peer_public_key) return null;
             obj.local_address = parseList(outbound.local_address);
+            obj.private_key = outbound.private_key;
             obj.peer_public_key = outbound.peer_public_key;
             if (outbound.pre_shared_key) obj.pre_shared_key = outbound.pre_shared_key;
             const mtu = parseOptionalInteger(outbound.mtu);
@@ -644,13 +774,32 @@ export function setupServerConfigCore(ctx) {
 
         return obj;
     };
+    const buildExportableRemoteOutbounds = () => ctx.remoteOutbounds.value
+        .map(sanitizeRemoteOutboundForExport)
+        .map(buildRemoteOutbound)
+        .filter(Boolean);
+    const buildExportableOutboundTagSet = (outbounds = buildExportableRemoteOutbounds()) => new Set(
+        ['direct', ...outbounds.map((item) => String(item?.tag || '').trim()).filter(Boolean)],
+    );
+    const buildDnsServers = () => ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
+    const buildDnsTagSet = (dnsServers = buildDnsServers()) => new Set(
+        dnsServers.map((item) => String(item?.tag || '').trim()).filter(Boolean),
+    );
+    const buildExportableRuleSets = () => ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
+    const buildRuleSetTagSet = (ruleSets = buildExportableRuleSets()) => new Set(
+        ruleSets.map((item) => String(item?.tag || '').trim()).filter(Boolean),
+    );
+    const exportableOutboundOptions = computed(() => Array.from(buildExportableOutboundTagSet()));
 
     const generatedJson = computed(() => {
-        const dnsServers = ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
-        const inbounds = ctx.serverInbounds.value.map((inbound) => buildInbound(sanitizeInboundForExport(inbound))).filter(Boolean);
-        const ruleSets = ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
+        const dnsServers = buildDnsServers();
+        const availableInboundTags = buildInboundTagMap();
+        const inbounds = ctx.serverInbounds.value
+            .map((inbound) => buildInbound(sanitizeInboundForExport(inbound), availableInboundTags))
+            .filter(Boolean);
+        const ruleSets = buildExportableRuleSets();
         const routeRules = ctx.routeRules.value.map(buildRouteRule).filter(Boolean);
-        const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
+        const customOutbounds = buildExportableRemoteOutbounds();
         const route = {
             rules: routeRules,
             final: sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct'),
@@ -677,22 +826,79 @@ export function setupServerConfigCore(ctx) {
             route,
         };
 
-        return JSON.stringify(config, (key, value) => {
-            if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) return undefined;
+        return JSON.stringify(config, function replacer(key, value) {
+            if (Array.isArray(value) && value.length === 0) {
+                if (key === 'users' && this && typeof this === 'object' && typeof this.type === 'string') {
+                    if (INBOUND_TYPES_WITH_REQUIRED_USERS.includes(this.type) || this.type === 'shadowtls' || this.type === 'shadowsocks') {
+                        return value;
+                    }
+                }
+                return undefined;
+            }
+            if (value === undefined || value === null || value === '') return undefined;
             return value;
         }, 2);
     });
     const runtimeValidationErrors = computed(() => {
         const errors = [];
+        const availableInboundTags = buildInboundTagMap();
+        const dnsServers = buildDnsServers();
+        const availableDnsTags = buildDnsTagSet(dnsServers);
+        const exportableRuleSets = buildExportableRuleSets();
+        const exportableRuleSetTags = buildRuleSetTagSet(exportableRuleSets);
+        const exportableOutbounds = buildExportableRemoteOutbounds();
+        const exportableOutboundTags = buildExportableOutboundTagSet(exportableOutbounds);
+
+        collectDuplicateTags(ctx.serverInbounds.value).forEach((tag) => {
+            errors.push(`入站 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(dnsServers).forEach((tag) => {
+            errors.push(`DNS 服务器 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(exportableRuleSets).forEach((tag) => {
+            errors.push(`规则集 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(ctx.remoteOutbounds.value).forEach((tag) => {
+            errors.push(`远端出站 tag "${tag}" 重复`);
+        });
+        ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
+            const outboundTag = String(outbound?.tag || '').trim() || `relay-${outboundIndex + 1}`;
+            if (!BUILTIN_OUTBOUND_TAGS.has(outboundTag)) return;
+            errors.push(`远端出站 "${outboundTag}" 不能使用保留 tag`);
+        });
 
         ctx.serverInbounds.value.forEach((inbound, inboundIndex) => {
             const inboundTag = inbound?.tag || `inbound-${inboundIndex + 1}`;
             const sanitizedInbound = sanitizeInboundForExport(inbound);
             const capabilities = typeof ctx.resolveInboundCapabilities === 'function' ? ctx.resolveInboundCapabilities(sanitizedInbound) : null;
             const builtUsers = buildUsers(sanitizedInbound);
+            const detour = String(sanitizedInbound?.detour || '').trim();
+            const routingMark = parseRoutingMark(sanitizedInbound?.routing_mark);
 
             if (capabilities?.requiresTls && !sanitizedInbound?.tls_enabled) {
                 errors.push(`入站 "${inboundTag}" 的协议要求启用 TLS`);
+            }
+            if (!routingMark.empty && !routingMark.valid) {
+                errors.push(`入站 "${inboundTag}" 的 routing_mark 必须是十进制整数或 0x 开头的十六进制字符串`);
+            }
+            if (detour) {
+                if (detour === inboundTag) {
+                    errors.push(`入站 "${inboundTag}" 的 detour 不能指向自己`);
+                } else if (!availableInboundTags.has(detour)) {
+                    errors.push(`入站 "${inboundTag}" 的 detour 指向了不存在的入站 "${detour}"`);
+                } else {
+                    const detourType = String(availableInboundTags.get(detour) || '').trim();
+                    if (!supportsInjectableInbound(detourType)) {
+                        errors.push(`入站 "${inboundTag}" 的 detour 指向了不支持 Injectable 的入站 "${detour}"`);
+                    }
+                }
+            }
+            if (sanitizedInbound?.tls_enabled) {
+                const hasCertificate = !!String(sanitizedInbound?.tls_certificate || sanitizedInbound?.tls_cert_path || '').trim();
+                const hasKey = !!String(sanitizedInbound?.tls_key || sanitizedInbound?.tls_key_path || '').trim();
+                if (!hasCertificate || !hasKey) {
+                    errors.push(`入站 "${inboundTag}" 已启用 TLS，但缺少证书链或私钥（可填写 PEM 内容或文件路径）`);
+                }
             }
             if (inbound?.reality_enabled && !capabilities?.supportsReality) {
                 errors.push(`入站 "${inboundTag}" 当前协议不支持 Reality`);
@@ -700,7 +906,16 @@ export function setupServerConfigCore(ctx) {
             if (capabilities?.activeTransport === 'grpc' && !String(sanitizedInbound?.transport_service_name || '').trim()) {
                 errors.push(`入站 "${inboundTag}" 使用 gRPC transport 时建议填写 service_name，当前导出会生成空 service_name`);
             }
+            if (capabilities?.activeTransport === 'ws' && String(sanitizedInbound?.transport_early_data_header_name || '').trim()) {
+                const maxEarlyData = parseOptionalInteger(sanitizedInbound?.transport_early_data);
+                if (!maxEarlyData || maxEarlyData <= 0) {
+                    errors.push(`入站 "${inboundTag}" 设置了 WebSocket early_data_header_name，但 max_early_data 为空或为 0`);
+                }
+            }
             if (sanitizedInbound?.reality_enabled) {
+                if (!String(sanitizedInbound?.reality_server || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 handshake server`);
+                }
                 if (!String(sanitizedInbound?.reality_private_key || '').trim()) {
                     errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 private_key`);
                 }
@@ -712,8 +927,34 @@ export function setupServerConfigCore(ctx) {
                 errors.push(`入站 "${inboundTag}" 缺少有效用户配置`);
             }
             if (sanitizedInbound?.type === 'hysteria') {
-                if (!String(sanitizedInbound?.hy_up_mbps || '').trim() || !String(sanitizedInbound?.hy_down_mbps || '').trim()) {
-                    errors.push(`Hysteria 入站 "${inboundTag}" 缺少 up_mbps/down_mbps`);
+                const hasStringBandwidth = hasTextValue(sanitizedInbound?.hy_up) && hasTextValue(sanitizedInbound?.hy_down);
+                const hasMbpsBandwidth = hasTextValue(sanitizedInbound?.hy_up_mbps) && hasTextValue(sanitizedInbound?.hy_down_mbps);
+                if (!hasStringBandwidth && !hasMbpsBandwidth) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 缺少 up/down 或 up_mbps/down_mbps`);
+                }
+                if ((hasTextValue(sanitizedInbound?.hy_up) || hasTextValue(sanitizedInbound?.hy_down))
+                    && (!isValidHysteriaBandwidth(sanitizedInbound?.hy_up) || !isValidHysteriaBandwidth(sanitizedInbound?.hy_down))) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 up/down 必须符合官方带宽格式，例如 100 Mbps 或 640 KBps`);
+                }
+                if ((hasTextValue(sanitizedInbound?.hy_up_mbps) || hasTextValue(sanitizedInbound?.hy_down_mbps))
+                    && (parsePositiveInteger(sanitizedInbound?.hy_up_mbps) === undefined || parsePositiveInteger(sanitizedInbound?.hy_down_mbps) === undefined)) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 up_mbps/down_mbps 必须是正整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_recv_window_conn) && parseNonNegativeInteger(sanitizedInbound?.hy_recv_window_conn) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 recv_window_conn 必须是非负整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_recv_window_client) && parseNonNegativeInteger(sanitizedInbound?.hy_recv_window_client) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 recv_window_client 必须是非负整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_max_conn_client) && parseNonNegativeInteger(sanitizedInbound?.hy_max_conn_client) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 max_conn_client 必须是非负整数`);
+                }
+            }
+            if (sanitizedInbound?.mux_enabled && sanitizedInbound?.mux_brutal_enabled) {
+                if (!hasTextValue(sanitizedInbound?.mux_brutal_up_mbps) || !hasTextValue(sanitizedInbound?.mux_brutal_down_mbps)) {
+                    errors.push(`入站 "${inboundTag}" 启用 Multiplex Brutal 时缺少 up_mbps/down_mbps`);
+                } else if (parsePositiveInteger(sanitizedInbound?.mux_brutal_up_mbps) === undefined || parsePositiveInteger(sanitizedInbound?.mux_brutal_down_mbps) === undefined) {
+                    errors.push(`入站 "${inboundTag}" 的 Multiplex Brutal up_mbps/down_mbps 必须是正整数`);
                 }
             }
             if (sanitizedInbound?.type === 'shadowtls') {
@@ -730,8 +971,15 @@ export function setupServerConfigCore(ctx) {
                 }
             }
             if (inbound?.type === 'hysteria2' && inbound?.hy2_ignore_client_bandwidth) {
-                if (String(inbound?.hy2_up_mbps || '').trim() || String(inbound?.hy2_down_mbps || '').trim()) {
+                if (hasTextValue(inbound?.hy2_up_mbps) || hasTextValue(inbound?.hy2_down_mbps)) {
                     errors.push(`Hysteria2 入站 "${inboundTag}" 开启 ignore_client_bandwidth 时，不应继续填写 up_mbps/down_mbps`);
+                }
+            } else if (sanitizedInbound?.type === 'hysteria2') {
+                if (hasTextValue(sanitizedInbound?.hy2_up_mbps) && parsePositiveInteger(sanitizedInbound?.hy2_up_mbps) === undefined) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 的 up_mbps 必须是正整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy2_down_mbps) && parsePositiveInteger(sanitizedInbound?.hy2_down_mbps) === undefined) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 的 down_mbps 必须是正整数`);
                 }
             }
             if (inbound?.type !== 'shadowsocks') return;
@@ -765,14 +1013,141 @@ export function setupServerConfigCore(ctx) {
             }
         });
 
+        if (ctx.settings.value.dns_final) {
+            const dnsFinal = String(ctx.settings.value.dns_final || '').trim();
+            if (dnsFinal && !availableDnsTags.has(dnsFinal)) {
+                errors.push(`最终 DNS "${dnsFinal}" 指向了不存在的 DNS 服务器 tag`);
+            }
+        }
+
+        ctx.dnsList.value.forEach((dns, dnsIndex) => {
+            const dnsTag = String(dns?.tag || '').trim() || `dns-${dnsIndex + 1}`;
+            const dnsType = String(dns?.type || 'udp').trim();
+            const server = String(dns?.server || '').trim();
+            const domainResolver = String(dns?.domain_resolver || '').trim();
+            const detour = sanitizeOutboundSelection(dns?.detour, '', { allowEmpty: true });
+
+            if (dnsType !== 'local' && !server) {
+                errors.push(`DNS 服务器 "${dnsTag}" 缺少 server`);
+            }
+            if (dnsType !== 'local' && server && !isLikelyIpLiteral(server) && !domainResolver) {
+                errors.push(`DNS 服务器 "${dnsTag}" 使用域名作为 server 时，必须设置 domain_resolver`);
+            }
+            if (dnsType !== 'local' && domainResolver) {
+                if (domainResolver === dnsTag) {
+                    errors.push(`DNS 服务器 "${dnsTag}" 的 domain_resolver 不能指向自己`);
+                } else if (!availableDnsTags.has(domainResolver)) {
+                    errors.push(`DNS 服务器 "${dnsTag}" 的 domain_resolver 指向了不存在的 DNS 服务器 "${domainResolver}"`);
+                }
+            }
+            if (detour && !hasExportableOutboundTag(detour, exportableOutboundTags)) {
+                errors.push(`DNS 服务器 "${dnsTag}" 的 detour 指向了未导出的远端出站 "${detour}"`);
+            }
+        });
+
         ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
-            if (outbound?.type !== 'shadowsocks') return;
-            const method = outbound.method || '2022-blake3-aes-128-gcm';
-            if (!getShadowsocks2022KeyLength(method)) return;
-            if (!String(outbound.password || '').trim()) return;
-            if (isValidShadowsocks2022Password(method, outbound.password)) return;
-            const outboundTag = outbound.tag || `relay-${outboundIndex + 1}`;
-            errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+            const outboundTag = String(outbound?.tag || '').trim() || `relay-${outboundIndex + 1}`;
+            const sanitizedOutbound = sanitizeRemoteOutboundForExport(outbound);
+            const capabilities = typeof ctx.resolveRemoteOutboundCapabilities === 'function' ? ctx.resolveRemoteOutboundCapabilities(sanitizedOutbound) : null;
+            const outboundType = String(sanitizedOutbound?.type || '').trim();
+            const outboundServer = String(sanitizedOutbound?.server || '').trim();
+            const outboundPort = parseOptionalInteger(sanitizedOutbound?.server_port);
+
+            if (!outboundServer) {
+                errors.push(`远端出站 "${outboundTag}" 缺少 server`);
+            }
+            if (outboundPort === undefined || outboundPort <= 0) {
+                errors.push(`远端出站 "${outboundTag}" 的 server_port 必须是正整数`);
+            }
+            if (capabilities?.requiresTls && !sanitizedOutbound?.tls_enabled) {
+                errors.push(`远端出站 "${outboundTag}" 的协议要求启用 TLS`);
+            }
+            if (capabilities?.supportsTransport && capabilities?.activeTransport === 'grpc' && !String(sanitizedOutbound?.transport_service_name || '').trim()) {
+                errors.push(`远端出站 "${outboundTag}" 使用 gRPC transport 时建议填写 service_name，当前导出会生成空 service_name`);
+            }
+            if (outboundType === 'vless' && !String(sanitizedOutbound?.uuid || '').trim()) {
+                errors.push(`VLESS 远端出站 "${outboundTag}" 缺少 uuid`);
+            }
+            if (outboundType === 'vmess' && !String(sanitizedOutbound?.uuid || '').trim()) {
+                errors.push(`VMess 远端出站 "${outboundTag}" 缺少 uuid`);
+            }
+            if (outboundType === 'trojan' && !String(sanitizedOutbound?.password || '').trim()) {
+                errors.push(`Trojan 远端出站 "${outboundTag}" 缺少 password`);
+            }
+            if (outboundType === 'shadowsocks') {
+                if (!String(sanitizedOutbound?.method || '').trim()) {
+                    errors.push(`Shadowsocks 远端出站 "${outboundTag}" 缺少 method`);
+                }
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`Shadowsocks 远端出站 "${outboundTag}" 缺少 password`);
+                }
+                const method = sanitizedOutbound?.method || '2022-blake3-aes-128-gcm';
+                if (getShadowsocks2022KeyLength(method) && String(sanitizedOutbound?.password || '').trim()
+                    && !isValidShadowsocks2022Password(method, sanitizedOutbound.password)) {
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+                }
+            }
+            if (outboundType === 'hysteria2') {
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`Hysteria2 远端出站 "${outboundTag}" 缺少 password`);
+                }
+            }
+            if (outboundType === 'tuic') {
+                if (!String(sanitizedOutbound?.uuid || '').trim()) {
+                    errors.push(`TUIC 远端出站 "${outboundTag}" 缺少 uuid`);
+                }
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`TUIC 远端出站 "${outboundTag}" 缺少 password`);
+                }
+            }
+            if (outboundType === 'wireguard') {
+                if (parseList(sanitizedOutbound?.local_address).length === 0) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 local_address`);
+                }
+                if (!String(sanitizedOutbound?.private_key || '').trim()) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 private_key`);
+                }
+                if (!String(sanitizedOutbound?.peer_public_key || '').trim()) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 peer_public_key`);
+                }
+            }
+        });
+        const finalOutbound = sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct');
+        if (!hasExportableOutboundTag(finalOutbound, exportableOutboundTags)) {
+            errors.push(`默认出站 "${finalOutbound}" 没有对应已导出的远端出站配置`);
+        }
+
+        ctx.ruleSets.value.forEach((ruleSet, ruleSetIndex) => {
+            if (!ruleSet?.enabled || ruleSet?.source_type !== 'remote') return;
+            const downloadDetour = sanitizeOutboundSelection(ruleSet.download_detour, '', { allowEmpty: true });
+            if (!downloadDetour || hasExportableOutboundTag(downloadDetour, exportableOutboundTags)) return;
+            const ruleSetTag = ruleSet.tag || `ruleset-${ruleSetIndex + 1}`;
+            errors.push(`规则集 "${ruleSetTag}" 的 download_detour 指向了未导出的远端出站 "${downloadDetour}"`);
+        });
+
+        ctx.routeRules.value.forEach((rule, ruleIndex) => {
+            if (!rule?.enabled) return;
+            const ruleLabel = String(rule?.name || '').trim() || `路由规则 #${ruleIndex + 1}`;
+            const matchValues = parseList(rule.match_value);
+            if (rule.match_type === 'port' && matchValues.some((item) => parseOptionalInteger(item) === undefined)) {
+                errors.push(`路由规则 "${ruleLabel}" 的 port 必须是整数列表`);
+            }
+            if (rule.match_type === 'inbound') {
+                const missingInboundTags = matchValues.filter((item) => !availableInboundTags.has(item));
+                if (missingInboundTags.length > 0) {
+                    errors.push(`路由规则 "${ruleLabel}" 引用了不存在的入站: ${Array.from(new Set(missingInboundTags)).join(', ')}`);
+                }
+            }
+            if (rule.match_type === 'rule_set') {
+                const missingRuleSetTags = matchValues.filter((item) => !exportableRuleSetTags.has(item));
+                if (missingRuleSetTags.length > 0) {
+                    errors.push(`路由规则 "${ruleLabel}" 引用了不存在或未导出的规则集: ${Array.from(new Set(missingRuleSetTags)).join(', ')}`);
+                }
+            }
+            const normalizedRouteAction = normalizeRouteActionState(rule);
+            if (normalizedRouteAction.action !== 'route') return;
+            if (hasExportableOutboundTag(normalizedRouteAction.outbound, exportableOutboundTags)) return;
+            errors.push(`路由规则 "${ruleLabel}" 的 outbound 指向了未导出的远端出站 "${normalizedRouteAction.outbound}"`);
         });
 
         return errors;
@@ -979,6 +1354,7 @@ export function setupServerConfigCore(ctx) {
     });
 
     Object.assign(ctx, {
+        exportableOutboundOptions,
         generatedJson,
         runtimeValidationErrors,
         queueJsonScrollTo,

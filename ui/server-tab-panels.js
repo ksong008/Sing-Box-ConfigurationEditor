@@ -13,10 +13,20 @@ const createInjectedComponent = (name, template, extendSetup = null) => ({
 
 const createOutboundOptions = (ctx) => computed(() => {
     const reservedTags = new Set(['direct', 'block', 'dns', 'dns-out']);
-    const custom = ctx.remoteOutbounds.value
-        .map((item) => item.tag)
+    const exportable = Array.isArray(ctx.exportableOutboundOptions?.value)
+        ? ctx.exportableOutboundOptions.value
+        : ['direct'];
+    const selected = [
+        ctx.settings.value.route_final,
+        ctx.settings.value.rule_set_download_detour,
+        ...ctx.ruleSets.value.map((item) => item?.download_detour),
+        ...ctx.routeRules.value
+            .filter((rule) => (['route', 'reject', 'hijack-dns'].includes(rule?.action) ? rule.action : 'route') === 'route')
+            .map((rule) => rule?.outbound),
+    ]
+        .map((tag) => String(tag || '').trim())
         .filter((tag) => tag && !reservedTags.has(tag));
-    return Array.from(new Set(['direct', ...custom]));
+    return Array.from(new Set([...exportable, ...selected]));
 });
 
 const BasicTab = createInjectedComponent('ServerBasicTab', `                <div v-show="currentTab==='basic'" class="space-y-5">
@@ -71,14 +81,20 @@ const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-s
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">标签</label><input v-model="dns.tag" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-bold text-indigo-700"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="dns.type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="udp">udp</option><option value="tcp">tcp</option><option value="tls">tls</option><option value="https">https</option><option value="quic">quic</option><option value="h3">h3</option><option value="local">local</option></select></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="dns.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input v-model="dns.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><input v-model="dns.path" placeholder="/dns-query" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><select v-model="dns.domain_resolver" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">none</option><option v-for="item in dnsTagOptions(dns.domain_resolver, dns.tag)" :key="item" :value="item">{{ item }}</option></select></div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="dns.type" @change="syncDnsType(dns)" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="udp">udp</option><option value="tcp">tcp</option><option value="tls">tls</option><option value="https">https</option><option value="quic">quic</option><option value="h3">h3</option><option value="local">local</option></select></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="dns.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">使用系统 DNS</div></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input v-model="dns.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div v-if="dnsSupportsHttpFields(dns.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><input v-model="dns.path" placeholder="/dns-query" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><select v-model="dns.domain_resolver" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">none</option><option v-for="item in dnsTagOptions(dns.domain_resolver, dns.tag)" :key="item" :value="item">{{ item }}</option></select></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站 Detour</label><select v-model="dns.detour" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">default</option><option v-for="item in dnsDetourOptions(dns.detour)" :key="item" :value="item">{{ item }}</option></select></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端子网</label><input v-model="dns.client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时</label><input v-model="dns.connect_timeout" placeholder="5s" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><textarea v-model="dns.headers_text" rows="3" placeholder="Accept: application/dns-message" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                    <div v-if="dnsSupportsHttpFields(dns.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><textarea v-model="dns.headers_text" rows="3" placeholder="Accept: application/dns-message" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                    <div v-else class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
                                 </div>
                             </div>
                         </div>
@@ -92,6 +108,14 @@ const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-s
         const unique = Array.from(new Set(tags));
         return current && !unique.includes(current) ? [current, ...unique] : unique;
     },
+    dnsDetourOptions: (current = '') => {
+        const tags = (Array.isArray(ctx.exportableOutboundOptions?.value) ? ctx.exportableOutboundOptions.value : ['direct'])
+            .filter((tag) => tag && tag !== 'direct');
+        const unique = Array.from(new Set(tags));
+        const selected = String(current || '').trim();
+        return selected && !unique.includes(selected) ? [selected, ...unique] : unique;
+    },
+    dnsSupportsHttpFields: (type = '') => ['https', 'h3'].includes(String(type || '').trim()),
 }));
 
 const InboundsTab = createInjectedComponent('ServerInboundsTab', `                <div v-show="currentTab==='inbounds'" class="space-y-5">
@@ -128,6 +152,24 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="inbound.type" @change="syncInboundType(inbound)" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in inboundTypeOptions" :key="item.type" :value="item.type">{{ item.label }}</option></select></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label><input v-model="inbound.listen" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听端口</label><input type="number" v-model.number="inbound.listen_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div class="col-span-2 bg-white border border-gray-200 rounded-lg p-3">
+                                        <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">高级监听字段 (Listen Fields)</div>
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口</label><input v-model="inbound.bind_interface" placeholder="eth0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记</label><input v-model="inbound.routing_mark" placeholder="1234 / 0x1234" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间</label><input v-model="inbound.netns" placeholder="/var/run/netns/proxy" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reuse Addr</label><select v-model="inbound.reuse_addr" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TCP Fast Open</label><select v-model="inbound.tcp_fast_open" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TCP Multi Path</label><select v-model="inbound.tcp_multi_path" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Fragment</label><select v-model="inbound.udp_fragment" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Timeout</label><input v-model="inbound.udp_timeout" placeholder="5m" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Detour (目标入站)</label>
+                                                <select v-model="inbound.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"><option value="">none</option><option v-for="item in inboundDetourOptions(inbound.detour, inbound.tag)" :key="item" :value="item">{{ item }}</option></select>
+                                                <div class="mt-1 text-[11px] text-gray-500">连接会转发到指定入站；仅支持选择带 Injectable 能力的目标入站。</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div v-if="inbound.collapsed" class="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-3 py-2">
@@ -138,7 +180,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsShareLinks(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">客户端分享参数</div>
-                                            <span class="text-[11px] text-gray-500 font-semibold">用于生成节点链接和订阅原文</span>
+                                            <span class="text-[11px] text-gray-500 font-semibold">用于生成节点链接</span>
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">订阅地址 (Share Server)</label><input v-model="inbound.share_server" placeholder="server.example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -176,6 +218,8 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     </div>
 
                                     <div v-if="inbound.type==='hysteria'" class="bg-white border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-3">
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up)</label><input v-model="inbound.hy_up" placeholder="100 Mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down)</label><input v-model="inbound.hy_down" placeholder="1 Gbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up Mbps)</label><input v-model="inbound.hy_up_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down Mbps)</label><input v-model="inbound.hy_down_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆 (Obfs)</label><input v-model="inbound.hy_obfs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -284,6 +328,8 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                         <div v-if="inbound.tls_enabled" class="grid grid-cols-2 gap-3">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">证书路径 (Certificate Path)</label><input v-model="inbound.tls_cert_path" placeholder="/etc/sing-box/cert.pem" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">私钥路径 (Key Path)</label><input v-model="inbound.tls_key_path" placeholder="/etc/sing-box/key.pem" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">内联证书 (Certificate PEM)</label><textarea v-model="inbound.tls_certificate" rows="3" placeholder="-----BEGIN CERTIFICATE-----" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">内联私钥 (Key PEM)</label><textarea v-model="inbound.tls_key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器名称 (Server Name)</label><input v-model="inbound.tls_server_name" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">应用层协议 (ALPN)</label><select v-model="inbound.tls_alpn" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in alpnOptions(inbound.type, inbound.tls_alpn)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低版本 (Min Version)</label><select v-model="inbound.tls_min_version" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option value="1.0">1.0</option><option value="1.1">1.1</option><option value="1.2">1.2</option><option value="1.3">1.3</option></select></div>
@@ -307,12 +353,12 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="inbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_service_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="inbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="inbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_method')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><select v-model="inbound.transport_method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in httpMethodOptions(inbound.transport_method)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_method')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><input v-model="inbound.transport_method" placeholder="GET" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_idle_timeout')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时 (Idle Timeout)</label><input v-model="inbound.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_ping_timeout')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时 (Ping Timeout)</label><input v-model="inbound.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_permit_without_stream')" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">无流探测 (Permit Without Stream)</span></label></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_early_data')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大提前数据 (Max Early Data)</label><input v-model="inbound.transport_early_data" placeholder="0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_early_data_header_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">提前数据头 (Early Data Header Name)</label><select v-model="inbound.transport_early_data_header_name" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in earlyDataHeaderOptions(inbound.transport_early_data_header_name)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_early_data_header_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">提前数据头 (Early Data Header Name)</label><input v-model="inbound.transport_early_data_header_name" placeholder="Sec-WebSocket-Protocol" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div v-if="inboundTransportFieldVisible(inbound, 'transport_headers_text')" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求头 (Headers)</label><textarea v-model="inbound.transport_headers_text" rows="3" placeholder="Server: nginx" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
                                             <div v-if="inbound.transport==='quic'" class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">QUIC transport 没有额外字段，当前仅输出 <code>{ type: "quic" }</code>。</div>
                                         </div>
@@ -321,12 +367,16 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsMultiplex(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">多路复用 (Multiplex)</div>
-                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 Multiplex</span></label>
+                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_enabled" @change="syncInboundMultiplexState(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 Multiplex</span></label>
                                         </div>
                                         <div v-if="inbound.mux_enabled" class="grid grid-cols-2 gap-3">
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_padding" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">填充 (Padding)</span></label></div>
-                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_brutal_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Brutal 模式 (Brutal)</span></label></div>
-                                            <div class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">服务端 Multiplex 这里只暴露官方最常用的布尔项，不再沿用客户端 outbound 式的协议/连接数配置。</div>
+                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_brutal_enabled" @change="syncInboundMultiplexState(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Brutal 模式 (Brutal)</span></label></div>
+                                            <template v-if="inbound.mux_brutal_enabled">
+                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 上行 (Up Mbps)</label><input v-model="inbound.mux_brutal_up_mbps" placeholder="100" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 下行 (Down Mbps)</label><input v-model="inbound.mux_brutal_down_mbps" placeholder="1000" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            </template>
+                                            <div class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">启用 Brutal 时会导出 TCP Brutal 结构，up_mbps/down_mbps 必填。</div>
                                         </div>
                                     </div>
                                 </div>
@@ -352,6 +402,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
             '2022-blake3-aes-256-gcm',
             '2022-blake3-chacha20-poly1305',
             'aes-128-gcm',
+            'aes-192-gcm',
             'aes-256-gcm',
             'chacha20-ietf-poly1305',
             'xchacha20-ietf-poly1305',
@@ -375,8 +426,15 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
         const options = ['Sec-WebSocket-Protocol'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
+    inboundDetourOptions: (current = '', excludeTag = '') => {
+        const tags = ctx.serverInbounds.value
+            .filter((item) => item.tag && item.tag !== excludeTag && ctx.inboundSupportsDetourTarget(item))
+            .map((item) => item.tag)
+            .filter((tag) => tag && tag !== excludeTag);
+        const unique = Array.from(new Set(tags));
+        return current && !unique.includes(current) ? [current, ...unique] : unique;
+    },
     inboundTypeOptions: [
         { type: 'vless', label: 'VLESS', buttonClass: 'bg-indigo-600 hover:bg-indigo-500' },
         { type: 'vmess', label: 'VMess', buttonClass: 'bg-sky-600 hover:bg-sky-500' },
@@ -403,7 +461,7 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">订阅 / 节点链接</div>
                         <div class="space-y-3 text-sm text-gray-600 leading-7">
-                            <p>这里生成的是本地“节点链接原文”，不会自动托管成在线订阅 URL。</p>
+                            <p>这里生成的是本地节点链接，不会自动托管成在线订阅 URL。</p>
                             <p>当前优先支持 <code>VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC</code>。生成质量依赖每个入站里填写的 <code>share_server / share_port</code>；如果启用了 Reality，还需要补 <code>Reality public key</code>。</p>
                         </div>
                     </div>
@@ -413,13 +471,10 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                     </div>
 
                     <div v-for="bundle in userBundles" :key="bundle.key" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <div class="flex flex-wrap justify-between items-center gap-3">
+                        <div>
                             <div>
                                 <div class="text-base font-extrabold text-gray-900">{{ bundle.label }}</div>
                                 <div class="text-xs text-gray-500 font-semibold mt-1">{{ bundle.links.length }} 条节点链接</div>
-                            </div>
-                            <div class="flex gap-2 flex-wrap">
-                                <button @click="copyBundlePlainText(bundle)" :disabled="!bundle.plainText" class="px-4 py-2 rounded-lg text-sm font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fas fa-copy mr-1.5"></i>复制订阅原文</button>
                             </div>
                         </div>
 
@@ -439,14 +494,12 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                                     </div>
                                     <button @click="copyShareLink(item)" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><i class="fas fa-copy mr-1"></i>复制链接</button>
                                 </div>
-                                <textarea :value="item.link" rows="3" readonly class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-y"></textarea>
+                                <div class="rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2 text-xs text-gray-500">
+                                    链接内容已隐藏，直接使用右侧按钮复制。
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">订阅原文</label>
-                            <textarea :value="bundle.plainText" rows="6" readonly class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-y"></textarea>
-                        </div>
                     </div>
                 </div>
 `);
@@ -504,7 +557,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                     </div>
                                     <div class="grid grid-cols-2 gap-3">
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">标签 (Tag)</label><input v-model="outbound.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-indigo-700"></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型 (Type)</label><select v-model="outbound.type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in REMOTE_OUTBOUND_TYPES" :key="item" :value="item">{{ item }}</option></select></div>
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型 (Type)</label><select v-model="outbound.type" @change="syncRemoteOutboundType(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in REMOTE_OUTBOUND_TYPES" :key="item" :value="item">{{ item }}</option></select></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 (Server)</label><input v-model="outbound.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口 (Server Port)</label><input type="number" v-model.number="outbound.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
 
@@ -536,7 +589,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <template v-if="outbound.type==='hysteria2'">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in genericNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆类型 (Obfs Type)</label><select v-model="outbound.hy2_obfs_type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option v-for="item in hy2ObfsTypeOptions(outbound.hy2_obfs_type)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆类型 (Obfs Type)</label><select v-model="outbound.hy2_obfs_type" @change="sanitizeRemoteOutboundByCapabilities(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option v-for="item in hy2ObfsTypeOptions(outbound.hy2_obfs_type)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆密码 (Obfs Password)</label><input v-model="outbound.hy2_obfs_password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         </template>
 
@@ -544,28 +597,30 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UUID (UUID)</label><input v-model="outbound.uuid" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拥塞控制 (Congestion Control)</label><select v-model="outbound.tuic_congestion" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="cubic">cubic</option><option value="new_reno">new_reno</option><option value="bbr">bbr</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 中继模式 (UDP Relay Mode)</label><select v-model="outbound.tuic_udp_relay_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in tuicUdpRelayModeOptions(outbound.tuic_udp_relay_mode)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 中继模式 (UDP Relay Mode)</label><select v-model="outbound.tuic_udp_relay_mode" :disabled="outbound.tuic_udp_over_stream" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed"><option value="">default / omit</option><option v-for="item in tuicUdpRelayModeOptions(outbound.tuic_udp_relay_mode)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in genericNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">心跳 (Heartbeat)</label><input v-model="outbound.tuic_heartbeat" placeholder="10s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_udp_over_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP over Stream</span></label></div>
+                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_udp_over_stream" @change="syncRemoteOutboundTuicState(outbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP over Stream</span></label></div>
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_zero_rtt_handshake" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Zero RTT Handshake</span></label></div>
                                         </template>
 
-                                        <template v-if="['vless','vmess','trojan','hysteria2','tuic'].includes(outbound.type)">
-                                            <div class="col-span-2 flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tls_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">启用 TLS (Enable TLS)</span></label></div>
+                                        <template v-if="remoteOutboundSupportsTls(outbound) || remoteOutboundSupportsTransport(outbound)">
+                                            <div v-if="remoteOutboundSupportsTls(outbound)" class="col-span-2 flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tls_enabled" :disabled="remoteOutboundTlsRequired(outbound)" @change="syncRemoteOutboundTlsState(outbound)" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-60 disabled:cursor-not-allowed"><span class="text-xs font-bold text-gray-700">启用 TLS (Enable TLS)<span v-if="remoteOutboundTlsRequired(outbound)" class="text-[11px] text-gray-500 ml-1">(必需)</span></span></label></div>
                                             <div v-if="outbound.tls_enabled"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器名称 (Server Name)</label><input v-model="outbound.server_name" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div v-if="outbound.tls_enabled"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">应用层协议 (ALPN)</label><select v-model="outbound.alpn" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in alpnOptions(outbound.type, outbound.alpn)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div v-if="outbound.tls_enabled" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.allow_insecure" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">允许不安全证书 (Allow Insecure)</span></label></div>
-                                            <div v-if="outbound.tls_enabled && ['vless','trojan'].includes(outbound.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 公钥 (Reality Public Key)</label><input v-model="outbound.reality_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="outbound.tls_enabled && ['vless','trojan'].includes(outbound.type) && outbound.reality_public_key"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 短 ID (Reality Short ID)</label><input v-model="outbound.reality_short_id" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="['vless','vmess','trojan'].includes(outbound.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="outbound.transport" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">tcp</option><option value="ws">ws</option><option value="grpc">grpc</option><option value="http">http</option><option value="httpupgrade">httpupgrade</option><option value="quic">quic</option></select></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(outbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="outbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="outbound.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="outbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(outbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="outbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundRealityVisible(outbound)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 公钥 (Reality Public Key)</label><input v-model="outbound.reality_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundRealityVisible(outbound) && outbound.reality_public_key"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 短 ID (Reality Short ID)</label><input v-model="outbound.reality_short_id" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundSupportsTransport(outbound)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="outbound.transport" @change="syncRemoteOutboundTransport(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none (default)</option><option v-for="item in remoteOutboundTransportOptions(outbound)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="outbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_service_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="outbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="outbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         </template>
 
                                         <template v-if="outbound.type==='wireguard'">
+                                            <div class="col-span-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">WireGuard outbound 仅为旧版 sing-box 兼容保留；当前官方文档已标记 deprecated，后续版本建议改用 endpoint WireGuard。</div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地地址 (Local Address)</label><input v-model="outbound.local_address" placeholder="10.0.0.2/32" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地私钥 (Private Key)</label><input v-model="outbound.private_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">对端公钥 (Peer Public Key)</label><input v-model="outbound.peer_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">预共享密钥 (Pre Shared Key)</label><input v-model="outbound.pre_shared_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU (MTU)</label><input v-model="outbound.mtu" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -587,6 +642,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                     </select>
                                 </div>
                             </div>
+                            <div class="mb-4 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2"><code>download_detour</code> 仅为 <code>v1.12</code> 兼容保留；当前官方文档已将远端 rule-set 的该字段标记为 deprecated，较新版本建议改用 <code>http_client</code>。</div>
                             <div class="flex justify-between items-center mb-4">
                                 <div>
                                     <div class="text-sm font-extrabold text-gray-800">规则集 (Rule Sets)</div>
@@ -646,7 +702,11 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <div v-if="ruleSet.source_type==='remote'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">远端地址 (URL)</label><input v-model="ruleSet.url" placeholder="https://example.com/google.srs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="ruleSet.source_type==='local'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地路径 (Path)</label><input v-model="ruleSet.path" placeholder="/etc/sing-box/rules/google.srs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="ruleSet.source_type==='remote'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">更新间隔 (Update Interval)</label><input v-model="ruleSet.update_interval" placeholder="24h" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                        <div v-if="ruleSet.source_type==='remote'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下载出站 (Download Detour)</label><select v-model="ruleSet.download_detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option></select></div>
+                                        <div v-if="ruleSet.source_type==='remote'">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下载出站 (Download Detour)</label>
+                                            <select v-model="ruleSet.download_detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option></select>
+                                            <div class="mt-1 text-[11px] text-gray-500">该字段在 <code>v1.12</code> 可用；当前官方文档已标记 deprecated。</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -794,6 +854,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
             '2022-blake3-aes-256-gcm',
             '2022-blake3-chacha20-poly1305',
             'aes-128-gcm',
+            'aes-192-gcm',
             'aes-256-gcm',
             'chacha20-ietf-poly1305',
             'xchacha20-ietf-poly1305',
@@ -851,11 +912,10 @@ const AdvancedTab = createInjectedComponent('ServerAdvancedTab', `              
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">当前阶段说明</div>
                         <div class="space-y-3 text-sm text-gray-600 leading-7">
-                            <p>当前这版已经把服务端常用字段往真实部署场景收了一轮，重点覆盖 <code>inbounds</code>、<code>tls / reality</code>、<code>v2ray transport</code>、<code>multiplex</code> 和最小 <code>route / outbounds</code>。</p>
+                            <p>当前这版已经把服务端常用字段往真实部署场景收了一轮，重点覆盖 <code>inbounds</code>、<code>listen fields</code>、<code>tls / reality</code>、<code>v2ray transport</code>、<code>multiplex</code> 和最小 <code>route / outbounds</code>。</p>
                             <p>下一阶段更适合继续补的是：</p>
                             <ul class="list-disc pl-5 space-y-1 text-gray-500">
                                 <li>服务端运行配置导入</li>
-                                <li>更完整的 Listen Fields</li>
                                 <li>更完整的 DNS rules / Route rules</li>
                                 <li>SSM API 等 Shadowsocks 进阶能力</li>
                             </ul>

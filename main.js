@@ -4,6 +4,7 @@ import { setupServerImportExportCore } from './core/server-import-export.js';
 import { setupServerRemoteImportCore } from './core/server-remote-import.js';
 import { setupServerShareCore } from './core/server-share.js';
 import { setupServerStorageCore } from './core/server-storage.js';
+import { installServerBilingualLabels } from './ui/server-bilingual-labels.js';
 import { registerServerUIComponents } from './ui/server-register-components.js';
 
 const { createApp, provide } = window.Vue;
@@ -26,3 +27,4 @@ const app = createApp({
 
 registerServerUIComponents(app);
 app.mount('#app');
+installServerBilingualLabels(document.getElementById('app'));
