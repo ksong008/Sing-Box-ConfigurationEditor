@@ -154,6 +154,15 @@ Check your Browserslist config to be sure that your targets are set up correctly
         .panel-card:hover { border-color: #a5b4fc; background: #eef2ff; }
         .panel-card.selected { border-color: #4f46e5; background: #eef2ff; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); }
         .stitle { font-size: 14px; font-weight: 700; color: #374151; border-left: 4px solid #4f46e5; padding-left: 10px; margin-bottom: 16px; }
+        .ui-bilingual { text-transform: none !important; letter-spacing: 0 !important; }
+        .ui-bilingual-zh,
+        .ui-bilingual-en { display: block; line-height: 1.2; letter-spacing: 0 !important; text-transform: none !important; }
+        .ui-bilingual-zh { font: inherit; color: inherit; }
+        .ui-bilingual-en { margin-top: 2px; font-size: 0.82em; font-weight: 600; color: #94a3b8; }
+        [data-ui-bilingual-size="title"] .ui-bilingual-en { font-size: 0.72em; margin-top: 3px; }
+        [data-ui-bilingual-size="medium"] .ui-bilingual-en { font-size: 0.78em; }
+        [data-ui-bilingual-size="small"] .ui-bilingual-en { font-size: 0.8em; }
+        [data-ui-bilingual-size="micro"] .ui-bilingual-en { font-size: 0.88em; }
         
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; }
         .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 95%; max-width: 1000px; height: 85vh; display: flex; flex-direction: column; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
@@ -220,6 +229,7 @@ const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const SHAREABLE_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic'];
 const REMOTE_OUTBOUND_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'wireguard'];
+const DNS_SERVER_TYPES_WITH_HTTP_FIELDS = Object.freeze(['https', 'h3']);
 const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     block: 'reject',
     dns: 'hijack-dns',
@@ -229,6 +239,141 @@ const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
     '2022-blake3-aes-128-gcm': 16,
     '2022-blake3-aes-256-gcm': 32,
     '2022-blake3-chacha20-poly1305': 32,
+});
+const REMOTE_OUTBOUND_TRANSPORT_FIELD_KEYS = Object.freeze([
+    'transport_path',
+    'transport_host',
+    'transport_service_name',
+]);
+const REMOTE_OUTBOUND_TRANSPORT_FIELD_DEFAULTS = Object.freeze({
+    transport_path: '',
+    transport_host: '',
+    transport_service_name: '',
+});
+const TRANSPORT_FIELD_KEYS = Object.freeze([
+    'transport_path',
+    'transport_host',
+    'transport_headers_text',
+    'transport_method',
+    'transport_idle_timeout',
+    'transport_ping_timeout',
+    'transport_service_name',
+    'transport_early_data',
+    'transport_early_data_header_name',
+    'transport_permit_without_stream',
+]);
+const TRANSPORT_FIELD_DEFAULTS = Object.freeze({
+    transport_path: '',
+    transport_host: '',
+    transport_headers_text: '',
+    transport_method: '',
+    transport_idle_timeout: '',
+    transport_ping_timeout: '',
+    transport_service_name: '',
+    transport_early_data: '',
+    transport_early_data_header_name: '',
+    transport_permit_without_stream: false,
+});
+const TRANSPORT_FIELD_SPEC = Object.freeze({
+    ws: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text', 'transport_early_data', 'transport_early_data_header_name']),
+    grpc: Object.freeze(['transport_service_name', 'transport_idle_timeout', 'transport_ping_timeout', 'transport_permit_without_stream']),
+    http: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text', 'transport_method', 'transport_idle_timeout', 'transport_ping_timeout']),
+    httpupgrade: Object.freeze(['transport_path', 'transport_host', 'transport_headers_text']),
+    quic: Object.freeze([]),
+});
+const INBOUND_PROTOCOL_SPEC = Object.freeze({
+    vless: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    vmess: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: true, required: false, reality: false }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    trojan: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    shadowsocks: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: true }),
+    }),
+    hysteria2: Object.freeze({
+        injectable: false,
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    tuic: Object.freeze({
+        injectable: false,
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    hysteria: Object.freeze({
+        injectable: false,
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    anytls: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: true, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+    shadowtls: Object.freeze({
+        injectable: true,
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+        multiplex: Object.freeze({ supported: false }),
+    }),
+});
+const REMOTE_OUTBOUND_TRANSPORTS = Object.freeze(['ws', 'grpc', 'http', 'httpupgrade', 'quic']);
+const REMOTE_OUTBOUND_TRANSPORT_FIELD_SPEC = Object.freeze({
+    ws: Object.freeze(['transport_path', 'transport_host']),
+    grpc: Object.freeze(['transport_service_name']),
+    http: Object.freeze(['transport_path', 'transport_host']),
+    httpupgrade: Object.freeze(['transport_path', 'transport_host']),
+    quic: Object.freeze([]),
+});
+const REMOTE_OUTBOUND_PROTOCOL_SPEC = Object.freeze({
+    vless: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: REMOTE_OUTBOUND_TRANSPORTS }),
+    }),
+    vmess: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: false }),
+        transport: Object.freeze({ supported: true, allowed: REMOTE_OUTBOUND_TRANSPORTS }),
+    }),
+    trojan: Object.freeze({
+        tls: Object.freeze({ supported: true, required: false, reality: true }),
+        transport: Object.freeze({ supported: true, allowed: REMOTE_OUTBOUND_TRANSPORTS }),
+    }),
+    shadowsocks: Object.freeze({
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+    }),
+    hysteria2: Object.freeze({
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+    }),
+    tuic: Object.freeze({
+        tls: Object.freeze({ supported: true, required: true, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+    }),
+    wireguard: Object.freeze({
+        tls: Object.freeze({ supported: false, required: false, reality: false }),
+        transport: Object.freeze({ supported: false, allowed: Object.freeze([]) }),
+    }),
 });
 
 const dnsHeadersToText = (headers) => {
@@ -327,6 +472,14 @@ function createServerState() {
             action,
             outbound,
         };
+    };
+    const normalizeOptionalBoolean = (value) => {
+        if (value === true) return 'true';
+        if (value === false) return 'false';
+        const source = String(value ?? '').trim().toLowerCase();
+        if (source === 'true') return 'true';
+        if (source === 'false') return 'false';
+        return '';
     };
 
     const showToast = (msg, type = 'ok', duration = 2800) => {
@@ -433,7 +586,7 @@ function createServerState() {
         const tls = outbound.tls && typeof outbound.tls === 'object' ? outbound.tls : {};
         const reality = tls.reality && typeof tls.reality === 'object' ? tls.reality : {};
         const transport = outbound.transport && typeof outbound.transport === 'object' ? outbound.transport : {};
-        return {
+        return sanitizeRemoteOutboundByCapabilities({
             id: outbound.id || generateId('outbound'),
             tag: typeof outbound.tag === 'string' && outbound.tag.trim() ? outbound.tag.trim() : `relay-${index + 1}`,
             type: REMOTE_OUTBOUND_TYPES.includes(outbound.type) ? outbound.type : 'vless',
@@ -469,12 +622,13 @@ function createServerState() {
             tuic_zero_rtt_handshake: !!outbound.tuic_zero_rtt_handshake || !!outbound.zero_rtt_handshake,
             tuic_heartbeat: typeof outbound.tuic_heartbeat === 'string' && outbound.tuic_heartbeat ? outbound.tuic_heartbeat : (typeof outbound.heartbeat === 'string' ? outbound.heartbeat : '10s'),
             local_address: typeof outbound.local_address === 'string' ? outbound.local_address : '',
+            private_key: typeof outbound.private_key === 'string' ? outbound.private_key : '',
             peer_public_key: typeof outbound.peer_public_key === 'string' ? outbound.peer_public_key : '',
             pre_shared_key: typeof outbound.pre_shared_key === 'string' ? outbound.pre_shared_key : '',
             mtu: outbound.mtu === null || outbound.mtu === undefined ? '' : String(outbound.mtu),
             persistent_keepalive_interval: typeof outbound.persistent_keepalive_interval === 'string' ? outbound.persistent_keepalive_interval : '',
             collapsed: outbound.collapsed === undefined ? false : !!outbound.collapsed,
-        };
+        });
     };
 
     const normalizeRuleSet = (ruleSet = {}, index = 0) => ({
@@ -576,6 +730,192 @@ function createServerState() {
         return ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'].includes(type);
     };
     const inboundUsesDestinations = (type, inbound) => type === 'shadowsocks' && inbound.ss_mode === 'relay';
+    const getInboundProtocolSpec = (type) => INBOUND_PROTOCOL_SPEC[type] || INBOUND_PROTOCOL_SPEC.vless;
+    const resolveInboundCapabilities = (inbound = {}) => {
+        const spec = getInboundProtocolSpec(inbound.type);
+        const allowedTransports = spec.transport?.allowed || [];
+        const activeTransport = allowedTransports.includes(inbound.transport) ? inbound.transport : '';
+        const shadowTlsVersion = ['1', '2', '3'].includes(String(inbound.shadowtls_version || '3')) ? String(inbound.shadowtls_version || '3') : '3';
+
+        return {
+            injectable: !!spec.injectable,
+            supportsTls: !!spec.tls?.supported,
+            requiresTls: !!spec.tls?.required,
+            supportsReality: !!spec.tls?.reality,
+            supportsTransport: !!spec.transport?.supported,
+            allowedTransports,
+            activeTransport,
+            visibleTransportFields: TRANSPORT_FIELD_SPEC[activeTransport] || [],
+            supportsMultiplex: !!spec.multiplex?.supported,
+            shadowtls: inbound.type === 'shadowtls' ? {
+                version: shadowTlsVersion,
+                allowPassword: shadowTlsVersion === '2',
+                allowUsers: shadowTlsVersion === '3',
+                allowHandshakeForServerName: shadowTlsVersion === '2' || shadowTlsVersion === '3',
+                allowStrictMode: shadowTlsVersion === '3',
+                allowWildcardSni: shadowTlsVersion === '3',
+            } : null,
+            hysteria2: inbound.type === 'hysteria2' ? {
+                showBandwidthFields: !inbound.hy2_ignore_client_bandwidth,
+            } : null,
+        };
+    };
+    const inboundTransportOptions = (inbound = {}) => resolveInboundCapabilities(inbound).allowedTransports;
+    const inboundTransportFieldVisible = (inbound, field) => resolveInboundCapabilities(inbound).visibleTransportFields.includes(field);
+    const inboundSupportsDetourTarget = (inbound = {}) => {
+        const type = typeof inbound === 'string' ? inbound : inbound?.type;
+        return !!INBOUND_PROTOCOL_SPEC[type]?.injectable;
+    };
+    const inboundTlsRequired = (inbound = {}) => !!resolveInboundCapabilities(inbound).requiresTls;
+    const inboundRealitySupported = (inbound = {}) => !!resolveInboundCapabilities(inbound).supportsReality;
+    const inboundRealityVisible = (inbound = {}) => inboundRealitySupported(inbound) && !!inbound.tls_enabled;
+    const inboundShadowTlsFieldVisible = (inbound, field) => {
+        const caps = resolveInboundCapabilities(inbound).shadowtls;
+        if (!caps) return false;
+        const mapping = {
+            shadowtls_password: caps.allowPassword,
+            shadowtls_handshake_for_server_name_text: caps.allowHandshakeForServerName,
+            shadowtls_strict_mode: caps.allowStrictMode,
+            shadowtls_wildcard_sni: caps.allowWildcardSni,
+        };
+        return !!mapping[field];
+    };
+    const inboundHysteria2BandwidthFieldsVisible = (inbound) => !!resolveInboundCapabilities(inbound).hysteria2?.showBandwidthFields;
+    const clearInboundTransportFields = (inbound, allowedFields = []) => {
+        const allowed = new Set(allowedFields);
+        TRANSPORT_FIELD_KEYS.forEach((field) => {
+            if (allowed.has(field)) return;
+            inbound[field] = TRANSPORT_FIELD_DEFAULTS[field];
+        });
+    };
+    const getRemoteOutboundProtocolSpec = (type) => REMOTE_OUTBOUND_PROTOCOL_SPEC[type] || REMOTE_OUTBOUND_PROTOCOL_SPEC.vless;
+    const resolveRemoteOutboundCapabilities = (outbound = {}) => {
+        const spec = getRemoteOutboundProtocolSpec(outbound.type);
+        const allowedTransports = spec.transport?.allowed || [];
+        const activeTransport = allowedTransports.includes(outbound.transport) ? outbound.transport : '';
+        return {
+            supportsTls: !!spec.tls?.supported,
+            requiresTls: !!spec.tls?.required,
+            supportsReality: !!spec.tls?.reality,
+            supportsTransport: !!spec.transport?.supported,
+            allowedTransports,
+            activeTransport,
+            visibleTransportFields: REMOTE_OUTBOUND_TRANSPORT_FIELD_SPEC[activeTransport] || [],
+        };
+    };
+    const remoteOutboundTransportOptions = (outbound = {}) => resolveRemoteOutboundCapabilities(outbound).allowedTransports;
+    const remoteOutboundTransportFieldVisible = (outbound, field) => resolveRemoteOutboundCapabilities(outbound).visibleTransportFields.includes(field);
+    const remoteOutboundSupportsTls = (outbound = {}) => !!resolveRemoteOutboundCapabilities(outbound).supportsTls;
+    const remoteOutboundTlsRequired = (outbound = {}) => !!resolveRemoteOutboundCapabilities(outbound).requiresTls;
+    const remoteOutboundSupportsReality = (outbound = {}) => !!resolveRemoteOutboundCapabilities(outbound).supportsReality;
+    const remoteOutboundRealityVisible = (outbound = {}) => remoteOutboundSupportsReality(outbound) && !!outbound.tls_enabled;
+    const remoteOutboundSupportsTransport = (outbound = {}) => !!resolveRemoteOutboundCapabilities(outbound).supportsTransport;
+    const clearRemoteOutboundTransportFields = (outbound, allowedFields = []) => {
+        const allowed = new Set(allowedFields);
+        REMOTE_OUTBOUND_TRANSPORT_FIELD_KEYS.forEach((field) => {
+            if (allowed.has(field)) return;
+            outbound[field] = REMOTE_OUTBOUND_TRANSPORT_FIELD_DEFAULTS[field];
+        });
+    };
+    const sanitizeRemoteOutboundByCapabilities = (outbound = {}) => {
+        const caps = resolveRemoteOutboundCapabilities(outbound);
+        if (!caps.supportsTls) {
+            outbound.tls_enabled = false;
+            outbound.server_name = '';
+            outbound.alpn = '';
+            outbound.allow_insecure = false;
+        } else if (caps.requiresTls) {
+            outbound.tls_enabled = true;
+        }
+        if (!caps.supportsReality || !outbound.tls_enabled) {
+            outbound.reality_public_key = '';
+            outbound.reality_short_id = '';
+        }
+        if (!caps.supportsTransport || !caps.allowedTransports.includes(outbound.transport)) {
+            outbound.transport = '';
+        }
+        clearRemoteOutboundTransportFields(outbound, caps.activeTransport ? caps.visibleTransportFields : []);
+        if (!['vless', 'vmess', 'tuic'].includes(outbound.type)) outbound.uuid = '';
+        if (!['trojan', 'shadowsocks', 'hysteria2', 'tuic'].includes(outbound.type)) outbound.password = '';
+        if (outbound.type !== 'vless') outbound.flow = '';
+        if (outbound.type !== 'vmess') {
+            outbound.alter_id = 0;
+            outbound.security = 'auto';
+            outbound.global_padding = false;
+            outbound.authenticated_length = true;
+        }
+        if (outbound.type !== 'hysteria2') {
+            outbound.hy2_obfs_type = '';
+            outbound.hy2_obfs_password = '';
+        } else if (!String(outbound.hy2_obfs_type || '').trim()) {
+            outbound.hy2_obfs_password = '';
+        }
+        if (outbound.type !== 'tuic') {
+            outbound.tuic_congestion = 'cubic';
+            outbound.tuic_udp_relay_mode = 'native';
+            outbound.tuic_udp_over_stream = false;
+            outbound.tuic_zero_rtt_handshake = false;
+            outbound.tuic_heartbeat = '10s';
+        } else if (outbound.tuic_udp_over_stream) {
+            outbound.tuic_udp_relay_mode = '';
+        }
+        if (outbound.type !== 'wireguard') {
+            outbound.local_address = '';
+            outbound.private_key = '';
+            outbound.peer_public_key = '';
+            outbound.pre_shared_key = '';
+            outbound.mtu = '';
+            outbound.persistent_keepalive_interval = '';
+        }
+        return outbound;
+    };
+    const sanitizeInboundByCapabilities = (inbound = {}) => {
+        const caps = resolveInboundCapabilities(inbound);
+
+        if (!caps.supportsTls) {
+            inbound.tls_enabled = false;
+            inbound.reality_enabled = false;
+        } else if (caps.requiresTls) {
+            inbound.tls_enabled = true;
+        }
+
+        if (!caps.supportsReality || !inbound.tls_enabled) inbound.reality_enabled = false;
+
+        if (!caps.supportsTransport || !caps.allowedTransports.includes(inbound.transport)) {
+            inbound.transport = '';
+        }
+        clearInboundTransportFields(inbound, caps.activeTransport ? caps.visibleTransportFields : []);
+
+        if (!caps.supportsMultiplex) {
+            inbound.mux_enabled = false;
+            inbound.mux_padding = false;
+            inbound.mux_brutal_enabled = false;
+            inbound.mux_brutal_up_mbps = '';
+            inbound.mux_brutal_down_mbps = '';
+        } else if (!inbound.mux_enabled) {
+            inbound.mux_padding = false;
+            inbound.mux_brutal_enabled = false;
+            inbound.mux_brutal_up_mbps = '';
+            inbound.mux_brutal_down_mbps = '';
+        } else if (!inbound.mux_brutal_enabled) {
+            inbound.mux_brutal_up_mbps = '';
+            inbound.mux_brutal_down_mbps = '';
+        }
+
+        if (caps.shadowtls) {
+            if (!caps.shadowtls.allowPassword) inbound.shadowtls_password = '';
+            if (!caps.shadowtls.allowHandshakeForServerName) inbound.shadowtls_handshake_for_server_name_text = '';
+            if (!caps.shadowtls.allowStrictMode) inbound.shadowtls_strict_mode = false;
+            if (!caps.shadowtls.allowWildcardSni) inbound.shadowtls_wildcard_sni = 'off';
+        }
+
+        if (caps.hysteria2 && !caps.hysteria2.showBandwidthFields) {
+            inbound.hy2_up_mbps = '';
+            inbound.hy2_down_mbps = '';
+        }
+
+        return ensureInboundCollections(inbound);
+    };
 
     const ensureInboundCollections = (inbound) => {
         if (!Array.isArray(inbound.users)) inbound.users = [];
@@ -608,23 +948,31 @@ function createServerState() {
         if (inbound.type === 'shadowtls' && !inbound.shadowtls_password && String(inbound.shadowtls_version) === '2') {
             inbound.shadowtls_password = '';
         }
-        return ensureInboundCollections(inbound);
+        return sanitizeInboundByCapabilities(inbound);
     };
 
     const normalizeDnsServer = (dns = {}, index = 0) => {
         const type = ['tls', 'https', 'udp', 'tcp', 'quic', 'h3', 'local'].includes(dns.type) ? dns.type : 'udp';
+        const normalizedDetour = sanitizeOutboundSelection(dns.detour, 'direct', { allowEmpty: true });
+        const usesServerAddress = type !== 'local';
+        const usesHttpFields = DNS_SERVER_TYPES_WITH_HTTP_FIELDS.includes(type);
+        const normalizedServer = typeof dns.server === 'string' ? dns.server : '';
+        const normalizedServerPort = dns.server_port === 0 ? '0' : (dns.server_port ? String(dns.server_port) : '');
+        const normalizedDomainResolver = typeof dns.domain_resolver === 'string'
+            ? dns.domain_resolver
+            : (dns.domain_resolver && typeof dns.domain_resolver.server === 'string' ? dns.domain_resolver.server : '');
+        const normalizedPath = typeof dns.path === 'string' ? dns.path : '';
+        const normalizedHeadersText = typeof dns.headers_text === 'string' ? dns.headers_text : dnsHeadersToText(dns.headers);
         return {
             id: dns.id || generateId('dns'),
             tag: typeof dns.tag === 'string' && dns.tag.trim() ? dns.tag.trim() : `dns-${index + 1}`,
             type,
-            server: typeof dns.server === 'string' ? dns.server : '',
-            server_port: dns.server_port === 0 ? '0' : (dns.server_port ? String(dns.server_port) : ''),
-            detour: typeof dns.detour === 'string' ? dns.detour : '',
-            domain_resolver: typeof dns.domain_resolver === 'string'
-                ? dns.domain_resolver
-                : (dns.domain_resolver && typeof dns.domain_resolver.server === 'string' ? dns.domain_resolver.server : ''),
-            path: typeof dns.path === 'string' ? dns.path : '',
-            headers_text: typeof dns.headers_text === 'string' ? dns.headers_text : dnsHeadersToText(dns.headers),
+            server: usesServerAddress ? normalizedServer : '',
+            server_port: usesServerAddress ? normalizedServerPort : '',
+            detour: normalizedDetour === 'direct' ? '' : normalizedDetour,
+            domain_resolver: usesServerAddress ? normalizedDomainResolver : '',
+            path: usesHttpFields ? normalizedPath : '',
+            headers_text: usesHttpFields ? normalizedHeadersText : '',
             client_subnet: typeof dns.client_subnet === 'string' ? dns.client_subnet : '',
             connect_timeout: typeof dns.connect_timeout === 'string' ? dns.connect_timeout : '',
         };
@@ -667,6 +1015,15 @@ function createServerState() {
             type: INBOUND_TYPES.includes(inbound.type) ? inbound.type : 'vless',
             listen: typeof inbound.listen === 'string' && inbound.listen ? inbound.listen : '::',
             listen_port: Number.isFinite(Number(inbound.listen_port)) ? Number(inbound.listen_port) : 443,
+            bind_interface: typeof inbound.bind_interface === 'string' ? inbound.bind_interface : '',
+            routing_mark: inbound.routing_mark === null || inbound.routing_mark === undefined ? '' : String(inbound.routing_mark),
+            reuse_addr: normalizeOptionalBoolean(inbound.reuse_addr),
+            netns: typeof inbound.netns === 'string' ? inbound.netns : '',
+            tcp_fast_open: normalizeOptionalBoolean(inbound.tcp_fast_open),
+            tcp_multi_path: normalizeOptionalBoolean(inbound.tcp_multi_path),
+            udp_fragment: normalizeOptionalBoolean(inbound.udp_fragment),
+            udp_timeout: typeof inbound.udp_timeout === 'string' ? inbound.udp_timeout : '',
+            detour: typeof inbound.detour === 'string' ? inbound.detour : '',
             users: ssUsers.map((user) => ({
                 ...makeInboundUser(),
                 ...user,
@@ -674,7 +1031,9 @@ function createServerState() {
                 auth_mode: user.auth_mode || (user.auth ? 'base64' : 'plain'),
             })),
             tls_enabled: inbound.tls_enabled !== undefined ? !!inbound.tls_enabled : !!tls.enabled,
+            tls_certificate: typeof inbound.tls_certificate === 'string' ? inbound.tls_certificate : (tls.certificate || ''),
             tls_cert_path: typeof inbound.tls_cert_path === 'string' ? inbound.tls_cert_path : (tls.certificate_path || ''),
+            tls_key: typeof inbound.tls_key === 'string' ? inbound.tls_key : (tls.key || ''),
             tls_key_path: typeof inbound.tls_key_path === 'string' ? inbound.tls_key_path : (tls.key_path || ''),
             tls_server_name: typeof inbound.tls_server_name === 'string' ? inbound.tls_server_name : (tls.server_name || ''),
             tls_alpn: typeof inbound.tls_alpn === 'string' ? inbound.tls_alpn : joinList(tls.alpn),
@@ -719,6 +1078,12 @@ function createServerState() {
             mux_enabled: inbound.mux_enabled !== undefined ? !!inbound.mux_enabled : !!multiplex.enabled,
             mux_padding: inbound.mux_padding !== undefined ? !!inbound.mux_padding : !!multiplex.padding,
             mux_brutal_enabled: inbound.mux_brutal_enabled !== undefined ? !!inbound.mux_brutal_enabled : !!multiplex.brutal,
+            mux_brutal_up_mbps: inbound.mux_brutal_up_mbps === null || inbound.mux_brutal_up_mbps === undefined
+                ? (multiplex.brutal && multiplex.brutal.up_mbps !== undefined ? String(multiplex.brutal.up_mbps) : '')
+                : String(inbound.mux_brutal_up_mbps),
+            mux_brutal_down_mbps: inbound.mux_brutal_down_mbps === null || inbound.mux_brutal_down_mbps === undefined
+                ? (multiplex.brutal && multiplex.brutal.down_mbps !== undefined ? String(multiplex.brutal.down_mbps) : '')
+                : String(inbound.mux_brutal_down_mbps),
             ss_method: typeof inbound.ss_method === 'string' && inbound.ss_method ? inbound.ss_method : (inbound.method || '2022-blake3-aes-128-gcm'),
             ss_password: typeof inbound.ss_password === 'string' ? inbound.ss_password : (inbound.password || ''),
             ss_network: typeof inbound.ss_network === 'string' ? inbound.ss_network : (inbound.network || ''),
@@ -730,8 +1095,10 @@ function createServerState() {
                 id: item.id || generateId('ss_dest'),
                 server_port: Number.isFinite(Number(item.server_port)) ? Number(item.server_port) : 443,
             })),
-            hy_up_mbps: inbound.hy_up_mbps === null || inbound.hy_up_mbps === undefined ? '' : String(inbound.hy_up_mbps),
-            hy_down_mbps: inbound.hy_down_mbps === null || inbound.hy_down_mbps === undefined ? '' : String(inbound.hy_down_mbps),
+            hy_up: typeof inbound.hy_up === 'string' ? inbound.hy_up : (typeof inbound.up === 'string' ? inbound.up : ''),
+            hy_down: typeof inbound.hy_down === 'string' ? inbound.hy_down : (typeof inbound.down === 'string' ? inbound.down : ''),
+            hy_up_mbps: inbound.hy_up_mbps === null || inbound.hy_up_mbps === undefined ? String(inbound.up_mbps ?? '') : String(inbound.hy_up_mbps),
+            hy_down_mbps: inbound.hy_down_mbps === null || inbound.hy_down_mbps === undefined ? String(inbound.down_mbps ?? '') : String(inbound.hy_down_mbps),
             hy_obfs: typeof inbound.hy_obfs === 'string' ? inbound.hy_obfs : '',
             hy_recv_window_conn: inbound.hy_recv_window_conn === null || inbound.hy_recv_window_conn === undefined ? '' : String(inbound.hy_recv_window_conn),
             hy_recv_window_client: inbound.hy_recv_window_client === null || inbound.hy_recv_window_client === undefined ? '' : String(inbound.hy_recv_window_client),
@@ -861,6 +1228,17 @@ function createServerState() {
     const removeDnsServer = (index) => {
         dnsList.value.splice(index, 1);
     };
+    const syncDnsType = (dns) => {
+        if (!dns || typeof dns !== 'object') return;
+        if (!DNS_SERVER_TYPES_WITH_HTTP_FIELDS.includes(dns.type)) {
+            dns.path = '';
+            dns.headers_text = '';
+        }
+        if (dns.type !== 'local') return;
+        dns.server = '';
+        dns.server_port = '';
+        dns.domain_resolver = '';
+    };
 
     const addInbound = (type = 'vless', placement = 'bottom') => {
         const inbound = normalizeInbound({ type, collapsed: false }, serverInbounds.value.length);
@@ -897,6 +1275,21 @@ function createServerState() {
     const syncShadowsocksMode = (inbound) => {
         applyInboundTypeDefaults(inbound);
     };
+    const syncInboundTransport = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncInboundTlsState = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncInboundRealityState = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncInboundMultiplexState = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
+    const syncHysteria2BandwidthMode = (inbound) => {
+        sanitizeInboundByCapabilities(inbound);
+    };
     const generateUserUuid = async (inbound, user) => {
         if (!String(user.name || '').trim()) {
             showToast('请先填写用户名称，再生成 UUID', 'warn');
@@ -915,6 +1308,22 @@ function createServerState() {
     };
     const toggleRemoteOutboundCollapsed = (index) => {
         remoteOutbounds.value[index].collapsed = !remoteOutbounds.value[index].collapsed;
+    };
+    const syncRemoteOutboundType = (outbound) => {
+        sanitizeRemoteOutboundByCapabilities(outbound);
+    };
+    const syncRemoteOutboundTlsState = (outbound) => {
+        sanitizeRemoteOutboundByCapabilities(outbound);
+    };
+    const syncRemoteOutboundTransport = (outbound) => {
+        sanitizeRemoteOutboundByCapabilities(outbound);
+    };
+    const syncRemoteOutboundTuicState = (outbound) => {
+        if (outbound?.type === 'tuic') {
+            if (outbound.tuic_udp_over_stream) outbound.tuic_udp_relay_mode = '';
+            else if (!String(outbound.tuic_udp_relay_mode || '').trim()) outbound.tuic_udp_relay_mode = 'native';
+        }
+        sanitizeRemoteOutboundByCapabilities(outbound);
     };
     const addRuleSet = (sourceType = 'remote') => {
         ruleSets.value.push(normalizeRuleSet({
@@ -1042,6 +1451,7 @@ function createServerState() {
         normalizeRouteRule,
         addDnsServer,
         removeDnsServer,
+        syncDnsType,
         serverInbounds,
         normalizeInbound,
         addInbound,
@@ -1054,6 +1464,11 @@ function createServerState() {
         syncInboundType,
         syncShadowTlsVersion,
         syncShadowsocksMode,
+        syncInboundTransport,
+        syncInboundTlsState,
+        syncInboundRealityState,
+        syncInboundMultiplexState,
+        syncHysteria2BandwidthMode,
         generateUserUuid,
         generateUuidFromName,
         pruneLegacySeededDefaults,
@@ -1061,6 +1476,10 @@ function createServerState() {
         addRemoteOutbound,
         removeRemoteOutbound,
         toggleRemoteOutboundCollapsed,
+        syncRemoteOutboundType,
+        syncRemoteOutboundTlsState,
+        syncRemoteOutboundTransport,
+        syncRemoteOutboundTuicState,
         addRuleSet,
         removeRuleSet,
         toggleRuleSetCollapsed,
@@ -1075,7 +1494,26 @@ function createServerState() {
         inboundUsesUsers,
         inboundUsesDestinations,
         inboundSupportsShareLinks,
+        resolveInboundCapabilities,
+        inboundTransportOptions,
+        inboundTransportFieldVisible,
+        inboundSupportsDetourTarget,
+        inboundTlsRequired,
+        inboundRealitySupported,
+        inboundRealityVisible,
+        inboundShadowTlsFieldVisible,
+        inboundHysteria2BandwidthFieldsVisible,
+        sanitizeInboundByCapabilities,
         REMOTE_OUTBOUND_TYPES,
+        resolveRemoteOutboundCapabilities,
+        remoteOutboundTransportOptions,
+        remoteOutboundTransportFieldVisible,
+        remoteOutboundSupportsTls,
+        remoteOutboundTlsRequired,
+        remoteOutboundSupportsReality,
+        remoteOutboundRealityVisible,
+        remoteOutboundSupportsTransport,
+        sanitizeRemoteOutboundByCapabilities,
         routeRules,
         addRouteRule,
         removeRouteRule,
@@ -1098,6 +1536,8 @@ const { computed, nextTick, watch } = window.Vue;
 const TRANSPORT_TYPES = ['vless', 'vmess', 'trojan'];
 const MULTIPLEX_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
 const TLS_TYPES = ['vless', 'vmess', 'trojan', 'hysteria2', 'tuic', 'hysteria', 'anytls'];
+const INBOUND_TYPES_WITH_REQUIRED_USERS = ['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'];
+const BUILTIN_OUTBOUND_TAGS = new Set(['direct', 'block', 'dns', 'dns-out']);
 const LEGACY_SPECIAL_OUTBOUND_ACTIONS = Object.freeze({
     block: 'reject',
     dns: 'hijack-dns',
@@ -1110,12 +1550,59 @@ const SHADOWSOCKS_2022_KEY_BYTES = Object.freeze({
 });
 
 function setupServerConfigCore(ctx) {
+    const INTEGER_PATTERN = /^-?\d+$/;
+    const HYSTERIA_BANDWIDTH_PATTERN = /^(0|[1-9]\d*)\s*(?:bps|Bps|Kbps|KBps|Mbps|MBps|Gbps|GBps|Tbps|TBps)$/;
+    const cloneState = (value) => {
+        if (typeof globalThis.structuredClone === 'function') {
+            try {
+                return globalThis.structuredClone(value);
+            } catch {
+                // Vue reactive proxies are not always structured-cloneable.
+            }
+        }
+        return JSON.parse(JSON.stringify(value));
+    };
+    const sanitizeInboundForExport = (inbound) => {
+        if (!inbound || typeof ctx.sanitizeInboundByCapabilities !== 'function') return inbound;
+        return ctx.sanitizeInboundByCapabilities(cloneState(inbound));
+    };
+    const sanitizeRemoteOutboundForExport = (outbound) => {
+        if (!outbound || typeof ctx.sanitizeRemoteOutboundByCapabilities !== 'function') return outbound;
+        return ctx.sanitizeRemoteOutboundByCapabilities(cloneState(outbound));
+    };
     const parseOptionalInteger = (value) => {
         if (value === null || value === undefined) return undefined;
         const source = String(value).trim();
         if (!source) return undefined;
+        if (!INTEGER_PATTERN.test(source)) return undefined;
         const parsed = parseInt(source, 10);
         return Number.isInteger(parsed) ? parsed : undefined;
+    };
+    const parsePositiveInteger = (value) => {
+        const parsed = parseOptionalInteger(value);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+    };
+    const parseNonNegativeInteger = (value) => {
+        const parsed = parseOptionalInteger(value);
+        return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+    };
+    const hasTextValue = (value) => String(value === null || value === undefined ? '' : value).trim() !== '';
+    const isValidHysteriaBandwidth = (value) => HYSTERIA_BANDWIDTH_PATTERN.test(String(value || '').trim());
+    const parseRoutingMark = (value) => {
+        if (value === null || value === undefined) return { empty: true, valid: true, value: undefined };
+        const source = String(value).trim();
+        if (!source) return { empty: true, valid: true, value: undefined };
+        if (/^0x[0-9a-f]+$/i.test(source)) return { empty: false, valid: true, value: source.toLowerCase() };
+        if (/^\d+$/.test(source)) return { empty: false, valid: true, value: parseInt(source, 10) };
+        return { empty: false, valid: false, value: undefined };
+    };
+    const parseOptionalBoolean = (value) => {
+        if (value === true || value === false) return value;
+        if (value === null || value === undefined) return undefined;
+        const source = String(value).trim().toLowerCase();
+        if (source === 'true') return true;
+        if (source === 'false') return false;
+        return undefined;
     };
 
     const parseList = (value) => String(value || '')
@@ -1128,6 +1615,59 @@ function setupServerConfigCore(ctx) {
         if (!rawTag) return allowEmpty ? '' : fallback;
         const tag = rawTag;
         return LEGACY_SPECIAL_OUTBOUND_ACTIONS[tag] ? fallback : tag;
+    };
+    const hasExportableOutboundTag = (value, exportableOutboundTags = null) => {
+        const tag = sanitizeOutboundSelection(value, '', { allowEmpty: true });
+        if (!tag) return false;
+        if (!(exportableOutboundTags instanceof Set)) return true;
+        return exportableOutboundTags.has(tag);
+    };
+    const collectDuplicateTags = (items = [], resolveTag = (item) => item?.tag) => {
+        const counts = new Map();
+        items.forEach((item) => {
+            const tag = String(resolveTag(item) || '').trim();
+            if (!tag) return;
+            counts.set(tag, (counts.get(tag) || 0) + 1);
+        });
+        return Array.from(counts.entries())
+            .filter(([, count]) => count > 1)
+            .map(([tag]) => tag);
+    };
+    const isLikelyIpLiteral = (value) => {
+        const source = String(value || '').trim();
+        if (!source) return false;
+        if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(source)) {
+            return source.split('.').every((part) => {
+                const valuePart = Number(part);
+                return Number.isInteger(valuePart) && valuePart >= 0 && valuePart <= 255;
+            });
+        }
+        const normalized = source.startsWith('[') && source.endsWith(']') ? source.slice(1, -1) : source;
+        return normalized.includes(':') && /^[0-9a-f:]+$/i.test(normalized);
+    };
+    const buildInboundTagMap = () => new Map(
+        ctx.serverInbounds.value
+            .map((item) => {
+                const tag = String(item?.tag || '').trim();
+                if (!tag) return null;
+                return [tag, item?.type || ''];
+            })
+            .filter(Boolean),
+    );
+    const supportsInjectableInbound = (type) => {
+        if (typeof ctx.inboundSupportsDetourTarget === 'function') return !!ctx.inboundSupportsDetourTarget({ type });
+        if (typeof ctx.resolveInboundCapabilities !== 'function') return true;
+        return !!ctx.resolveInboundCapabilities({ type }).injectable;
+    };
+    const sanitizeInboundDetour = (value, currentTag = '', availableInboundTags = null) => {
+        const detour = String(value || '').trim();
+        const ownTag = String(currentTag || '').trim();
+        if (!detour || detour === ownTag) return '';
+        if (availableInboundTags instanceof Map) {
+            const detourType = String(availableInboundTags.get(detour) || '').trim();
+            if (!detourType || !supportsInjectableInbound(detourType)) return '';
+        }
+        return detour;
     };
     const normalizeRouteActionState = (rule = {}) => {
         const action = ['route', 'reject', 'hijack-dns'].includes(rule.action) ? rule.action : 'route';
@@ -1229,16 +1769,17 @@ function setupServerConfigCore(ctx) {
 
     const buildDnsServer = (dns) => {
         if (!dns || !dns.tag) return null;
-        if (dns.type === 'local') return { type: 'local', tag: dns.tag };
+        const usesServerAddress = dns.type !== 'local';
+        const usesHttpFields = ['https', 'h3'].includes(dns.type);
         const server = { type: dns.type, tag: dns.tag };
-        if (dns.server) server.server = dns.server;
+        if (usesServerAddress && dns.server) server.server = dns.server;
         const serverPort = parseOptionalInteger(dns.server_port);
-        if (serverPort !== undefined && serverPort > 0) server.server_port = serverPort;
+        if (usesServerAddress && serverPort !== undefined && serverPort > 0) server.server_port = serverPort;
         if (dns.detour) server.detour = dns.detour;
-        if (dns.domain_resolver) server.domain_resolver = dns.domain_resolver;
-        if (dns.path && ['https', 'h3'].includes(dns.type)) server.path = dns.path;
+        if (usesServerAddress && dns.domain_resolver) server.domain_resolver = dns.domain_resolver;
+        if (usesHttpFields && dns.path) server.path = dns.path;
         const headers = parseHeadersText(dns.headers_text);
-        if (headers && ['https', 'h3'].includes(dns.type)) server.headers = headers;
+        if (usesHttpFields && headers) server.headers = headers;
         if (dns.client_subnet) server.client_subnet = dns.client_subnet;
         if (dns.connect_timeout) server.connect_timeout = dns.connect_timeout;
         return server;
@@ -1293,16 +1834,21 @@ function setupServerConfigCore(ctx) {
             })
             .filter(Boolean);
     };
+    const shouldPreserveUsersArray = (inbound) => {
+        if (!inbound) return false;
+        if (INBOUND_TYPES_WITH_REQUIRED_USERS.includes(inbound.type)) return true;
+        if (inbound.type === 'shadowtls' && String(inbound.shadowtls_version || '3') === '3') return true;
+        if (inbound.type === 'shadowsocks' && inbound.ss_mode === 'multi-user') return true;
+        return false;
+    };
 
     const buildTransport = (inbound) => {
         if (!TRANSPORT_TYPES.includes(inbound.type) || !inbound.transport) return undefined;
         const headers = parseHeadersText(inbound.transport_headers_text);
         if (inbound.transport === 'ws') {
-            const transport = {
-                type: 'ws',
-                path: inbound.transport_path || '/',
-                headers,
-            };
+            const transport = { type: 'ws' };
+            if (inbound.transport_path) transport.path = inbound.transport_path;
+            if (headers) transport.headers = headers;
             if (inbound.transport_host) {
                 transport.headers = {
                     ...(transport.headers || {}),
@@ -1337,12 +1883,11 @@ function setupServerConfigCore(ctx) {
             return transport;
         }
         if (inbound.transport === 'httpupgrade') {
-            return {
-                type: 'httpupgrade',
-                host: inbound.transport_host || undefined,
-                path: inbound.transport_path || '/',
-                headers,
-            };
+            const transport = { type: 'httpupgrade' };
+            if (inbound.transport_host) transport.host = inbound.transport_host;
+            if (inbound.transport_path) transport.path = inbound.transport_path;
+            if (headers) transport.headers = headers;
+            return transport;
         }
         if (inbound.transport === 'quic') {
             return { type: 'quic' };
@@ -1354,14 +1899,22 @@ function setupServerConfigCore(ctx) {
         if (!MULTIPLEX_TYPES.includes(inbound.type) || !inbound.mux_enabled) return undefined;
         const multiplex = { enabled: true };
         if (inbound.mux_padding) multiplex.padding = true;
-        if (inbound.mux_brutal_enabled) multiplex.brutal = {};
+        if (inbound.mux_brutal_enabled) {
+            multiplex.brutal = { enabled: true };
+            const brutalUp = parsePositiveInteger(inbound.mux_brutal_up_mbps);
+            const brutalDown = parsePositiveInteger(inbound.mux_brutal_down_mbps);
+            if (brutalUp !== undefined) multiplex.brutal.up_mbps = brutalUp;
+            if (brutalDown !== undefined) multiplex.brutal.down_mbps = brutalDown;
+        }
         return multiplex;
     };
 
     const buildTls = (inbound) => {
         if (!TLS_TYPES.includes(inbound.type) || !inbound.tls_enabled) return undefined;
         const tls = { enabled: true };
+        if (inbound.tls_certificate) tls.certificate = inbound.tls_certificate;
         if (inbound.tls_cert_path) tls.certificate_path = inbound.tls_cert_path;
+        if (inbound.tls_key) tls.key = inbound.tls_key;
         if (inbound.tls_key_path) tls.key_path = inbound.tls_key_path;
         if (inbound.tls_server_name) tls.server_name = inbound.tls_server_name;
         const alpn = parseList(inbound.tls_alpn);
@@ -1370,15 +1923,15 @@ function setupServerConfigCore(ctx) {
         if (inbound.tls_max_version) tls.max_version = inbound.tls_max_version;
         if (inbound.tls_handshake_timeout) tls.handshake_timeout = inbound.tls_handshake_timeout;
         if (inbound.reality_enabled) {
-            tls.reality = {
-                enabled: true,
-                handshake: {
-                    server: inbound.reality_server || 'www.cloudflare.com',
+            tls.reality = { enabled: true };
+            if (inbound.reality_server) {
+                tls.reality.handshake = {
+                    server: inbound.reality_server,
                     server_port: parseOptionalInteger(inbound.reality_server_port) || 443,
-                },
-                private_key: inbound.reality_private_key || '',
-                short_id: inbound.reality_short_id || '',
-            };
+                };
+            }
+            if (inbound.reality_private_key) tls.reality.private_key = inbound.reality_private_key;
+            if (inbound.reality_short_id) tls.reality.short_id = inbound.reality_short_id;
             if (inbound.reality_max_time_difference) {
                 tls.reality.max_time_difference = inbound.reality_max_time_difference;
             }
@@ -1417,11 +1970,10 @@ function setupServerConfigCore(ctx) {
     const buildRemoteOutboundTransport = (outbound) => {
         if (!['vless', 'vmess', 'trojan'].includes(outbound.type) || !outbound.transport) return undefined;
         if (outbound.transport === 'ws') {
-            return {
-                type: 'ws',
-                path: outbound.transport_path || '/',
-                headers: outbound.transport_host ? { Host: outbound.transport_host } : undefined,
-            };
+            const transport = { type: 'ws' };
+            if (outbound.transport_path) transport.path = outbound.transport_path;
+            if (outbound.transport_host) transport.headers = { Host: outbound.transport_host };
+            return transport;
         }
         if (outbound.transport === 'grpc') {
             return {
@@ -1437,11 +1989,10 @@ function setupServerConfigCore(ctx) {
             };
         }
         if (outbound.transport === 'httpupgrade') {
-            return {
-                type: 'httpupgrade',
-                path: outbound.transport_path || '/',
-                host: outbound.transport_host || undefined,
-            };
+            const transport = { type: 'httpupgrade' };
+            if (outbound.transport_path) transport.path = outbound.transport_path;
+            if (outbound.transport_host) transport.host = outbound.transport_host;
+            return transport;
         }
         if (outbound.transport === 'quic') {
             return { type: 'quic' };
@@ -1449,7 +2000,7 @@ function setupServerConfigCore(ctx) {
         return undefined;
     };
 
-    const buildInbound = (inbound) => {
+    const buildInbound = (inbound, availableInboundTags = null) => {
         if (!inbound || !inbound.tag) return null;
         const listenPort = parseOptionalInteger(inbound.listen_port);
         const obj = {
@@ -1458,10 +2009,25 @@ function setupServerConfigCore(ctx) {
             listen: inbound.listen || '::',
             listen_port: listenPort === undefined ? 443 : listenPort,
         };
+        const routingMark = parseRoutingMark(inbound.routing_mark);
+        const reuseAddr = parseOptionalBoolean(inbound.reuse_addr);
+        const tcpFastOpen = parseOptionalBoolean(inbound.tcp_fast_open);
+        const tcpMultiPath = parseOptionalBoolean(inbound.tcp_multi_path);
+        const udpFragment = parseOptionalBoolean(inbound.udp_fragment);
+        if (inbound.bind_interface) obj.bind_interface = inbound.bind_interface;
+        if (routingMark.valid && routingMark.value !== undefined) obj.routing_mark = routingMark.value;
+        if (reuseAddr !== undefined) obj.reuse_addr = reuseAddr;
+        if (inbound.netns) obj.netns = inbound.netns;
+        if (tcpFastOpen !== undefined) obj.tcp_fast_open = tcpFastOpen;
+        if (tcpMultiPath !== undefined) obj.tcp_multi_path = tcpMultiPath;
+        if (udpFragment !== undefined) obj.udp_fragment = udpFragment;
+        if (inbound.udp_timeout) obj.udp_timeout = inbound.udp_timeout;
+        const detour = sanitizeInboundDetour(inbound.detour, inbound.tag, availableInboundTags);
+        if (detour) obj.detour = detour;
 
         if (['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'].includes(inbound.type)) {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
         }
 
         if (inbound.type === 'shadowsocks') {
@@ -1471,7 +2037,7 @@ function setupServerConfigCore(ctx) {
             if (inbound.ss_managed) obj.managed = true;
             if (inbound.ss_mode === 'multi-user') {
                 const users = buildUsers(inbound);
-                if (users.length > 0) obj.users = users;
+                obj.users = users;
             }
             if (inbound.ss_mode === 'relay' && Array.isArray(inbound.ss_destinations) && inbound.ss_destinations.length > 0) {
                 obj.destinations = inbound.ss_destinations
@@ -1490,20 +2056,29 @@ function setupServerConfigCore(ctx) {
         }
 
         if (inbound.type === 'hysteria') {
-            if (inbound.hy_up_mbps) obj.up_mbps = parseOptionalInteger(inbound.hy_up_mbps) || inbound.hy_up_mbps;
-            if (inbound.hy_down_mbps) obj.down_mbps = parseOptionalInteger(inbound.hy_down_mbps) || inbound.hy_down_mbps;
+            if (inbound.hy_up) obj.up = inbound.hy_up;
+            if (inbound.hy_down) obj.down = inbound.hy_down;
+            const hyUpMbps = parsePositiveInteger(inbound.hy_up_mbps);
+            const hyDownMbps = parsePositiveInteger(inbound.hy_down_mbps);
+            const hyRecvWindowConn = parseNonNegativeInteger(inbound.hy_recv_window_conn);
+            const hyRecvWindowClient = parseNonNegativeInteger(inbound.hy_recv_window_client);
+            const hyMaxConnClient = parseNonNegativeInteger(inbound.hy_max_conn_client);
+            if (hyUpMbps !== undefined) obj.up_mbps = hyUpMbps;
+            if (hyDownMbps !== undefined) obj.down_mbps = hyDownMbps;
             if (inbound.hy_obfs) obj.obfs = inbound.hy_obfs;
-            if (inbound.hy_recv_window_conn) obj.recv_window_conn = parseOptionalInteger(inbound.hy_recv_window_conn) || inbound.hy_recv_window_conn;
-            if (inbound.hy_recv_window_client) obj.recv_window_client = parseOptionalInteger(inbound.hy_recv_window_client) || inbound.hy_recv_window_client;
-            if (inbound.hy_max_conn_client) obj.max_conn_client = parseOptionalInteger(inbound.hy_max_conn_client) || inbound.hy_max_conn_client;
+            if (hyRecvWindowConn !== undefined) obj.recv_window_conn = hyRecvWindowConn;
+            if (hyRecvWindowClient !== undefined) obj.recv_window_client = hyRecvWindowClient;
+            if (hyMaxConnClient !== undefined) obj.max_conn_client = hyMaxConnClient;
             if (inbound.hy_disable_mtu_discovery) obj.disable_mtu_discovery = true;
         }
 
         if (inbound.type === 'hysteria2') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
-            if (inbound.hy2_up_mbps) obj.up_mbps = parseOptionalInteger(inbound.hy2_up_mbps) || inbound.hy2_up_mbps;
-            if (inbound.hy2_down_mbps) obj.down_mbps = parseOptionalInteger(inbound.hy2_down_mbps) || inbound.hy2_down_mbps;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
+            const hy2UpMbps = parsePositiveInteger(inbound.hy2_up_mbps);
+            const hy2DownMbps = parsePositiveInteger(inbound.hy2_down_mbps);
+            if (hy2UpMbps !== undefined) obj.up_mbps = hy2UpMbps;
+            if (hy2DownMbps !== undefined) obj.down_mbps = hy2DownMbps;
             if (inbound.hy2_obfs_type) obj.obfs = { type: inbound.hy2_obfs_type, password: inbound.hy2_obfs_password || '' };
             if (inbound.hy2_ignore_client_bandwidth) obj.ignore_client_bandwidth = true;
             const masquerade = buildMasquerade(inbound);
@@ -1512,7 +2087,7 @@ function setupServerConfigCore(ctx) {
 
         if (inbound.type === 'tuic') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             if (inbound.tuic_congestion) obj.congestion_control = inbound.tuic_congestion;
             if (inbound.tuic_auth_timeout) obj.auth_timeout = inbound.tuic_auth_timeout;
             if (inbound.tuic_zero_rtt_handshake) obj.zero_rtt_handshake = true;
@@ -1521,7 +2096,7 @@ function setupServerConfigCore(ctx) {
 
         if (inbound.type === 'anytls') {
             const users = buildUsers(inbound);
-            if (users.length > 0) obj.users = users;
+            if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             const paddingScheme = parseList(inbound.anytls_padding_scheme_text);
             if (paddingScheme.length > 0) obj.padding_scheme = paddingScheme;
         }
@@ -1531,7 +2106,7 @@ function setupServerConfigCore(ctx) {
             if (String(obj.version) === '2' && inbound.shadowtls_password) obj.password = inbound.shadowtls_password;
             if (String(obj.version) === '3') {
                 const users = buildUsers(inbound);
-                if (users.length > 0) obj.users = users;
+                if (users.length > 0 || shouldPreserveUsersArray(inbound)) obj.users = users;
             }
             if (inbound.shadowtls_handshake_server) {
                 obj.handshake = {
@@ -1717,8 +2292,9 @@ function setupServerConfigCore(ctx) {
             if (alpn.length > 0) obj.tls.alpn = alpn;
             if (outbound.allow_insecure) obj.tls.insecure = true;
         } else if (outbound.type === 'wireguard') {
-            if (!outbound.local_address || !outbound.peer_public_key) return null;
+            if (!outbound.local_address || !outbound.private_key || !outbound.peer_public_key) return null;
             obj.local_address = parseList(outbound.local_address);
+            obj.private_key = outbound.private_key;
             obj.peer_public_key = outbound.peer_public_key;
             if (outbound.pre_shared_key) obj.pre_shared_key = outbound.pre_shared_key;
             const mtu = parseOptionalInteger(outbound.mtu);
@@ -1731,13 +2307,32 @@ function setupServerConfigCore(ctx) {
 
         return obj;
     };
+    const buildExportableRemoteOutbounds = () => ctx.remoteOutbounds.value
+        .map(sanitizeRemoteOutboundForExport)
+        .map(buildRemoteOutbound)
+        .filter(Boolean);
+    const buildExportableOutboundTagSet = (outbounds = buildExportableRemoteOutbounds()) => new Set(
+        ['direct', ...outbounds.map((item) => String(item?.tag || '').trim()).filter(Boolean)],
+    );
+    const buildDnsServers = () => ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
+    const buildDnsTagSet = (dnsServers = buildDnsServers()) => new Set(
+        dnsServers.map((item) => String(item?.tag || '').trim()).filter(Boolean),
+    );
+    const buildExportableRuleSets = () => ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
+    const buildRuleSetTagSet = (ruleSets = buildExportableRuleSets()) => new Set(
+        ruleSets.map((item) => String(item?.tag || '').trim()).filter(Boolean),
+    );
+    const exportableOutboundOptions = computed(() => Array.from(buildExportableOutboundTagSet()));
 
     const generatedJson = computed(() => {
-        const dnsServers = ctx.dnsList.value.map(buildDnsServer).filter(Boolean);
-        const inbounds = ctx.serverInbounds.value.map(buildInbound).filter(Boolean);
-        const ruleSets = ctx.ruleSets.value.map(buildRuleSet).filter(Boolean);
+        const dnsServers = buildDnsServers();
+        const availableInboundTags = buildInboundTagMap();
+        const inbounds = ctx.serverInbounds.value
+            .map((inbound) => buildInbound(sanitizeInboundForExport(inbound), availableInboundTags))
+            .filter(Boolean);
+        const ruleSets = buildExportableRuleSets();
         const routeRules = ctx.routeRules.value.map(buildRouteRule).filter(Boolean);
-        const customOutbounds = ctx.remoteOutbounds.value.map(buildRemoteOutbound).filter(Boolean);
+        const customOutbounds = buildExportableRemoteOutbounds();
         const route = {
             rules: routeRules,
             final: sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct'),
@@ -1764,17 +2359,164 @@ function setupServerConfigCore(ctx) {
             route,
         };
 
-        return JSON.stringify(config, (key, value) => {
-            if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) return undefined;
+        return JSON.stringify(config, function replacer(key, value) {
+            if (Array.isArray(value) && value.length === 0) {
+                if (key === 'users' && this && typeof this === 'object' && typeof this.type === 'string') {
+                    if (INBOUND_TYPES_WITH_REQUIRED_USERS.includes(this.type) || this.type === 'shadowtls' || this.type === 'shadowsocks') {
+                        return value;
+                    }
+                }
+                return undefined;
+            }
+            if (value === undefined || value === null || value === '') return undefined;
             return value;
         }, 2);
     });
     const runtimeValidationErrors = computed(() => {
         const errors = [];
+        const availableInboundTags = buildInboundTagMap();
+        const dnsServers = buildDnsServers();
+        const availableDnsTags = buildDnsTagSet(dnsServers);
+        const exportableRuleSets = buildExportableRuleSets();
+        const exportableRuleSetTags = buildRuleSetTagSet(exportableRuleSets);
+        const exportableOutbounds = buildExportableRemoteOutbounds();
+        const exportableOutboundTags = buildExportableOutboundTagSet(exportableOutbounds);
+
+        collectDuplicateTags(ctx.serverInbounds.value).forEach((tag) => {
+            errors.push(`入站 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(dnsServers).forEach((tag) => {
+            errors.push(`DNS 服务器 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(exportableRuleSets).forEach((tag) => {
+            errors.push(`规则集 tag "${tag}" 重复`);
+        });
+        collectDuplicateTags(ctx.remoteOutbounds.value).forEach((tag) => {
+            errors.push(`远端出站 tag "${tag}" 重复`);
+        });
+        ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
+            const outboundTag = String(outbound?.tag || '').trim() || `relay-${outboundIndex + 1}`;
+            if (!BUILTIN_OUTBOUND_TAGS.has(outboundTag)) return;
+            errors.push(`远端出站 "${outboundTag}" 不能使用保留 tag`);
+        });
 
         ctx.serverInbounds.value.forEach((inbound, inboundIndex) => {
+            const inboundTag = inbound?.tag || `inbound-${inboundIndex + 1}`;
+            const sanitizedInbound = sanitizeInboundForExport(inbound);
+            const capabilities = typeof ctx.resolveInboundCapabilities === 'function' ? ctx.resolveInboundCapabilities(sanitizedInbound) : null;
+            const builtUsers = buildUsers(sanitizedInbound);
+            const detour = String(sanitizedInbound?.detour || '').trim();
+            const routingMark = parseRoutingMark(sanitizedInbound?.routing_mark);
+
+            if (capabilities?.requiresTls && !sanitizedInbound?.tls_enabled) {
+                errors.push(`入站 "${inboundTag}" 的协议要求启用 TLS`);
+            }
+            if (!routingMark.empty && !routingMark.valid) {
+                errors.push(`入站 "${inboundTag}" 的 routing_mark 必须是十进制整数或 0x 开头的十六进制字符串`);
+            }
+            if (detour) {
+                if (detour === inboundTag) {
+                    errors.push(`入站 "${inboundTag}" 的 detour 不能指向自己`);
+                } else if (!availableInboundTags.has(detour)) {
+                    errors.push(`入站 "${inboundTag}" 的 detour 指向了不存在的入站 "${detour}"`);
+                } else {
+                    const detourType = String(availableInboundTags.get(detour) || '').trim();
+                    if (!supportsInjectableInbound(detourType)) {
+                        errors.push(`入站 "${inboundTag}" 的 detour 指向了不支持 Injectable 的入站 "${detour}"`);
+                    }
+                }
+            }
+            if (sanitizedInbound?.tls_enabled) {
+                const hasCertificate = !!String(sanitizedInbound?.tls_certificate || sanitizedInbound?.tls_cert_path || '').trim();
+                const hasKey = !!String(sanitizedInbound?.tls_key || sanitizedInbound?.tls_key_path || '').trim();
+                if (!hasCertificate || !hasKey) {
+                    errors.push(`入站 "${inboundTag}" 已启用 TLS，但缺少证书链或私钥（可填写 PEM 内容或文件路径）`);
+                }
+            }
+            if (inbound?.reality_enabled && !capabilities?.supportsReality) {
+                errors.push(`入站 "${inboundTag}" 当前协议不支持 Reality`);
+            }
+            if (capabilities?.activeTransport === 'grpc' && !String(sanitizedInbound?.transport_service_name || '').trim()) {
+                errors.push(`入站 "${inboundTag}" 使用 gRPC transport 时建议填写 service_name，当前导出会生成空 service_name`);
+            }
+            if (capabilities?.activeTransport === 'ws' && String(sanitizedInbound?.transport_early_data_header_name || '').trim()) {
+                const maxEarlyData = parseOptionalInteger(sanitizedInbound?.transport_early_data);
+                if (!maxEarlyData || maxEarlyData <= 0) {
+                    errors.push(`入站 "${inboundTag}" 设置了 WebSocket early_data_header_name，但 max_early_data 为空或为 0`);
+                }
+            }
+            if (sanitizedInbound?.reality_enabled) {
+                if (!String(sanitizedInbound?.reality_server || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 handshake server`);
+                }
+                if (!String(sanitizedInbound?.reality_private_key || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 private_key`);
+                }
+                if (!String(sanitizedInbound?.reality_short_id || '').trim()) {
+                    errors.push(`入站 "${inboundTag}" 已启用 Reality，但缺少 short_id`);
+                }
+            }
+            if (['vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2', 'anytls'].includes(sanitizedInbound?.type) && builtUsers.length === 0) {
+                errors.push(`入站 "${inboundTag}" 缺少有效用户配置`);
+            }
+            if (sanitizedInbound?.type === 'hysteria') {
+                const hasStringBandwidth = hasTextValue(sanitizedInbound?.hy_up) && hasTextValue(sanitizedInbound?.hy_down);
+                const hasMbpsBandwidth = hasTextValue(sanitizedInbound?.hy_up_mbps) && hasTextValue(sanitizedInbound?.hy_down_mbps);
+                if (!hasStringBandwidth && !hasMbpsBandwidth) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 缺少 up/down 或 up_mbps/down_mbps`);
+                }
+                if ((hasTextValue(sanitizedInbound?.hy_up) || hasTextValue(sanitizedInbound?.hy_down))
+                    && (!isValidHysteriaBandwidth(sanitizedInbound?.hy_up) || !isValidHysteriaBandwidth(sanitizedInbound?.hy_down))) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 up/down 必须符合官方带宽格式，例如 100 Mbps 或 640 KBps`);
+                }
+                if ((hasTextValue(sanitizedInbound?.hy_up_mbps) || hasTextValue(sanitizedInbound?.hy_down_mbps))
+                    && (parsePositiveInteger(sanitizedInbound?.hy_up_mbps) === undefined || parsePositiveInteger(sanitizedInbound?.hy_down_mbps) === undefined)) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 up_mbps/down_mbps 必须是正整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_recv_window_conn) && parseNonNegativeInteger(sanitizedInbound?.hy_recv_window_conn) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 recv_window_conn 必须是非负整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_recv_window_client) && parseNonNegativeInteger(sanitizedInbound?.hy_recv_window_client) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 recv_window_client 必须是非负整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy_max_conn_client) && parseNonNegativeInteger(sanitizedInbound?.hy_max_conn_client) === undefined) {
+                    errors.push(`Hysteria 入站 "${inboundTag}" 的 max_conn_client 必须是非负整数`);
+                }
+            }
+            if (sanitizedInbound?.mux_enabled && sanitizedInbound?.mux_brutal_enabled) {
+                if (!hasTextValue(sanitizedInbound?.mux_brutal_up_mbps) || !hasTextValue(sanitizedInbound?.mux_brutal_down_mbps)) {
+                    errors.push(`入站 "${inboundTag}" 启用 Multiplex Brutal 时缺少 up_mbps/down_mbps`);
+                } else if (parsePositiveInteger(sanitizedInbound?.mux_brutal_up_mbps) === undefined || parsePositiveInteger(sanitizedInbound?.mux_brutal_down_mbps) === undefined) {
+                    errors.push(`入站 "${inboundTag}" 的 Multiplex Brutal up_mbps/down_mbps 必须是正整数`);
+                }
+            }
+            if (sanitizedInbound?.type === 'shadowtls') {
+                const shadowTlsCaps = capabilities?.shadowtls;
+                const wildcardAll = shadowTlsCaps?.allowWildcardSni && String(sanitizedInbound?.shadowtls_wildcard_sni || 'off') === 'all';
+                if (!wildcardAll && !String(sanitizedInbound?.shadowtls_handshake_server || '').trim()) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 缺少 handshake server；仅 wildcard_sni=all 时可省略`);
+                }
+                if (shadowTlsCaps?.version === '2' && !String(sanitizedInbound?.shadowtls_password || '').trim()) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 在 v2 模式下缺少 password`);
+                }
+                if (shadowTlsCaps?.version === '3' && builtUsers.length === 0) {
+                    errors.push(`ShadowTLS 入站 "${inboundTag}" 在 v3 模式下缺少有效用户配置`);
+                }
+            }
+            if (inbound?.type === 'hysteria2' && inbound?.hy2_ignore_client_bandwidth) {
+                if (hasTextValue(inbound?.hy2_up_mbps) || hasTextValue(inbound?.hy2_down_mbps)) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 开启 ignore_client_bandwidth 时，不应继续填写 up_mbps/down_mbps`);
+                }
+            } else if (sanitizedInbound?.type === 'hysteria2') {
+                if (hasTextValue(sanitizedInbound?.hy2_up_mbps) && parsePositiveInteger(sanitizedInbound?.hy2_up_mbps) === undefined) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 的 up_mbps 必须是正整数`);
+                }
+                if (hasTextValue(sanitizedInbound?.hy2_down_mbps) && parsePositiveInteger(sanitizedInbound?.hy2_down_mbps) === undefined) {
+                    errors.push(`Hysteria2 入站 "${inboundTag}" 的 down_mbps 必须是正整数`);
+                }
+            }
             if (inbound?.type !== 'shadowsocks') return;
-            const inboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
+            const shadowsocksInboundTag = inbound.tag || `shadowsocks-in-${inboundIndex + 1}`;
             const method = inbound.ss_method || '2022-blake3-aes-128-gcm';
             if (!getShadowsocks2022KeyLength(method)) return;
 
@@ -1783,7 +2525,7 @@ function setupServerConfigCore(ctx) {
                     if (!String(user?.password || '').trim()) return;
                     if (isValidShadowsocks2022Password(method, user.password)) return;
                     const userLabel = user?.name ? `用户 "${user.name}"` : `用户 #${userIndex + 1}`;
-                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${userLabel}`, method));
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}" 的${userLabel}`, method));
                 });
                 return;
             }
@@ -1793,25 +2535,152 @@ function setupServerConfigCore(ctx) {
                     if (!String(destination?.password || '').trim()) return;
                     if (isValidShadowsocks2022Password(method, destination.password)) return;
                     const destinationLabel = destination?.name ? `目标 "${destination.name}"` : `目标 #${destinationIndex + 1}`;
-                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}" 的${destinationLabel}`, method));
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}" 的${destinationLabel}`, method));
                 });
                 return;
             }
 
             if (!String(inbound.ss_password || '').trim()) return;
             if (!isValidShadowsocks2022Password(method, inbound.ss_password)) {
-                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${inboundTag}"`, method));
+                errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 入站 "${shadowsocksInboundTag}"`, method));
+            }
+        });
+
+        if (ctx.settings.value.dns_final) {
+            const dnsFinal = String(ctx.settings.value.dns_final || '').trim();
+            if (dnsFinal && !availableDnsTags.has(dnsFinal)) {
+                errors.push(`最终 DNS "${dnsFinal}" 指向了不存在的 DNS 服务器 tag`);
+            }
+        }
+
+        ctx.dnsList.value.forEach((dns, dnsIndex) => {
+            const dnsTag = String(dns?.tag || '').trim() || `dns-${dnsIndex + 1}`;
+            const dnsType = String(dns?.type || 'udp').trim();
+            const server = String(dns?.server || '').trim();
+            const domainResolver = String(dns?.domain_resolver || '').trim();
+            const detour = sanitizeOutboundSelection(dns?.detour, '', { allowEmpty: true });
+
+            if (dnsType !== 'local' && !server) {
+                errors.push(`DNS 服务器 "${dnsTag}" 缺少 server`);
+            }
+            if (dnsType !== 'local' && server && !isLikelyIpLiteral(server) && !domainResolver) {
+                errors.push(`DNS 服务器 "${dnsTag}" 使用域名作为 server 时，必须设置 domain_resolver`);
+            }
+            if (dnsType !== 'local' && domainResolver) {
+                if (domainResolver === dnsTag) {
+                    errors.push(`DNS 服务器 "${dnsTag}" 的 domain_resolver 不能指向自己`);
+                } else if (!availableDnsTags.has(domainResolver)) {
+                    errors.push(`DNS 服务器 "${dnsTag}" 的 domain_resolver 指向了不存在的 DNS 服务器 "${domainResolver}"`);
+                }
+            }
+            if (detour && !hasExportableOutboundTag(detour, exportableOutboundTags)) {
+                errors.push(`DNS 服务器 "${dnsTag}" 的 detour 指向了未导出的远端出站 "${detour}"`);
             }
         });
 
         ctx.remoteOutbounds.value.forEach((outbound, outboundIndex) => {
-            if (outbound?.type !== 'shadowsocks') return;
-            const method = outbound.method || '2022-blake3-aes-128-gcm';
-            if (!getShadowsocks2022KeyLength(method)) return;
-            if (!String(outbound.password || '').trim()) return;
-            if (isValidShadowsocks2022Password(method, outbound.password)) return;
-            const outboundTag = outbound.tag || `relay-${outboundIndex + 1}`;
-            errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+            const outboundTag = String(outbound?.tag || '').trim() || `relay-${outboundIndex + 1}`;
+            const sanitizedOutbound = sanitizeRemoteOutboundForExport(outbound);
+            const capabilities = typeof ctx.resolveRemoteOutboundCapabilities === 'function' ? ctx.resolveRemoteOutboundCapabilities(sanitizedOutbound) : null;
+            const outboundType = String(sanitizedOutbound?.type || '').trim();
+            const outboundServer = String(sanitizedOutbound?.server || '').trim();
+            const outboundPort = parseOptionalInteger(sanitizedOutbound?.server_port);
+
+            if (!outboundServer) {
+                errors.push(`远端出站 "${outboundTag}" 缺少 server`);
+            }
+            if (outboundPort === undefined || outboundPort <= 0) {
+                errors.push(`远端出站 "${outboundTag}" 的 server_port 必须是正整数`);
+            }
+            if (capabilities?.requiresTls && !sanitizedOutbound?.tls_enabled) {
+                errors.push(`远端出站 "${outboundTag}" 的协议要求启用 TLS`);
+            }
+            if (capabilities?.supportsTransport && capabilities?.activeTransport === 'grpc' && !String(sanitizedOutbound?.transport_service_name || '').trim()) {
+                errors.push(`远端出站 "${outboundTag}" 使用 gRPC transport 时建议填写 service_name，当前导出会生成空 service_name`);
+            }
+            if (outboundType === 'vless' && !String(sanitizedOutbound?.uuid || '').trim()) {
+                errors.push(`VLESS 远端出站 "${outboundTag}" 缺少 uuid`);
+            }
+            if (outboundType === 'vmess' && !String(sanitizedOutbound?.uuid || '').trim()) {
+                errors.push(`VMess 远端出站 "${outboundTag}" 缺少 uuid`);
+            }
+            if (outboundType === 'trojan' && !String(sanitizedOutbound?.password || '').trim()) {
+                errors.push(`Trojan 远端出站 "${outboundTag}" 缺少 password`);
+            }
+            if (outboundType === 'shadowsocks') {
+                if (!String(sanitizedOutbound?.method || '').trim()) {
+                    errors.push(`Shadowsocks 远端出站 "${outboundTag}" 缺少 method`);
+                }
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`Shadowsocks 远端出站 "${outboundTag}" 缺少 password`);
+                }
+                const method = sanitizedOutbound?.method || '2022-blake3-aes-128-gcm';
+                if (getShadowsocks2022KeyLength(method) && String(sanitizedOutbound?.password || '').trim()
+                    && !isValidShadowsocks2022Password(method, sanitizedOutbound.password)) {
+                    errors.push(buildShadowsocks2022PasswordError(`Shadowsocks 远端出站 "${outboundTag}"`, method));
+                }
+            }
+            if (outboundType === 'hysteria2') {
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`Hysteria2 远端出站 "${outboundTag}" 缺少 password`);
+                }
+            }
+            if (outboundType === 'tuic') {
+                if (!String(sanitizedOutbound?.uuid || '').trim()) {
+                    errors.push(`TUIC 远端出站 "${outboundTag}" 缺少 uuid`);
+                }
+                if (!String(sanitizedOutbound?.password || '').trim()) {
+                    errors.push(`TUIC 远端出站 "${outboundTag}" 缺少 password`);
+                }
+            }
+            if (outboundType === 'wireguard') {
+                if (parseList(sanitizedOutbound?.local_address).length === 0) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 local_address`);
+                }
+                if (!String(sanitizedOutbound?.private_key || '').trim()) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 private_key`);
+                }
+                if (!String(sanitizedOutbound?.peer_public_key || '').trim()) {
+                    errors.push(`WireGuard 远端出站 "${outboundTag}" 缺少 peer_public_key`);
+                }
+            }
+        });
+        const finalOutbound = sanitizeOutboundSelection(ctx.settings.value.route_final, 'direct');
+        if (!hasExportableOutboundTag(finalOutbound, exportableOutboundTags)) {
+            errors.push(`默认出站 "${finalOutbound}" 没有对应已导出的远端出站配置`);
+        }
+
+        ctx.ruleSets.value.forEach((ruleSet, ruleSetIndex) => {
+            if (!ruleSet?.enabled || ruleSet?.source_type !== 'remote') return;
+            const downloadDetour = sanitizeOutboundSelection(ruleSet.download_detour, '', { allowEmpty: true });
+            if (!downloadDetour || hasExportableOutboundTag(downloadDetour, exportableOutboundTags)) return;
+            const ruleSetTag = ruleSet.tag || `ruleset-${ruleSetIndex + 1}`;
+            errors.push(`规则集 "${ruleSetTag}" 的 download_detour 指向了未导出的远端出站 "${downloadDetour}"`);
+        });
+
+        ctx.routeRules.value.forEach((rule, ruleIndex) => {
+            if (!rule?.enabled) return;
+            const ruleLabel = String(rule?.name || '').trim() || `路由规则 #${ruleIndex + 1}`;
+            const matchValues = parseList(rule.match_value);
+            if (rule.match_type === 'port' && matchValues.some((item) => parseOptionalInteger(item) === undefined)) {
+                errors.push(`路由规则 "${ruleLabel}" 的 port 必须是整数列表`);
+            }
+            if (rule.match_type === 'inbound') {
+                const missingInboundTags = matchValues.filter((item) => !availableInboundTags.has(item));
+                if (missingInboundTags.length > 0) {
+                    errors.push(`路由规则 "${ruleLabel}" 引用了不存在的入站: ${Array.from(new Set(missingInboundTags)).join(', ')}`);
+                }
+            }
+            if (rule.match_type === 'rule_set') {
+                const missingRuleSetTags = matchValues.filter((item) => !exportableRuleSetTags.has(item));
+                if (missingRuleSetTags.length > 0) {
+                    errors.push(`路由规则 "${ruleLabel}" 引用了不存在或未导出的规则集: ${Array.from(new Set(missingRuleSetTags)).join(', ')}`);
+                }
+            }
+            const normalizedRouteAction = normalizeRouteActionState(rule);
+            if (normalizedRouteAction.action !== 'route') return;
+            if (hasExportableOutboundTag(normalizedRouteAction.outbound, exportableOutboundTags)) return;
+            errors.push(`路由规则 "${ruleLabel}" 的 outbound 指向了未导出的远端出站 "${normalizedRouteAction.outbound}"`);
         });
 
         return errors;
@@ -2018,6 +2887,7 @@ function setupServerConfigCore(ctx) {
     });
 
     Object.assign(ctx, {
+        exportableOutboundOptions,
         generatedJson,
         runtimeValidationErrors,
         queueJsonScrollTo,
@@ -2601,6 +3471,17 @@ function setupServerRemoteImportCore(ctx) {
                 ctx.showToast('当前仅支持导入 VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC 远端出站', 'warn');
                 return;
             }
+            if (typeof ctx.normalizeRemoteOutbound === 'function') {
+                const index = Array.isArray(ctx.remoteOutbounds?.value)
+                    ? ctx.remoteOutbounds.value.findIndex((item) => item === outbound || item?.id === outbound?.id)
+                    : -1;
+                const normalized = ctx.normalizeRemoteOutbound({
+                    ...outbound,
+                    id: outbound.id,
+                    collapsed: outbound.collapsed,
+                }, index >= 0 ? index : 0);
+                Object.assign(outbound, normalized);
+            }
             ctx.showToast('远端出站已根据订阅链接自动填充', 'ok');
         } catch (error) {
             ctx.showToast(`导入失败：${error.message || error}`, 'err');
@@ -2829,14 +3710,8 @@ function setupServerShareCore(ctx) {
         return Array.from(bundles.values()).map((bundle) => ({
             ...bundle,
             problems: Array.from(bundle.problems),
-            plainText: bundle.links.map((item) => item.link).join('\n'),
         }));
     });
-
-    const copyBundlePlainText = async (bundle) => {
-        const ok = await ctx.copyToClipboard(bundle.plainText);
-        ctx.showToast(ok ? `已复制 ${bundle.label} 的订阅原文` : '复制失败，请手动复制', ok ? 'ok' : 'err');
-    };
 
     const copyShareLink = async (linkItem) => {
         const ok = await ctx.copyToClipboard(linkItem.link);
@@ -2845,7 +3720,6 @@ function setupServerShareCore(ctx) {
 
     Object.assign(ctx, {
         userBundles,
-        copyBundlePlainText,
         copyShareLink,
     });
 }
@@ -2974,6 +3848,161 @@ function setupServerStorageCore(ctx) {
     });
 }
 window.__SINGBOX_BUNDLE__.setupServerStorageCore = setupServerStorageCore;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const CJK_PATTERN = /[\u3400-\u9fff]/;
+const LATIN_PATTERN = /[A-Za-z]/;
+
+const BILINGUAL_TEXT_MAP = new Map([
+    ['基础设置', ['基础设置', 'Basic Settings']],
+    ['上游 DNS', ['上游 DNS', 'Upstream DNS']],
+    ['服务端入站', ['服务端入站', 'Server Inbounds']],
+    ['客户端分享参数', ['客户端分享参数', 'Client Share Fields']],
+    ['路由 / 出站', ['路由 / 出站', 'Route / Outbounds']],
+    ['订阅 / 节点链接', ['订阅 / 节点链接', 'Subscriptions / Links']],
+    ['当前阶段说明', ['当前阶段说明', 'Current Stage']],
+    ['标签', ['标签', 'Tag']],
+    ['类型', ['类型', 'Type']],
+    ['监听地址', ['监听地址', 'Listen Address']],
+    ['监听端口', ['监听端口', 'Listen Port']],
+    ['绑定接口', ['绑定接口', 'Bind Interface']],
+    ['路由标记', ['路由标记', 'Routing Mark']],
+    ['网络命名空间', ['网络命名空间', 'Network Namespace']],
+    ['Reuse Addr', ['地址复用', 'Reuse Addr']],
+    ['TCP Fast Open', ['TCP 快速打开', 'TCP Fast Open']],
+    ['TCP Multi Path', ['TCP 多路径', 'TCP Multi Path']],
+    ['UDP Fragment', ['UDP 分片', 'UDP Fragment']],
+    ['UDP Timeout', ['UDP 超时', 'UDP Timeout']],
+    ['TLS / Reality', ['TLS 与 Reality', 'TLS / Reality']],
+    ['主密码', ['主密码', 'Primary Password']],
+    ['模式', ['模式', 'Mode']],
+    ['名称', ['名称', 'Name']],
+    ['域名解析器', ['域名解析器', 'Domain Resolver']],
+    ['出站 Detour', ['出站绕行', 'Outbound Detour']],
+    ['客户端子网', ['客户端子网', 'Client Subnet']],
+    ['连接超时', ['连接超时', 'Connect Timeout']],
+    ['使用 CORS 代理兜底', ['使用 CORS 代理兜底', 'Use CORS Proxy Fallback']],
+    ['使用 jsDelivr CDN 补全 Rule Set 链接', ['使用 jsDelivr CDN 补全 Rule Set 链接', 'Auto-fill Rule Set URLs via jsDelivr']],
+    ['disable_cache', ['禁用缓存', 'disable_cache']],
+    ['disable_expire', ['禁用过期', 'disable_expire']],
+    ['启用', ['启用', 'Enabled']],
+    ['启用 Multiplex', ['启用多路复用', 'Enable Multiplex']],
+    ['启用 Reality', ['启用 Reality', 'Enable Reality']],
+    ['服务器', ['服务器', 'Server']],
+    ['端口', ['端口', 'Port']],
+    ['路径', ['路径', 'Path']],
+    ['密码', ['密码', 'Password']],
+    ['认证方式', ['认证方式', 'Authentication Method']],
+    ['自动探测接口', ['自动探测接口', 'Auto Detect Interface']],
+    ['日志级别', ['日志级别', 'Log Level']],
+    ['路由 / 出站', ['路由 / 出站', 'Route / Outbounds']],
+    ['UDP over Stream', ['流式 UDP', 'UDP over Stream']],
+    ['Zero RTT Handshake', ['零 RTT 握手', 'Zero RTT Handshake']],
+    ['全局下载出站', ['全局下载出站', 'Global Download Detour']],
+    ['UUID', ['唯一标识', 'UUID']],
+    ['MTU', ['最大传输单元', 'MTU']],
+]);
+
+const LABEL_SELECTORS = [
+    '.stitle',
+    'label.block',
+    'div[class*="tracking-wider"]',
+    'div.text-sm.font-extrabold.text-gray-800',
+    'div.text-xs.font-extrabold.text-gray-700',
+    'span.text-xs.font-bold',
+    'span.text-sm.font-bold',
+].join(', ');
+
+const normalizeRawText = (value) => String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[：:]$/, '')
+    .trim();
+
+const containsCjk = (value) => CJK_PATTERN.test(String(value || ''));
+const containsLatin = (value) => LATIN_PATTERN.test(String(value || ''));
+
+const parseBracketedLabel = (value) => {
+    const match = String(value || '').match(/^(.+?)\s*\(([^()]+)\)$/);
+    if (!match) return null;
+    const left = normalizeRawText(match[1]);
+    const right = normalizeRawText(match[2]);
+    if (!left || !right) return null;
+    if (containsCjk(left) && !containsCjk(right)) return [left, right];
+    if (containsCjk(right) && !containsCjk(left)) return [right, left];
+    if (containsCjk(left) && containsLatin(right)) return [left, right];
+    return null;
+};
+
+const resolveBilingualText = (rawText) => {
+    const normalized = normalizeRawText(rawText);
+    if (!normalized) return null;
+    if (BILINGUAL_TEXT_MAP.has(normalized)) return BILINGUAL_TEXT_MAP.get(normalized);
+    return parseBracketedLabel(normalized);
+};
+
+const classifyLabelSize = (element) => {
+    const className = String(element.className || '');
+    if (className.includes('stitle')) return 'title';
+    if (className.includes('text-sm')) return 'medium';
+    if (className.includes('text-xs')) return 'small';
+    if (className.includes('text-[10px]')) return 'micro';
+    return 'default';
+};
+
+const isLeafTextContainer = (element) => {
+    if (!element) return false;
+    if (element.tagName === 'LABEL' && element.querySelector('input, select, textarea, button')) return false;
+    return element.children.length === 0;
+};
+
+const decorateLabel = (element) => {
+    if (!isLeafTextContainer(element)) return;
+    if (element.dataset.uiBilingual === '1') return;
+    const rawText = normalizeRawText(element.textContent);
+    if (!rawText || rawText.includes('{{')) return;
+    const resolved = resolveBilingualText(rawText);
+    if (!resolved) return;
+    const [zh, en] = resolved;
+    if (!zh || !en) return;
+
+    element.dataset.uiBilingual = '1';
+    element.dataset.uiBilingualSize = classifyLabelSize(element);
+    element.setAttribute('aria-label', `${zh} / ${en}`);
+    element.innerHTML = `<span class="ui-bilingual-zh">${zh}</span><span class="ui-bilingual-en">${en}</span>`;
+    element.classList.add('ui-bilingual');
+};
+
+const decorateRoot = (root) => {
+    if (!root) return;
+    root.querySelectorAll(LABEL_SELECTORS).forEach((element) => decorateLabel(element));
+};
+
+function installServerBilingualLabels(root) {
+    if (!root) return;
+
+    let scheduled = false;
+    const scheduleDecorate = () => {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+            scheduled = false;
+            decorateRoot(root);
+        });
+    };
+
+    const observer = new MutationObserver(() => {
+        scheduleDecorate();
+    });
+
+    scheduleDecorate();
+    observer.observe(root, {
+        childList: true,
+        subtree: true,
+    });
+}
+window.__SINGBOX_BUNDLE__.installServerBilingualLabels = installServerBilingualLabels;
 })();
 
 (() => {
@@ -3155,10 +4184,20 @@ const createInjectedComponent = (name, template, extendSetup = null) => ({
 
 const createOutboundOptions = (ctx) => computed(() => {
     const reservedTags = new Set(['direct', 'block', 'dns', 'dns-out']);
-    const custom = ctx.remoteOutbounds.value
-        .map((item) => item.tag)
+    const exportable = Array.isArray(ctx.exportableOutboundOptions?.value)
+        ? ctx.exportableOutboundOptions.value
+        : ['direct'];
+    const selected = [
+        ctx.settings.value.route_final,
+        ctx.settings.value.rule_set_download_detour,
+        ...ctx.ruleSets.value.map((item) => item?.download_detour),
+        ...ctx.routeRules.value
+            .filter((rule) => (['route', 'reject', 'hijack-dns'].includes(rule?.action) ? rule.action : 'route') === 'route')
+            .map((rule) => rule?.outbound),
+    ]
+        .map((tag) => String(tag || '').trim())
         .filter((tag) => tag && !reservedTags.has(tag));
-    return Array.from(new Set(['direct', ...custom]));
+    return Array.from(new Set([...exportable, ...selected]));
 });
 
 const BasicTab = createInjectedComponent('ServerBasicTab', `                <div v-show="currentTab==='basic'" class="space-y-5">
@@ -3213,14 +4252,20 @@ const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-s
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">标签</label><input v-model="dns.tag" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-bold text-indigo-700"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="dns.type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="udp">udp</option><option value="tcp">tcp</option><option value="tls">tls</option><option value="https">https</option><option value="quic">quic</option><option value="h3">h3</option><option value="local">local</option></select></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="dns.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input v-model="dns.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><input v-model="dns.path" placeholder="/dns-query" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><select v-model="dns.domain_resolver" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">none</option><option v-for="item in dnsTagOptions(dns.domain_resolver, dns.tag)" :key="item" :value="item">{{ item }}</option></select></div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="dns.type" @change="syncDnsType(dns)" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option value="udp">udp</option><option value="tcp">tcp</option><option value="tls">tls</option><option value="https">https</option><option value="quic">quic</option><option value="h3">h3</option><option value="local">local</option></select></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><input v-model="dns.server" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">使用系统 DNS</div></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input v-model="dns.server_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div v-if="dnsSupportsHttpFields(dns.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><input v-model="dns.path" placeholder="/dns-query" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div v-if="dns.type!=='local'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><select v-model="dns.domain_resolver" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">none</option><option v-for="item in dnsTagOptions(dns.domain_resolver, dns.tag)" :key="item" :value="item">{{ item }}</option></select></div>
+                                    <div v-else><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">域名解析器</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
+                                    <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站 Detour</label><select v-model="dns.detour" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"><option value="">default</option><option v-for="item in dnsDetourOptions(dns.detour)" :key="item" :value="item">{{ item }}</option></select></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">客户端子网</label><input v-model="dns.client_subnet" placeholder="1.2.3.0/24" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时</label><input v-model="dns.connect_timeout" placeholder="5s" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                    <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><textarea v-model="dns.headers_text" rows="3" placeholder="Accept: application/dns-message" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                    <div v-if="dnsSupportsHttpFields(dns.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><textarea v-model="dns.headers_text" rows="3" placeholder="Accept: application/dns-message" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                    <div v-else class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP 请求头 (HTTP Headers)</label><div class="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-lg text-sm text-gray-400 text-center italic">not used</div></div>
                                 </div>
                             </div>
                         </div>
@@ -3234,6 +4279,14 @@ const DnsTab = createInjectedComponent('ServerDnsTab', `                <div v-s
         const unique = Array.from(new Set(tags));
         return current && !unique.includes(current) ? [current, ...unique] : unique;
     },
+    dnsDetourOptions: (current = '') => {
+        const tags = (Array.isArray(ctx.exportableOutboundOptions?.value) ? ctx.exportableOutboundOptions.value : ['direct'])
+            .filter((tag) => tag && tag !== 'direct');
+        const unique = Array.from(new Set(tags));
+        const selected = String(current || '').trim();
+        return selected && !unique.includes(selected) ? [selected, ...unique] : unique;
+    },
+    dnsSupportsHttpFields: (type = '') => ['https', 'h3'].includes(String(type || '').trim()),
 }));
 
 const InboundsTab = createInjectedComponent('ServerInboundsTab', `                <div v-show="currentTab==='inbounds'" class="space-y-5">
@@ -3270,6 +4323,24 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型</label><select v-model="inbound.type" @change="syncInboundType(inbound)" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in inboundTypeOptions" :key="item.type" :value="item.type">{{ item.label }}</option></select></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label><input v-model="inbound.listen" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                     <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听端口</label><input type="number" v-model.number="inbound.listen_port" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                    <div class="col-span-2 bg-white border border-gray-200 rounded-lg p-3">
+                                        <div class="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">高级监听字段 (Listen Fields)</div>
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口</label><input v-model="inbound.bind_interface" placeholder="eth0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记</label><input v-model="inbound.routing_mark" placeholder="1234 / 0x1234" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间</label><input v-model="inbound.netns" placeholder="/var/run/netns/proxy" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reuse Addr</label><select v-model="inbound.reuse_addr" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TCP Fast Open</label><select v-model="inbound.tcp_fast_open" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TCP Multi Path</label><select v-model="inbound.tcp_multi_path" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Fragment</label><select v-model="inbound.udp_fragment" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none"><option value="">default</option><option value="true">true</option><option value="false">false</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP Timeout</label><input v-model="inbound.udp_timeout" placeholder="5m" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Detour (目标入站)</label>
+                                                <select v-model="inbound.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"><option value="">none</option><option v-for="item in inboundDetourOptions(inbound.detour, inbound.tag)" :key="item" :value="item">{{ item }}</option></select>
+                                                <div class="mt-1 text-[11px] text-gray-500">连接会转发到指定入站；仅支持选择带 Injectable 能力的目标入站。</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div v-if="inbound.collapsed" class="text-xs text-gray-500 bg-white border border-gray-200 rounded-lg px-3 py-2">
@@ -3280,7 +4351,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsShareLinks(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">客户端分享参数</div>
-                                            <span class="text-[11px] text-gray-500 font-semibold">用于生成节点链接和订阅原文</span>
+                                            <span class="text-[11px] text-gray-500 font-semibold">用于生成节点链接</span>
                                         </div>
                                         <div class="grid grid-cols-2 gap-3">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">订阅地址 (Share Server)</label><input v-model="inbound.share_server" placeholder="server.example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -3318,6 +4389,8 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     </div>
 
                                     <div v-if="inbound.type==='hysteria'" class="bg-white border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-3">
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up)</label><input v-model="inbound.hy_up" placeholder="100 Mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down)</label><input v-model="inbound.hy_down" placeholder="1 Gbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up Mbps)</label><input v-model="inbound.hy_up_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down Mbps)</label><input v-model="inbound.hy_down_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆 (Obfs)</label><input v-model="inbound.hy_obfs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -3328,12 +4401,12 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     </div>
 
                                     <div v-if="inbound.type==='hysteria2'" class="bg-white border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-3">
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up Mbps)</label><input v-model="inbound.hy2_up_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down Mbps)</label><input v-model="inbound.hy2_down_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                        <div v-if="inboundHysteria2BandwidthFieldsVisible(inbound)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">上行带宽 (Up Mbps)</label><input v-model="inbound.hy2_up_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                        <div v-if="inboundHysteria2BandwidthFieldsVisible(inbound)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下行带宽 (Down Mbps)</label><input v-model="inbound.hy2_down_mbps" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆类型 (Obfs Type)</label><select v-model="inbound.hy2_obfs_type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option v-for="item in hy2ObfsTypeOptions(inbound.hy2_obfs_type)" :key="item" :value="item">{{ item }}</option></select></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆密码 (Obfs Password)</label><input v-model="inbound.hy2_obfs_password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">伪装模式 (Masquerade)</label><select v-model="inbound.hy2_masquerade_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="none">none</option><option value="url">url</option><option value="file">file</option><option value="proxy">proxy</option><option value="string">string</option></select></div>
-                                        <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.hy2_ignore_client_bandwidth" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">忽略客户端带宽 (Ignore Client Bandwidth)</span></label></div>
+                                        <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.hy2_ignore_client_bandwidth" @change="syncHysteria2BandwidthMode(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">忽略客户端带宽 (Ignore Client Bandwidth)</span></label></div>
                                         <div v-if="['url','proxy'].includes(inbound.hy2_masquerade_mode)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">伪装地址 (Masquerade URL)</label><input v-model="inbound.hy2_masquerade_url" placeholder="https://example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="inbound.hy2_masquerade_mode==='file'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">伪装目录 (Masquerade Directory)</label><input v-model="inbound.hy2_masquerade_directory" placeholder="/var/www/html" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="inbound.hy2_masquerade_mode==='proxy'" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.hy2_masquerade_rewrite_host" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">重写 Host (Rewrite Host)</span></label></div>
@@ -3356,12 +4429,12 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
 
                                     <div v-if="inbound.type==='shadowtls'" class="bg-white border border-gray-200 rounded-lg p-3 grid grid-cols-2 gap-3">
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本 (Version)</label><select v-model="inbound.shadowtls_version" @change="syncShadowTlsVersion(inbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
-                                        <div v-if="inbound.shadowtls_version==='2'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="inbound.shadowtls_password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                        <div v-if="inboundShadowTlsFieldVisible(inbound, 'shadowtls_password')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="inbound.shadowtls_password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手地址 (Handshake Server)</label><input v-model="inbound.shadowtls_handshake_server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手端口 (Handshake Port)</label><input type="number" v-model.number="inbound.shadowtls_handshake_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                        <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">按域名握手 (Handshake For Server Name)</label><textarea v-model="inbound.shadowtls_handshake_for_server_name_text" rows="3" placeholder="example.com=127.0.0.1:443&#10;api.example.com=127.0.0.1:8443" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
-                                        <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.shadowtls_strict_mode" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">严格模式 (Strict Mode)</span></label></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">通配 SNI (Wildcard SNI)</label><select v-model="inbound.shadowtls_wildcard_sni" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="off">off</option><option value="authed">authed</option><option value="all">all</option></select></div>
+                                        <div v-if="inboundShadowTlsFieldVisible(inbound, 'shadowtls_handshake_for_server_name_text')" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">按域名握手 (Handshake For Server Name)</label><textarea v-model="inbound.shadowtls_handshake_for_server_name_text" rows="3" placeholder="example.com=127.0.0.1:443&#10;api.example.com=127.0.0.1:8443" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                        <div v-if="inboundShadowTlsFieldVisible(inbound, 'shadowtls_strict_mode')" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.shadowtls_strict_mode" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">严格模式 (Strict Mode)</span></label></div>
+                                        <div v-if="inboundShadowTlsFieldVisible(inbound, 'shadowtls_wildcard_sni')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">通配 SNI (Wildcard SNI)</label><select v-model="inbound.shadowtls_wildcard_sni" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="off">off</option><option value="authed">authed</option><option value="all">all</option></select></div>
                                     </div>
 
                                     <div v-if="inboundUsesDestinations(inbound.type, inbound)" class="bg-white border border-gray-200 rounded-lg p-3">
@@ -3421,18 +4494,20 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsTls(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">TLS / Reality</div>
-                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.tls_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 TLS</span></label>
+                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.tls_enabled" :disabled="inboundTlsRequired(inbound)" @change="syncInboundTlsState(inbound)" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-60 disabled:cursor-not-allowed"><span class="text-sm font-bold text-gray-700">启用 TLS<span v-if="inboundTlsRequired(inbound)" class="text-[11px] text-gray-500 ml-1">(必需)</span></span></label>
                                         </div>
                                         <div v-if="inbound.tls_enabled" class="grid grid-cols-2 gap-3">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">证书路径 (Certificate Path)</label><input v-model="inbound.tls_cert_path" placeholder="/etc/sing-box/cert.pem" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">私钥路径 (Key Path)</label><input v-model="inbound.tls_key_path" placeholder="/etc/sing-box/key.pem" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">内联证书 (Certificate PEM)</label><textarea v-model="inbound.tls_certificate" rows="3" placeholder="-----BEGIN CERTIFICATE-----" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                            <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">内联私钥 (Key PEM)</label><textarea v-model="inbound.tls_key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器名称 (Server Name)</label><input v-model="inbound.tls_server_name" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">应用层协议 (ALPN)</label><select v-model="inbound.tls_alpn" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in alpnOptions(inbound.type, inbound.tls_alpn)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最低版本 (Min Version)</label><select v-model="inbound.tls_min_version" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option value="1.0">1.0</option><option value="1.1">1.1</option><option value="1.2">1.2</option><option value="1.3">1.3</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最高版本 (Max Version)</label><select v-model="inbound.tls_max_version" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option value="1.0">1.0</option><option value="1.1">1.1</option><option value="1.2">1.2</option><option value="1.3">1.3</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手超时 (Handshake Timeout)</label><input v-model="inbound.tls_handshake_timeout" placeholder="5s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.reality_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">启用 Reality</span></label></div>
-                                            <template v-if="inbound.reality_enabled">
+                                            <div v-if="inboundRealitySupported(inbound)" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.reality_enabled" @change="syncInboundRealityState(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">启用 Reality</span></label></div>
+                                            <template v-if="inboundRealityVisible(inbound) && inbound.reality_enabled">
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 私钥 (Reality Private Key)</label><input v-model="inbound.reality_private_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 短 ID (Reality Short ID)</label><input v-model="inbound.reality_short_id" placeholder="0123456789abcdef" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
                                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 握手地址 (Reality Handshake Server)</label><input v-model="inbound.reality_server" placeholder="www.cloudflare.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
@@ -3445,17 +4520,17 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsTransport(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">V2Ray 传输层 (V2Ray Transport)</div>
                                         <div class="grid grid-cols-2 gap-3">
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="inbound.transport" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">tcp</option><option value="ws">ws</option><option value="grpc">grpc</option><option value="http">http</option><option value="httpupgrade">httpupgrade</option><option value="quic">quic</option></select></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(inbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="inbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inbound.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="inbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(inbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="inbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inbound.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><select v-model="inbound.transport_method" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in httpMethodOptions(inbound.transport_method)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div v-if="['http','grpc'].includes(inbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时 (Idle Timeout)</label><input v-model="inbound.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="['http','grpc'].includes(inbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时 (Ping Timeout)</label><input v-model="inbound.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inbound.transport==='grpc'" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">无流探测 (Permit Without Stream)</span></label></div>
-                                            <div v-if="inbound.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大提前数据 (Max Early Data)</label><input v-model="inbound.transport_early_data" placeholder="0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                            <div v-if="inbound.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">提前数据头 (Early Data Header Name)</label><select v-model="inbound.transport_early_data_header_name" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in earlyDataHeaderOptions(inbound.transport_early_data_header_name)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(inbound.transport)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求头 (Headers)</label><textarea v-model="inbound.transport_headers_text" rows="3" placeholder="Server: nginx" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="inbound.transport" @change="syncInboundTransport(inbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none (default)</option><option v-for="item in inboundTransportOptions(inbound)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="inbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_service_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="inbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="inbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_method')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><input v-model="inbound.transport_method" placeholder="GET" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_idle_timeout')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时 (Idle Timeout)</label><input v-model="inbound.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_ping_timeout')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时 (Ping Timeout)</label><input v-model="inbound.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_permit_without_stream')" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">无流探测 (Permit Without Stream)</span></label></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_early_data')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大提前数据 (Max Early Data)</label><input v-model="inbound.transport_early_data" placeholder="0" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_early_data_header_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">提前数据头 (Early Data Header Name)</label><input v-model="inbound.transport_early_data_header_name" placeholder="Sec-WebSocket-Protocol" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="inboundTransportFieldVisible(inbound, 'transport_headers_text')" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">请求头 (Headers)</label><textarea v-model="inbound.transport_headers_text" rows="3" placeholder="Server: nginx" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-none"></textarea></div>
                                             <div v-if="inbound.transport==='quic'" class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">QUIC transport 没有额外字段，当前仅输出 <code>{ type: "quic" }</code>。</div>
                                         </div>
                                     </div>
@@ -3463,12 +4538,16 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
                                     <div v-if="inboundSupportsMultiplex(inbound.type)" class="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
                                         <div class="flex items-center justify-between">
                                             <div class="text-xs font-extrabold text-gray-700 uppercase tracking-wider">多路复用 (Multiplex)</div>
-                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 Multiplex</span></label>
+                                            <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_enabled" @change="syncInboundMultiplexState(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-sm font-bold text-gray-700">启用 Multiplex</span></label>
                                         </div>
                                         <div v-if="inbound.mux_enabled" class="grid grid-cols-2 gap-3">
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_padding" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">填充 (Padding)</span></label></div>
-                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_brutal_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Brutal 模式 (Brutal)</span></label></div>
-                                            <div class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">服务端 Multiplex 这里只暴露官方最常用的布尔项，不再沿用客户端 outbound 式的协议/连接数配置。</div>
+                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="inbound.mux_brutal_enabled" @change="syncInboundMultiplexState(inbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Brutal 模式 (Brutal)</span></label></div>
+                                            <template v-if="inbound.mux_brutal_enabled">
+                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 上行 (Up Mbps)</label><input v-model="inbound.mux_brutal_up_mbps" placeholder="100" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Brutal 下行 (Down Mbps)</label><input v-model="inbound.mux_brutal_down_mbps" placeholder="1000" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                            </template>
+                                            <div class="col-span-2 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">启用 Brutal 时会导出 TCP Brutal 结构，up_mbps/down_mbps 必填。</div>
                                         </div>
                                     </div>
                                 </div>
@@ -3494,6 +4573,7 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
             '2022-blake3-aes-256-gcm',
             '2022-blake3-chacha20-poly1305',
             'aes-128-gcm',
+            'aes-192-gcm',
             'aes-256-gcm',
             'chacha20-ietf-poly1305',
             'xchacha20-ietf-poly1305',
@@ -3517,8 +4597,15 @@ const InboundsTab = createInjectedComponent('ServerInboundsTab', `              
         const options = ['Sec-WebSocket-Protocol'];
         return current && !options.includes(current) ? [current, ...options] : options;
     },
-    outboundOptions: createOutboundOptions(ctx),
     enabledRuleSetTags: computed(() => ctx.ruleSets.value.filter((item) => item.enabled && item.tag).map((item) => item.tag)),
+    inboundDetourOptions: (current = '', excludeTag = '') => {
+        const tags = ctx.serverInbounds.value
+            .filter((item) => item.tag && item.tag !== excludeTag && ctx.inboundSupportsDetourTarget(item))
+            .map((item) => item.tag)
+            .filter((tag) => tag && tag !== excludeTag);
+        const unique = Array.from(new Set(tags));
+        return current && !unique.includes(current) ? [current, ...unique] : unique;
+    },
     inboundTypeOptions: [
         { type: 'vless', label: 'VLESS', buttonClass: 'bg-indigo-600 hover:bg-indigo-500' },
         { type: 'vmess', label: 'VMess', buttonClass: 'bg-sky-600 hover:bg-sky-500' },
@@ -3545,7 +4632,7 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">订阅 / 节点链接</div>
                         <div class="space-y-3 text-sm text-gray-600 leading-7">
-                            <p>这里生成的是本地“节点链接原文”，不会自动托管成在线订阅 URL。</p>
+                            <p>这里生成的是本地节点链接，不会自动托管成在线订阅 URL。</p>
                             <p>当前优先支持 <code>VLESS / VMess / Trojan / Shadowsocks / Hysteria2 / TUIC</code>。生成质量依赖每个入站里填写的 <code>share_server / share_port</code>；如果启用了 Reality，还需要补 <code>Reality public key</code>。</p>
                         </div>
                     </div>
@@ -3555,13 +4642,10 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                     </div>
 
                     <div v-for="bundle in userBundles" :key="bundle.key" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <div class="flex flex-wrap justify-between items-center gap-3">
+                        <div>
                             <div>
                                 <div class="text-base font-extrabold text-gray-900">{{ bundle.label }}</div>
                                 <div class="text-xs text-gray-500 font-semibold mt-1">{{ bundle.links.length }} 条节点链接</div>
-                            </div>
-                            <div class="flex gap-2 flex-wrap">
-                                <button @click="copyBundlePlainText(bundle)" :disabled="!bundle.plainText" class="px-4 py-2 rounded-lg text-sm font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fas fa-copy mr-1.5"></i>复制订阅原文</button>
                             </div>
                         </div>
 
@@ -3581,14 +4665,12 @@ const ShareTab = createInjectedComponent('ServerShareTab', `                <div
                                     </div>
                                     <button @click="copyShareLink(item)" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><i class="fas fa-copy mr-1"></i>复制链接</button>
                                 </div>
-                                <textarea :value="item.link" rows="3" readonly class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono resize-y"></textarea>
+                                <div class="rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2 text-xs text-gray-500">
+                                    链接内容已隐藏，直接使用右侧按钮复制。
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">订阅原文</label>
-                            <textarea :value="bundle.plainText" rows="6" readonly class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono resize-y"></textarea>
-                        </div>
                     </div>
                 </div>
 `);
@@ -3646,7 +4728,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                     </div>
                                     <div class="grid grid-cols-2 gap-3">
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">标签 (Tag)</label><input v-model="outbound.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-indigo-700"></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型 (Type)</label><select v-model="outbound.type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in REMOTE_OUTBOUND_TYPES" :key="item" :value="item">{{ item }}</option></select></div>
+                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">类型 (Type)</label><select v-model="outbound.type" @change="syncRemoteOutboundType(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in REMOTE_OUTBOUND_TYPES" :key="item" :value="item">{{ item }}</option></select></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 (Server)</label><input v-model="outbound.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口 (Server Port)</label><input type="number" v-model.number="outbound.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
 
@@ -3678,7 +4760,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <template v-if="outbound.type==='hysteria2'">
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in genericNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆类型 (Obfs Type)</label><select v-model="outbound.hy2_obfs_type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option v-for="item in hy2ObfsTypeOptions(outbound.hy2_obfs_type)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆类型 (Obfs Type)</label><select v-model="outbound.hy2_obfs_type" @change="sanitizeRemoteOutboundByCapabilities(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none</option><option v-for="item in hy2ObfsTypeOptions(outbound.hy2_obfs_type)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">混淆密码 (Obfs Password)</label><input v-model="outbound.hy2_obfs_password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         </template>
 
@@ -3686,28 +4768,30 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UUID (UUID)</label><input v-model="outbound.uuid" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label><input v-model="outbound.password" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">拥塞控制 (Congestion Control)</label><select v-model="outbound.tuic_congestion" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="cubic">cubic</option><option value="new_reno">new_reno</option><option value="bbr">bbr</option></select></div>
-                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 中继模式 (UDP Relay Mode)</label><select v-model="outbound.tuic_udp_relay_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option v-for="item in tuicUdpRelayModeOptions(outbound.tuic_udp_relay_mode)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">UDP 中继模式 (UDP Relay Mode)</label><select v-model="outbound.tuic_udp_relay_mode" :disabled="outbound.tuic_udp_over_stream" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed"><option value="">default / omit</option><option v-for="item in tuicUdpRelayModeOptions(outbound.tuic_udp_relay_mode)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label><select v-model="outbound.network" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in genericNetworkOptions(outbound.network)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">心跳 (Heartbeat)</label><input v-model="outbound.tuic_heartbeat" placeholder="10s" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_udp_over_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP over Stream</span></label></div>
+                                            <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_udp_over_stream" @change="syncRemoteOutboundTuicState(outbound)" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">UDP over Stream</span></label></div>
                                             <div class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tuic_zero_rtt_handshake" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Zero RTT Handshake</span></label></div>
                                         </template>
 
-                                        <template v-if="['vless','vmess','trojan','hysteria2','tuic'].includes(outbound.type)">
-                                            <div class="col-span-2 flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tls_enabled" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">启用 TLS (Enable TLS)</span></label></div>
+                                        <template v-if="remoteOutboundSupportsTls(outbound) || remoteOutboundSupportsTransport(outbound)">
+                                            <div v-if="remoteOutboundSupportsTls(outbound)" class="col-span-2 flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.tls_enabled" :disabled="remoteOutboundTlsRequired(outbound)" @change="syncRemoteOutboundTlsState(outbound)" class="w-4 h-4 text-indigo-600 rounded disabled:opacity-60 disabled:cursor-not-allowed"><span class="text-xs font-bold text-gray-700">启用 TLS (Enable TLS)<span v-if="remoteOutboundTlsRequired(outbound)" class="text-[11px] text-gray-500 ml-1">(必需)</span></span></label></div>
                                             <div v-if="outbound.tls_enabled"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器名称 (Server Name)</label><input v-model="outbound.server_name" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div v-if="outbound.tls_enabled"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">应用层协议 (ALPN)</label><select v-model="outbound.alpn" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in alpnOptions(outbound.type, outbound.alpn)" :key="item" :value="item">{{ item }}</option></select></div>
                                             <div v-if="outbound.tls_enabled" class="flex items-end"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="outbound.allow_insecure" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">允许不安全证书 (Allow Insecure)</span></label></div>
-                                            <div v-if="outbound.tls_enabled && ['vless','trojan'].includes(outbound.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 公钥 (Reality Public Key)</label><input v-model="outbound.reality_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="outbound.tls_enabled && ['vless','trojan'].includes(outbound.type) && outbound.reality_public_key"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 短 ID (Reality Short ID)</label><input v-model="outbound.reality_short_id" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="['vless','vmess','trojan'].includes(outbound.type)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="outbound.transport" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">tcp</option><option value="ws">ws</option><option value="grpc">grpc</option><option value="http">http</option><option value="httpupgrade">httpupgrade</option><option value="quic">quic</option></select></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(outbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="outbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="outbound.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="outbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                            <div v-if="['ws','http','httpupgrade'].includes(outbound.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="outbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundRealityVisible(outbound)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 公钥 (Reality Public Key)</label><input v-model="outbound.reality_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundRealityVisible(outbound) && outbound.reality_public_key"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Reality 短 ID (Reality Short ID)</label><input v-model="outbound.reality_short_id" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundSupportsTransport(outbound)" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层 (Transport)</label><select v-model="outbound.transport" @change="syncRemoteOutboundTransport(outbound)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">none (default)</option><option v-for="item in remoteOutboundTransportOptions(outbound)" :key="item" :value="item">{{ item }}</option></select></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input v-model="outbound.transport_path" placeholder="/ws" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_service_name')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务名 (Service Name)</label><input v-model="outbound.transport_service_name" placeholder="grpc-service" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div v-if="remoteOutboundTransportFieldVisible(outbound, 'transport_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">主机 (Host)</label><input v-model="outbound.transport_host" placeholder="example.com" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         </template>
 
                                         <template v-if="outbound.type==='wireguard'">
+                                            <div class="col-span-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">WireGuard outbound 仅为旧版 sing-box 兼容保留；当前官方文档已标记 deprecated，后续版本建议改用 endpoint WireGuard。</div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地地址 (Local Address)</label><input v-model="outbound.local_address" placeholder="10.0.0.2/32" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
+                                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地私钥 (Private Key)</label><input v-model="outbound.private_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">对端公钥 (Peer Public Key)</label><input v-model="outbound.peer_public_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">预共享密钥 (Pre Shared Key)</label><input v-model="outbound.pre_shared_key" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">MTU (MTU)</label><input v-model="outbound.mtu" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
@@ -3729,6 +4813,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                     </select>
                                 </div>
                             </div>
+                            <div class="mb-4 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2"><code>download_detour</code> 仅为 <code>v1.12</code> 兼容保留；当前官方文档已将远端 rule-set 的该字段标记为 deprecated，较新版本建议改用 <code>http_client</code>。</div>
                             <div class="flex justify-between items-center mb-4">
                                 <div>
                                     <div class="text-sm font-extrabold text-gray-800">规则集 (Rule Sets)</div>
@@ -3788,7 +4873,11 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
                                         <div v-if="ruleSet.source_type==='remote'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">远端地址 (URL)</label><input v-model="ruleSet.url" placeholder="https://example.com/google.srs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="ruleSet.source_type==='local'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地路径 (Path)</label><input v-model="ruleSet.path" placeholder="/etc/sing-box/rules/google.srs" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
                                         <div v-if="ruleSet.source_type==='remote'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">更新间隔 (Update Interval)</label><input v-model="ruleSet.update_interval" placeholder="24h" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono"></div>
-                                        <div v-if="ruleSet.source_type==='remote'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下载出站 (Download Detour)</label><select v-model="ruleSet.download_detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option></select></div>
+                                        <div v-if="ruleSet.source_type==='remote'">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">下载出站 (Download Detour)</label>
+                                            <select v-model="ruleSet.download_detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none"><option value="">default</option><option v-for="item in outboundOptions" :key="item" :value="item">{{ item }}</option></select>
+                                            <div class="mt-1 text-[11px] text-gray-500">该字段在 <code>v1.12</code> 可用；当前官方文档已标记 deprecated。</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -3936,6 +5025,7 @@ const RouteTab = createInjectedComponent('ServerRouteTab', `                <div
             '2022-blake3-aes-256-gcm',
             '2022-blake3-chacha20-poly1305',
             'aes-128-gcm',
+            'aes-192-gcm',
             'aes-256-gcm',
             'chacha20-ietf-poly1305',
             'xchacha20-ietf-poly1305',
@@ -3993,11 +5083,10 @@ const AdvancedTab = createInjectedComponent('ServerAdvancedTab', `              
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">当前阶段说明</div>
                         <div class="space-y-3 text-sm text-gray-600 leading-7">
-                            <p>当前这版已经把服务端常用字段往真实部署场景收了一轮，重点覆盖 <code>inbounds</code>、<code>tls / reality</code>、<code>v2ray transport</code>、<code>multiplex</code> 和最小 <code>route / outbounds</code>。</p>
+                            <p>当前这版已经把服务端常用字段往真实部署场景收了一轮，重点覆盖 <code>inbounds</code>、<code>listen fields</code>、<code>tls / reality</code>、<code>v2ray transport</code>、<code>multiplex</code> 和最小 <code>route / outbounds</code>。</p>
                             <p>下一阶段更适合继续补的是：</p>
                             <ul class="list-disc pl-5 space-y-1 text-gray-500">
                                 <li>服务端运行配置导入</li>
-                                <li>更完整的 Listen Fields</li>
                                 <li>更完整的 DNS rules / Route rules</li>
                                 <li>SSM API 等 Shadowsocks 进阶能力</li>
                             </ul>
@@ -4053,7 +5142,7 @@ window.__SINGBOX_BUNDLE__.registerServerUIComponents = registerServerUIComponent
 })();
 
 (() => {
-const { createServerState, setupServerConfigCore, setupServerImportExportCore, setupServerRemoteImportCore, setupServerShareCore, setupServerStorageCore, registerServerUIComponents } = window.__SINGBOX_BUNDLE__;
+const { createServerState, setupServerConfigCore, setupServerImportExportCore, setupServerRemoteImportCore, setupServerShareCore, setupServerStorageCore, installServerBilingualLabels, registerServerUIComponents } = window.__SINGBOX_BUNDLE__;
 const { createApp, provide } = window.Vue;
 
 const app = createApp({
@@ -4074,6 +5163,7 @@ const app = createApp({
 
 registerServerUIComponents(app);
 app.mount('#app');
+installServerBilingualLabels(document.getElementById('app'));
 })();
 </script>
 </body>
