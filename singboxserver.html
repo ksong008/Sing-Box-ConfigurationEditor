@@ -47,6 +47,15 @@
         .panel-card:hover { border-color: #a5b4fc; background: #eef2ff; }
         .panel-card.selected { border-color: #4f46e5; background: #eef2ff; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1); }
         .stitle { font-size: 14px; font-weight: 700; color: #374151; border-left: 4px solid #4f46e5; padding-left: 10px; margin-bottom: 16px; }
+        .ui-bilingual { text-transform: none !important; letter-spacing: 0 !important; }
+        .ui-bilingual-zh,
+        .ui-bilingual-en { display: block; line-height: 1.2; letter-spacing: 0 !important; text-transform: none !important; }
+        .ui-bilingual-zh { font: inherit; color: inherit; }
+        .ui-bilingual-en { margin-top: 2px; font-size: 0.82em; font-weight: 600; color: #94a3b8; }
+        [data-ui-bilingual-size="title"] .ui-bilingual-en { font-size: 0.72em; margin-top: 3px; }
+        [data-ui-bilingual-size="medium"] .ui-bilingual-en { font-size: 0.78em; }
+        [data-ui-bilingual-size="small"] .ui-bilingual-en { font-size: 0.8em; }
+        [data-ui-bilingual-size="micro"] .ui-bilingual-en { font-size: 0.88em; }
         
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; display: flex; align-items: center; justify-content: center; }
         .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 95%; max-width: 1000px; height: 85vh; display: flex; flex-direction: column; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.12); }

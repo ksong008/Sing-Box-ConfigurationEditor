@@ -211,14 +211,8 @@ export function setupServerShareCore(ctx) {
         return Array.from(bundles.values()).map((bundle) => ({
             ...bundle,
             problems: Array.from(bundle.problems),
-            plainText: bundle.links.map((item) => item.link).join('\n'),
         }));
     });
-
-    const copyBundlePlainText = async (bundle) => {
-        const ok = await ctx.copyToClipboard(bundle.plainText);
-        ctx.showToast(ok ? `已复制 ${bundle.label} 的订阅原文` : '复制失败，请手动复制', ok ? 'ok' : 'err');
-    };
 
     const copyShareLink = async (linkItem) => {
         const ok = await ctx.copyToClipboard(linkItem.link);
@@ -227,7 +221,6 @@ export function setupServerShareCore(ctx) {
 
     Object.assign(ctx, {
         userBundles,
-        copyBundlePlainText,
         copyShareLink,
     });
 }
