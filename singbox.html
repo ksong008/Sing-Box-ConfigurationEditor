@@ -216,13 +216,6 @@ const { ref, computed } = window.Vue;
 function createBaseState() {
     const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
 
-    const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
-    const PROTO_SUPPORT_MULTIPLEX = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_SUPPORT_SECRET = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria', 'shadowtls', 'anytls'];
-    const PROTO_SUPPORT_USER = ['socks', 'http', 'ssh', 'naive'];
-
     const showToast = (msg, type = 'ok', duration = 2800) => {
         const icons = {
             ok: 'fas fa-check-circle',
@@ -515,12 +508,6 @@ function createBaseState() {
     });
 
         return {
-        PROTO_SUPPORT_TRANSPORT,
-        PROTO_SUPPORT_MULTIPLEX,
-        PROTO_SUPPORT_TLS,
-        PROTO_ALWAYS_TLS,
-        PROTO_SUPPORT_SECRET,
-        PROTO_SUPPORT_USER,
         generateId,
         showToast,
         showConfirm,
@@ -566,6 +553,767 @@ window.__SINGBOX_BUNDLE__.createBaseState = createBaseState;
 
 (() => {
 window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const DEFAULT_NETWORK_OPTIONS = Object.freeze([
+    { value: '', label: '默认 (TCP + UDP)' },
+    { value: 'tcp', label: 'tcp' },
+    { value: 'udp', label: 'udp' },
+]);
+
+const TCP_ONLY_NETWORK_OPTIONS = Object.freeze([
+    { value: 'tcp', label: '仅 TCP' },
+]);
+
+const UDP_ONLY_NETWORK_OPTIONS = Object.freeze([
+    { value: 'udp', label: '仅 UDP' },
+]);
+
+const V2RAY_TRANSPORT_OPTIONS = Object.freeze([
+    { value: '', label: 'TCP (默认)' },
+    { value: 'ws', label: 'WebSocket' },
+    { value: 'grpc', label: 'gRPC' },
+    { value: 'http', label: 'HTTP' },
+    { value: 'httpupgrade', label: 'HTTPUpgrade' },
+    { value: 'quic', label: 'QUIC' },
+]);
+
+const TRANSPORT_FIELDS = Object.freeze([
+    'transport',
+    'path',
+    'ws_host',
+    'transport_headers_text',
+    'transport_method',
+    'transport_idle_timeout',
+    'transport_ping_timeout',
+    'transport_max_early_data',
+    'transport_early_data_header_name',
+    'transport_permit_without_stream',
+]);
+
+const TRANSPORT_FIELD_GROUPS = Object.freeze({
+    ws: ['path', 'ws_host', 'transport_headers_text', 'transport_max_early_data', 'transport_early_data_header_name'],
+    http: ['path', 'ws_host', 'transport_headers_text', 'transport_method', 'transport_idle_timeout', 'transport_ping_timeout'],
+    httpupgrade: ['path', 'ws_host', 'transport_headers_text'],
+    grpc: ['path', 'transport_idle_timeout', 'transport_ping_timeout', 'transport_permit_without_stream'],
+    quic: [],
+});
+
+const TRANSPORT_PATH_FIELDS = Object.freeze(['ws', 'http', 'httpupgrade', 'grpc']);
+const TRANSPORT_HEADER_FIELDS = Object.freeze(['ws', 'http', 'httpupgrade']);
+
+const TLS_FIELDS = Object.freeze([
+    'tls',
+    'insecure',
+    'reality',
+    'reality_pubkey',
+    'reality_sid',
+    'utls_fingerprint',
+    'alpn',
+    'alpn_custom',
+    'sni',
+    'disable_sni',
+    'tls_min_version',
+    'tls_max_version',
+    'cipher_suites',
+    'tls_fragment',
+    'tls_record_fragment',
+    'tls_fragment_fallback_delay',
+    'ech_enabled',
+    'ech_config',
+]);
+
+const REALITY_FIELDS = Object.freeze([
+    'reality',
+    'reality_pubkey',
+    'reality_sid',
+]);
+
+const MUX_FIELDS = Object.freeze([
+    'mux_enabled',
+    'mux_protocol',
+    'mux_max_connections',
+    'mux_min_streams',
+    'mux_max_streams',
+    'mux_padding',
+    'mux_brutal_enabled',
+    'mux_brutal_up_mbps',
+    'mux_brutal_down_mbps',
+]);
+
+const SHARED_QUIC_FIELDS = Object.freeze([
+    'quic_initial_packet_size',
+    'quic_disable_path_mtu_discovery',
+    'quic_idle_timeout',
+    'quic_keep_alive_period',
+    'quic_stream_receive_window',
+    'quic_connection_receive_window',
+    'quic_max_concurrent_streams',
+]);
+
+const NETWORK_FIELDS = Object.freeze([
+    'network',
+    'socks_network',
+    'tuic_network',
+    'hy_network',
+    'hy2_network',
+    'wg_network',
+]);
+
+const TLS_CONFIG_FIELDS = Object.freeze([
+    'insecure',
+    'reality',
+    'utls_fingerprint',
+    'alpn',
+    'sni',
+    'disable_sni',
+    'tls_min_version',
+    'tls_max_version',
+    'cipher_suites',
+    'tls_fragment',
+    'tls_record_fragment',
+    'tls_fragment_fallback_delay',
+    'ech_enabled',
+]);
+
+const PROTOCOL_FIELD_GROUPS = Object.freeze({
+    vless: ['flow'],
+    vmess: ['vmess_security', 'vmess_alter_id', 'vmess_global_padding', 'vmess_authenticated_length'],
+    shadowsocks: ['ss_method', 'ss_plugin', 'ss_plugin_opts', 'ss_udp_over_tcp', 'ss_udp_over_tcp_version'],
+    tuic: ['tuic_password', 'tuic_congestion', 'tuic_udp_relay_mode', 'tuic_network', 'tuic_udp_over_stream', 'tuic_zero_rtt_handshake', 'tuic_heartbeat'],
+    hysteria: ['hy_up_mbps', 'hy_down_mbps', 'hy_up_text', 'hy_down_text', 'hy_obfs', 'hy_auth_type', 'hy_server_ports', 'hy_hop_interval', 'hy_recv_window_conn', 'hy_recv_window', 'hy_disable_mtu_discovery', 'hy_network'],
+    hysteria2: ['hy2_up', 'hy2_down', 'hy2_obfs_type', 'hy2_obfs_password', 'hy2_server_ports', 'hy2_hop_interval', 'hy2_hop_interval_max', 'hy2_network', 'hy2_bbr_profile', 'hy2_brutal_debug'],
+    wireguard: ['wg_private_key', 'wg_peer_pubkey', 'wg_local_address', 'wg_psk', 'wg_mtu', 'wg_reserved', 'wg_system_interface', 'wg_interface_name', 'wg_workers', 'wg_network'],
+    socks: ['socks_version', 'socks_network', 'socks_udp_over_tcp', 'socks_udp_over_tcp_version'],
+    http: ['http_path', 'http_headers_text'],
+    ssh: ['ssh_auth_type', 'ssh_private_key_path', 'ssh_private_key_passphrase', 'ssh_host_key_text', 'ssh_host_key_algorithms', 'ssh_client_version'],
+    shadowtls: ['shadowtls_version', 'shadowtls_password'],
+    anytls: ['anytls_idle_session_check_interval', 'anytls_idle_session_timeout', 'anytls_min_idle_session'],
+    naive: ['naive_insecure_concurrency', 'naive_extra_headers_text', 'naive_udp_over_tcp', 'naive_udp_over_tcp_version', 'naive_quic', 'naive_quic_congestion_control'],
+    tor: ['tor_executable_path', 'tor_extra_args', 'tor_data_directory', 'tor_torrc_text'],
+    dns: [],
+});
+
+const PROTOCOL_CAPABILITY_SCHEMA = Object.freeze({
+    default: {
+        sharedSecret: false,
+        sharedUsername: false,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    vless: {
+        sharedSecret: true,
+        transportOptions: V2RAY_TRANSPORT_OPTIONS,
+        tlsMode: 'optional',
+        tlsDefaultOn: true,
+        networkField: 'network',
+        networkMode: 'v2ray',
+        multiplexMode: 'stream',
+        packetEncoding: true,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    vmess: {
+        sharedSecret: true,
+        transportOptions: V2RAY_TRANSPORT_OPTIONS,
+        tlsMode: 'optional',
+        tlsDefaultOn: true,
+        networkField: 'network',
+        networkMode: 'v2ray',
+        multiplexMode: 'stream',
+        packetEncoding: true,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    trojan: {
+        sharedSecret: true,
+        transportOptions: V2RAY_TRANSPORT_OPTIONS,
+        tlsMode: 'optional',
+        tlsDefaultOn: true,
+        networkField: 'network',
+        networkMode: 'v2ray',
+        multiplexMode: 'stream',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    shadowsocks: {
+        sharedSecret: true,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: 'network',
+        networkMode: 'default',
+        multiplexMode: 'stream',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    hysteria2: {
+        sharedSecret: true,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: 'hy2_network',
+        networkMode: 'default',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: true,
+        serverEndpoint: true,
+        nativeQuic: true,
+    },
+    hysteria: {
+        sharedSecret: true,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: 'hy_network',
+        networkMode: 'default',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: true,
+        serverEndpoint: true,
+        nativeQuic: true,
+    },
+    tuic: {
+        sharedSecret: true,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: 'tuic_network',
+        networkMode: 'default',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: true,
+        serverEndpoint: true,
+        nativeQuic: true,
+    },
+    anytls: {
+        sharedSecret: true,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    shadowtls: {
+        sharedSecret: false,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    naive: {
+        sharedSecret: true,
+        sharedUsername: true,
+        transportOptions: [],
+        tlsMode: 'required',
+        tlsDefaultOn: true,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    socks: {
+        sharedSecret: true,
+        sharedUsername: true,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: 'socks_network',
+        networkMode: 'socks',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    http: {
+        sharedSecret: true,
+        sharedUsername: true,
+        transportOptions: [],
+        tlsMode: 'optional',
+        tlsDefaultOn: false,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    wireguard: {
+        sharedSecret: false,
+        sharedUsername: false,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: 'wg_network',
+        networkMode: 'default',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    ssh: {
+        sharedSecret: true,
+        sharedUsername: true,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: true,
+    },
+    tor: {
+        sharedSecret: false,
+        sharedUsername: false,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: false,
+    },
+    dns: {
+        sharedSecret: false,
+        sharedUsername: false,
+        transportOptions: [],
+        tlsMode: 'none',
+        tlsDefaultOn: false,
+        networkField: '',
+        networkMode: 'none',
+        multiplexMode: 'none',
+        packetEncoding: false,
+        quicAdvanced: false,
+        serverEndpoint: false,
+    },
+});
+
+const deleteFields = (target, fields) => {
+    fields.forEach((field) => {
+        delete target[field];
+    });
+};
+
+const hasConfiguredValue = (value) => {
+    if (typeof value === 'boolean') return value;
+    return value !== null && value !== undefined && String(value).trim() !== '';
+};
+
+const nodeHasAnyConfiguredField = (node = {}, fields = []) => fields.some((field) => hasConfiguredValue(node[field]));
+
+const getNodeShadowtlsVersion = (node = {}) => {
+    const version = String(node.shadowtls_version || '3').trim();
+    return version || '3';
+};
+
+const isNodeValidPort = (value) => {
+    const port = Number(value);
+    return Number.isFinite(port) && port > 0 && port <= 65535;
+};
+
+function getNodeCapabilitySchema(type) {
+    return PROTOCOL_CAPABILITY_SCHEMA[String(type || '').trim()] || PROTOCOL_CAPABILITY_SCHEMA.default;
+}
+
+function getNodeAvailableTransportOptions(node = {}) {
+    const schema = getNodeCapabilitySchema(node.type);
+    return Array.isArray(schema.transportOptions) ? [...schema.transportOptions] : [];
+}
+
+function getNodeTransportValue(node = {}) {
+    return String(node.transport || '').trim();
+}
+
+function getNodeCurrentNetworkValue(node = {}) {
+    const field = getNodeCapabilitySchema(node.type).networkField || '';
+    if (!field) return '';
+    return String(node[field] || '').trim();
+}
+
+function setNodeCurrentNetworkValue(node = {}, value = '') {
+    const field = getNodeCapabilitySchema(node.type).networkField || '';
+    if (field) node[field] = value;
+}
+
+function getNodeAvailableNetworkOptions(node = {}) {
+    const schema = getNodeCapabilitySchema(node.type);
+    const transport = getNodeTransportValue(node);
+
+    if (schema.networkMode === 'v2ray') {
+        if (transport === 'quic') return [...UDP_ONLY_NETWORK_OPTIONS];
+        if (['ws', 'http', 'grpc', 'httpupgrade'].includes(transport)) return [...TCP_ONLY_NETWORK_OPTIONS];
+        return [...DEFAULT_NETWORK_OPTIONS];
+    }
+
+    if (schema.networkMode === 'socks') {
+        if (String(node.socks_version || '5') !== '5') return [...TCP_ONLY_NETWORK_OPTIONS];
+        return [...DEFAULT_NETWORK_OPTIONS];
+    }
+
+    if (schema.networkMode === 'default') return [...DEFAULT_NETWORK_OPTIONS];
+
+    return [];
+}
+
+function isNodeTlsDefaultOn(node = {}) {
+    const schema = getNodeCapabilitySchema(node.type);
+    return schema.tlsMode === 'required' || schema.tlsDefaultOn === true;
+}
+
+function resolveNodeCapabilities(node = {}) {
+    const type = String(node.type || 'vless').trim() || 'vless';
+    const schema = getNodeCapabilitySchema(type);
+    const shadowtlsVersion = type === 'shadowtls' ? getNodeShadowtlsVersion(node) : '';
+    const transportOptions = getNodeAvailableTransportOptions(node);
+    const allowedTransportValues = new Set(transportOptions.map((item) => item.value));
+    const requestedTransport = getNodeTransportValue(node);
+    const transportAllowed = requestedTransport === '' || allowedTransportValues.has(requestedTransport);
+    const transport = transportAllowed ? requestedTransport : '';
+
+    const networkField = schema.networkField || '';
+    const networkOptions = getNodeAvailableNetworkOptions({ ...node, transport });
+    const allowedNetworkValues = new Set(networkOptions.map((item) => item.value));
+    const defaultNetworkValue = networkOptions.length > 0 ? (networkOptions[0]?.value || '') : '';
+    const requestedNetworkValue = networkField ? String(node[networkField] || '').trim() : '';
+    const networkAllowed = !networkField || requestedNetworkValue === '' || allowedNetworkValues.has(requestedNetworkValue);
+    const effectiveNetworkValue = !networkField
+        ? ''
+        : (requestedNetworkValue && allowedNetworkValues.has(requestedNetworkValue) ? requestedNetworkValue : defaultNetworkValue);
+
+    let supportsStreamTransport = false;
+    let supportsDatagramTransport = false;
+
+    if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) {
+        supportsDatagramTransport = effectiveNetworkValue !== 'tcp';
+    } else if (type === 'naive') {
+        supportsStreamTransport = !node.naive_quic;
+        supportsDatagramTransport = !!node.naive_quic;
+    } else if (['vless', 'vmess', 'trojan'].includes(type)) {
+        supportsStreamTransport = transport !== 'quic' && effectiveNetworkValue !== 'udp';
+        supportsDatagramTransport = transport === 'quic';
+    } else if (type === 'shadowsocks') {
+        supportsStreamTransport = effectiveNetworkValue !== 'udp' || !!node.ss_udp_over_tcp;
+        supportsDatagramTransport = effectiveNetworkValue !== 'tcp' && !node.ss_udp_over_tcp;
+    } else if (type === 'socks') {
+        supportsStreamTransport = effectiveNetworkValue !== 'udp';
+        supportsDatagramTransport = effectiveNetworkValue !== 'tcp';
+    } else if (['http', 'ssh', 'shadowtls', 'anytls', 'tor'].includes(type)) {
+        supportsStreamTransport = true;
+    }
+
+    const supportsTls = schema.tlsMode !== 'none';
+    const tlsToggleVisible = schema.tlsMode === 'optional';
+    const tlsRequired = schema.tlsMode === 'required';
+    const hasTlsContext = tlsRequired || (tlsToggleVisible && !!node.tls);
+    const isQuicTlsContext = hasTlsContext && (schema.nativeQuic === true || transport === 'quic' || (type === 'naive' && !!node.naive_quic));
+    const isTcpTlsContext = hasTlsContext && !isQuicTlsContext;
+    const supportsMultiplex = schema.multiplexMode === 'stream'
+        && supportsStreamTransport
+        && !(type === 'shadowsocks' && !!node.ss_udp_over_tcp);
+
+    return {
+        type,
+        schema,
+        transportOptions,
+        transportAllowed,
+        transport,
+        requestedTransport,
+        supportsTransport: transportOptions.length > 0,
+        networkField,
+        networkOptions,
+        networkAllowed,
+        requestedNetworkValue,
+        effectiveNetworkValue,
+        supportsSharedSecret: schema.sharedSecret === true,
+        supportsSharedUsername: schema.sharedUsername === true,
+        supportsTls,
+        tlsToggleVisible,
+        tlsRequired,
+        tlsDefaultOn: tlsRequired || schema.tlsDefaultOn === true,
+        hasTlsContext,
+        isQuicTlsContext,
+        isTcpTlsContext,
+        supportsTlsInsecure: hasTlsContext && type !== 'naive',
+        supportsTlsAlpn: hasTlsContext && type !== 'naive',
+        supportsTlsDisableSni: hasTlsContext && type !== 'naive',
+        supportsTlsVersion: hasTlsContext && type !== 'naive',
+        supportsTlsFragment: isTcpTlsContext && type !== 'naive',
+        supportsUtls: isTcpTlsContext && ['vless', 'vmess', 'trojan'].includes(type),
+        supportsReality: isTcpTlsContext && ['vless', 'trojan'].includes(type),
+        supportsPacketEncoding: schema.packetEncoding === true && effectiveNetworkValue !== 'tcp',
+        supportsQuicAdvancedFields: schema.quicAdvanced === true,
+        supportsStreamTransport,
+        supportsDatagramTransport,
+        supportsMultiplex,
+        supportsServerEndpoint: schema.serverEndpoint !== false,
+        shadowtlsVersion,
+        supportsShadowtlsPassword: type === 'shadowtls' && shadowtlsVersion !== '1',
+    };
+}
+
+function shouldShowNodeTransportSection(node = {}) {
+    return resolveNodeCapabilities(node).supportsTransport;
+}
+
+function isNodeTransportFieldVisible(node = {}, field = '') {
+    const caps = resolveNodeCapabilities(node);
+    const name = String(field || '').trim();
+
+    if (name === 'transport') return caps.supportsTransport;
+    if (!caps.supportsTransport) return false;
+
+    if (name === 'path') return TRANSPORT_PATH_FIELDS.includes(caps.transport);
+    if (name === 'ws_host') return TRANSPORT_HEADER_FIELDS.includes(caps.transport);
+    if (name === 'transport_headers_text') return TRANSPORT_HEADER_FIELDS.includes(caps.transport);
+    if (name === 'transport_method') return caps.transport === 'http';
+    if (name === 'transport_idle_timeout' || name === 'transport_ping_timeout') return ['http', 'grpc'].includes(caps.transport);
+    if (name === 'transport_max_early_data' || name === 'transport_early_data_header_name') return caps.transport === 'ws';
+    if (name === 'transport_permit_without_stream') return caps.transport === 'grpc';
+    if (name === 'network') return caps.networkField === 'network';
+    if (name === 'packet_encoding') return caps.supportsPacketEncoding;
+
+    return false;
+}
+
+function sanitizeNodeByCapabilities(node = {}) {
+    if (!node || typeof node !== 'object') return node;
+
+    const type = String(node.type || 'vless').trim() || 'vless';
+    const caps = resolveNodeCapabilities(node);
+
+    Object.entries(PROTOCOL_FIELD_GROUPS).forEach(([protocol, fields]) => {
+        if (protocol !== type) deleteFields(node, fields);
+    });
+
+    NETWORK_FIELDS.forEach((field) => {
+        if (field !== caps.networkField) delete node[field];
+    });
+
+    if (!caps.supportsSharedUsername) delete node.username;
+    if (!caps.supportsSharedSecret) delete node.secret;
+
+    // Legacy outbound shadowtls editors incorrectly exposed inbound-only handshake fields.
+    delete node.shadowtls_handshake_server;
+    delete node.shadowtls_handshake_port;
+
+    if (!caps.supportsTransport) {
+        deleteFields(node, TRANSPORT_FIELDS);
+    } else {
+        node.transport = caps.transport;
+        Object.entries(TRANSPORT_FIELD_GROUPS).forEach(([transport, fields]) => {
+            if (transport !== caps.transport) deleteFields(node, fields);
+        });
+        if (caps.transport !== 'ws') {
+            delete node.transport_max_early_data;
+            delete node.transport_early_data_header_name;
+        }
+        if (caps.transport !== 'http') delete node.transport_method;
+        if (!['http', 'grpc'].includes(caps.transport)) {
+            delete node.transport_idle_timeout;
+            delete node.transport_ping_timeout;
+        }
+        if (caps.transport !== 'grpc') delete node.transport_permit_without_stream;
+        if (!['ws', 'http', 'httpupgrade', 'grpc'].includes(caps.transport)) delete node.path;
+        if (!['ws', 'http', 'httpupgrade'].includes(caps.transport)) delete node.ws_host;
+    }
+
+    if (caps.networkField) {
+        node[caps.networkField] = caps.effectiveNetworkValue;
+    }
+
+    if (!caps.supportsMultiplex) {
+        deleteFields(node, MUX_FIELDS);
+    } else {
+        if (!node.mux_enabled) deleteFields(node, MUX_FIELDS.filter((field) => field !== 'mux_enabled'));
+        if (!node.mux_brutal_enabled) {
+            delete node.mux_brutal_up_mbps;
+            delete node.mux_brutal_down_mbps;
+        }
+    }
+
+    if (!caps.supportsPacketEncoding) delete node.packet_encoding;
+
+    if (!caps.supportsQuicAdvancedFields) deleteFields(node, SHARED_QUIC_FIELDS);
+
+    if (!caps.supportsTls) {
+        deleteFields(node, TLS_FIELDS);
+    } else {
+        if (caps.tlsRequired) node.tls = true;
+        if (!caps.hasTlsContext) {
+            deleteFields(node, TLS_FIELDS.filter((field) => field !== 'tls'));
+        } else {
+            if (!caps.supportsTlsInsecure) delete node.insecure;
+            if (!caps.supportsTlsAlpn) {
+                delete node.alpn;
+                delete node.alpn_custom;
+            }
+            if (!caps.supportsTlsDisableSni) delete node.disable_sni;
+            if (!caps.supportsTlsVersion) {
+                delete node.tls_min_version;
+                delete node.tls_max_version;
+            }
+            if (!caps.isTcpTlsContext) delete node.cipher_suites;
+            if (!caps.supportsTlsFragment) {
+                delete node.tls_fragment;
+                delete node.tls_record_fragment;
+                delete node.tls_fragment_fallback_delay;
+            }
+            if (!caps.supportsUtls) delete node.utls_fingerprint;
+            if (!caps.supportsReality) deleteFields(node, REALITY_FIELDS);
+        }
+    }
+
+    if (!node.reality) {
+        delete node.reality_pubkey;
+        delete node.reality_sid;
+    }
+    if (!node.ech_enabled) delete node.ech_config;
+    if (!caps.supportsShadowtlsPassword) delete node.shadowtls_password;
+
+    if (!node.ss_udp_over_tcp) delete node.ss_udp_over_tcp_version;
+    if (!node.ss_plugin) delete node.ss_plugin_opts;
+    if (!node.socks_udp_over_tcp) delete node.socks_udp_over_tcp_version;
+    if (!node.hy2_obfs_type) delete node.hy2_obfs_password;
+    if (!node.naive_udp_over_tcp) delete node.naive_udp_over_tcp_version;
+    if (!node.naive_quic) delete node.naive_quic_congestion_control;
+
+    if (!caps.supportsServerEndpoint) {
+        delete node.server;
+        delete node.port;
+    }
+
+    return node;
+}
+
+function getNodeCapabilityIssues(node = {}) {
+    const caps = resolveNodeCapabilities(node);
+    const issues = [];
+
+    if (caps.requestedTransport && !caps.transportAllowed) {
+        issues.push({ code: 'transport_unsupported', field: 'transport', message: `选择了当前协议不支持的传输层 "${caps.requestedTransport}"` });
+    }
+
+    if (caps.networkField && caps.requestedNetworkValue && !caps.networkAllowed) {
+        issues.push({ code: 'network_invalid', field: caps.networkField, message: `network 取值 "${caps.requestedNetworkValue}" 与当前协议/传输层组合不匹配` });
+    }
+
+    if (node.mux_enabled && !caps.supportsMultiplex) {
+        issues.push({ code: 'multiplex_unsupported', field: 'mux_enabled', message: '当前协议/传输层不支持 multiplex' });
+    }
+
+    if (caps.tlsRequired && node.tls === false) {
+        issues.push({ code: 'tls_required', field: 'tls', message: '所选协议要求 TLS，当前配置却显式关闭了 TLS' });
+    }
+
+    if (node.reality && !caps.supportsReality) {
+        issues.push({ code: 'reality_unsupported', field: 'reality', message: '当前 TLS 上下文不支持 REALITY' });
+    }
+
+    if (node.utls_fingerprint && !caps.supportsUtls) {
+        issues.push({ code: 'utls_unsupported', field: 'utls_fingerprint', message: '当前 TLS 上下文不支持 uTLS 指纹' });
+    }
+
+    if (node.packet_encoding && !caps.supportsPacketEncoding) {
+        issues.push({ code: 'packet_encoding_ignored', field: 'packet_encoding', message: '当前 network 组合下 packet_encoding 不会生效' });
+    }
+
+    if (!caps.supportsQuicAdvancedFields && nodeHasAnyConfiguredField(node, SHARED_QUIC_FIELDS)) {
+        issues.push({ code: 'quic_fields_unsupported', field: 'quic_initial_packet_size', message: '配置了 QUIC 高级参数，但当前协议不使用这组字段' });
+    }
+
+    if (!caps.hasTlsContext && nodeHasAnyConfiguredField(node, TLS_CONFIG_FIELDS)) {
+        issues.push({ code: 'tls_fields_without_tls', field: 'tls', message: '填写了 TLS 相关参数，但当前协议/开关下 TLS 并未启用' });
+    }
+
+    if (caps.supportsServerEndpoint) {
+        if (!String(node.server || '').trim()) {
+            issues.push({ code: 'server_missing', field: 'server', message: '缺少服务器地址' });
+        }
+        if (!isNodeValidPort(node.port)) {
+            issues.push({ code: 'port_invalid', field: 'port', message: '服务器端口无效或为空' });
+        }
+    }
+
+    if (['vless', 'vmess', 'tuic'].includes(caps.type) && !String(node.secret || '').trim()) {
+        issues.push({ code: 'uuid_missing', field: 'secret', message: '缺少 UUID' });
+    }
+
+    if (['trojan', 'shadowsocks', 'anytls'].includes(caps.type) && !String(node.secret || '').trim()) {
+        issues.push({ code: 'password_missing', field: 'secret', message: '缺少密码' });
+    }
+
+    if (caps.type === 'hysteria') {
+        const hasUp = String(node.hy_up_text || '').trim() || hasConfiguredValue(node.hy_up_mbps);
+        const hasDown = String(node.hy_down_text || '').trim() || hasConfiguredValue(node.hy_down_mbps);
+        if (!hasUp) issues.push({ code: 'hysteria_up_missing', field: 'hy_up_text', message: '缺少上行带宽，需填写 up 或 up_mbps' });
+        if (!hasDown) issues.push({ code: 'hysteria_down_missing', field: 'hy_down_text', message: '缺少下行带宽，需填写 down 或 down_mbps' });
+    }
+
+    if (caps.type === 'hysteria2' && String(node.hy2_obfs_type || '').trim() && !String(node.hy2_obfs_password || '').trim()) {
+        issues.push({ code: 'hy2_obfs_password_missing', field: 'hy2_obfs_password', message: '已选择 Hysteria2 混淆类型，但未填写 OBFS 密码' });
+    }
+
+    if (caps.type === 'wireguard') {
+        if (!String(node.wg_private_key || '').trim()) issues.push({ code: 'wg_private_key_missing', field: 'wg_private_key', message: '缺少 WireGuard 本地私钥' });
+        if (!String(node.wg_peer_pubkey || '').trim()) issues.push({ code: 'wg_peer_pubkey_missing', field: 'wg_peer_pubkey', message: '缺少 WireGuard 对端公钥' });
+        if (!String(node.wg_local_address || '').trim()) issues.push({ code: 'wg_local_address_missing', field: 'wg_local_address', message: '缺少 WireGuard 本地地址' });
+    }
+
+    if (caps.type === 'ssh') {
+        if (node.ssh_auth_type === 'key') {
+            if (!String(node.secret || '').trim() && !String(node.ssh_private_key_path || '').trim()) {
+                issues.push({ code: 'ssh_key_missing', field: 'secret', message: 'SSH 密钥认证需要填写私钥内容或私钥路径' });
+            }
+        } else if (!String(node.secret || '').trim()) {
+            issues.push({ code: 'ssh_password_missing', field: 'secret', message: 'SSH 密码认证需要填写密码' });
+        }
+    }
+
+    if (caps.type === 'shadowtls' && caps.supportsShadowtlsPassword && !String(node.shadowtls_password || '').trim()) {
+        issues.push({ code: 'shadowtls_password_missing', field: 'shadowtls_password', message: `ShadowTLS v${caps.shadowtlsVersion} 需要填写 password` });
+    }
+
+    return issues;
+}
+window.__SINGBOX_BUNDLE__.getNodeCapabilitySchema = getNodeCapabilitySchema;
+window.__SINGBOX_BUNDLE__.getNodeAvailableTransportOptions = getNodeAvailableTransportOptions;
+window.__SINGBOX_BUNDLE__.getNodeTransportValue = getNodeTransportValue;
+window.__SINGBOX_BUNDLE__.getNodeCurrentNetworkValue = getNodeCurrentNetworkValue;
+window.__SINGBOX_BUNDLE__.setNodeCurrentNetworkValue = setNodeCurrentNetworkValue;
+window.__SINGBOX_BUNDLE__.getNodeAvailableNetworkOptions = getNodeAvailableNetworkOptions;
+window.__SINGBOX_BUNDLE__.isNodeTlsDefaultOn = isNodeTlsDefaultOn;
+window.__SINGBOX_BUNDLE__.resolveNodeCapabilities = resolveNodeCapabilities;
+window.__SINGBOX_BUNDLE__.shouldShowNodeTransportSection = shouldShowNodeTransportSection;
+window.__SINGBOX_BUNDLE__.isNodeTransportFieldVisible = isNodeTransportFieldVisible;
+window.__SINGBOX_BUNDLE__.sanitizeNodeByCapabilities = sanitizeNodeByCapabilities;
+window.__SINGBOX_BUNDLE__.getNodeCapabilityIssues = getNodeCapabilityIssues;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { getNodeCurrentNetworkValue, resolveNodeCapabilities, sanitizeNodeByCapabilities } = window.__SINGBOX_BUNDLE__;
 const { computed, watch, nextTick, onUnmounted } = window.Vue;
 
 function setupConfigCore(ctx) {
@@ -648,8 +1396,7 @@ function setupConfigCore(ctx) {
     const sanitizeNodeNetworkValue = (node = {}, rawValue = '') => {
         const value = String(rawValue || '').trim();
         if (!value) return '';
-        if (typeof ctx.getNodeAvailableNetworkOptions !== 'function') return value;
-        const allowedValues = ctx.getNodeAvailableNetworkOptions(node)
+        const allowedValues = resolveNodeCapabilities(node).networkOptions
             .map((item) => item.value)
             .filter(Boolean);
         return allowedValues.includes(value) ? value : '';
@@ -657,8 +1404,7 @@ function setupConfigCore(ctx) {
 
     const buildMultiplex = (node) => {
         if (!node.mux_enabled) return undefined;
-        if (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(node)) return undefined;
-        if (node.type === 'shadowsocks' && node.ss_udp_over_tcp) return undefined;
+        if (!resolveNodeCapabilities(node).supportsMultiplex) return undefined;
         const multiplex = {
             enabled: true,
             protocol: node.mux_protocol || 'h2mux',
@@ -1277,6 +2023,7 @@ function setupConfigCore(ctx) {
         ctx.nodes.value.forEach((node) => {
             const outbound = { type: node.type, tag: node.tag };
             const applyNodeDialFields = () => applyDialFields(outbound, node, { validDnsTags: new Set(ctx.dnsList.value.map((dns) => dns.tag)) });
+            const caps = resolveNodeCapabilities(node);
 
             if (node.type === 'wireguard') {
                 outbound.private_key = node.wg_private_key;
@@ -1322,12 +2069,6 @@ function setupConfigCore(ctx) {
                 outbound.server_port = node.port;
                 outbound.password = node.shadowtls_password;
                 outbound.version = parseInt(node.shadowtls_version, 10) || 3;
-                if (node.shadowtls_handshake_server) {
-                    outbound.handshake = {
-                        server: node.shadowtls_handshake_server,
-                        server_port: node.shadowtls_handshake_port || 443,
-                    };
-                }
                 applyNodeDialFields();
                 outbounds.push(outbound);
                 return;
@@ -1493,13 +2234,8 @@ function setupConfigCore(ctx) {
                 if (node.type === 'vless' && node.flow) outbound.flow = node.flow;
             }
 
-            const optionalTlsProtocols = ['vless', 'vmess', 'trojan', 'http'];
-            const requiredTlsProtocols = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-            const needTls = requiredTlsProtocols.includes(node.type)
-                ? true
-                : (optionalTlsProtocols.includes(node.type) ? node.tls !== false : false);
-            if (needTls) {
-                const isQuicTlsContext = ['hysteria', 'hysteria2', 'tuic'].includes(node.type) || node.transport === 'quic';
+            if (caps.hasTlsContext) {
+                const isQuicTlsContext = caps.isQuicTlsContext;
                 outbound.tls = { enabled: true };
                 if (node.disable_sni) outbound.tls.disable_sni = true;
                 if (node.insecure) outbound.tls.insecure = true;
@@ -1530,7 +2266,7 @@ function setupConfigCore(ctx) {
                     if (node.tls_record_fragment) outbound.tls.record_fragment = true;
                     if (node.tls_fragment_fallback_delay) outbound.tls.fragment_fallback_delay = node.tls_fragment_fallback_delay;
                 }
-                if (!isQuicTlsContext && node.reality && ['vless', 'trojan'].includes(node.type)) {
+                if (!isQuicTlsContext && node.reality && caps.supportsReality) {
                     outbound.tls.reality = {
                         enabled: true,
                         public_key: node.reality_pubkey,
@@ -1540,8 +2276,8 @@ function setupConfigCore(ctx) {
                 }
             }
 
-            if (node.transport && ['vless', 'vmess', 'trojan'].includes(node.type)) {
-                if (node.transport === 'ws') {
+            if (caps.supportsTransport && caps.transport) {
+                if (caps.transport === 'ws') {
                     const headers = parseHeadersText(node.transport_headers_text) || {};
                     if (node.ws_host) headers.Host = node.ws_host;
                     outbound.transport = {
@@ -1552,12 +2288,12 @@ function setupConfigCore(ctx) {
                     const maxEarlyData = parseOptionalInteger(node.transport_max_early_data);
                     if (maxEarlyData !== undefined && maxEarlyData >= 0) outbound.transport.max_early_data = maxEarlyData;
                     if (node.transport_early_data_header_name) outbound.transport.early_data_header_name = node.transport_early_data_header_name;
-                } else if (node.transport === 'grpc') {
+                } else if (caps.transport === 'grpc') {
                     outbound.transport = { type: 'grpc', service_name: node.path || '' };
                     if (node.transport_idle_timeout) outbound.transport.idle_timeout = node.transport_idle_timeout;
                     if (node.transport_ping_timeout) outbound.transport.ping_timeout = node.transport_ping_timeout;
                     if (node.transport_permit_without_stream) outbound.transport.permit_without_stream = true;
-                } else if (node.transport === 'http') {
+                } else if (caps.transport === 'http') {
                     const host = parseList(node.ws_host);
                     outbound.transport = {
                         type: 'http',
@@ -1569,7 +2305,7 @@ function setupConfigCore(ctx) {
                     if (headers) outbound.transport.headers = headers;
                     if (node.transport_idle_timeout) outbound.transport.idle_timeout = node.transport_idle_timeout;
                     if (node.transport_ping_timeout) outbound.transport.ping_timeout = node.transport_ping_timeout;
-                } else if (node.transport === 'httpupgrade') {
+                } else if (caps.transport === 'httpupgrade') {
                     outbound.transport = {
                         type: 'httpupgrade',
                         path: node.path || '/',
@@ -1577,25 +2313,23 @@ function setupConfigCore(ctx) {
                     };
                     const headers = parseHeadersText(node.transport_headers_text);
                     if (headers) outbound.transport.headers = headers;
-                } else if (node.transport === 'quic') {
+                } else if (caps.transport === 'quic') {
                     outbound.transport = { type: 'quic' };
                 }
             }
 
-            if (node.network && ['vless', 'vmess', 'trojan'].includes(node.type)) {
-                const v2rayNetwork = sanitizeNodeNetworkValue(node, node.network);
+            if (caps.networkField === 'network') {
+                const v2rayNetwork = sanitizeNodeNetworkValue(node, getNodeCurrentNetworkValue(node));
                 if (v2rayNetwork) outbound.network = v2rayNetwork;
             }
 
-            if (['vless', 'vmess'].includes(node.type)) {
-                if (node.network !== 'tcp') {
-                    if (node.packet_encoding === '') outbound.packet_encoding = '';
-                    else if (node.packet_encoding && !(node.type === 'vless' && node.packet_encoding === 'xudp')) outbound.packet_encoding = node.packet_encoding;
-                }
+            if (caps.supportsPacketEncoding) {
+                if (node.packet_encoding === '') outbound.packet_encoding = '';
+                else if (node.packet_encoding && !(node.type === 'vless' && node.packet_encoding === 'xudp')) outbound.packet_encoding = node.packet_encoding;
             }
 
             const multiplex = buildMultiplex(node);
-            if (multiplex && ['vless', 'vmess', 'trojan', 'shadowsocks'].includes(node.type)) outbound.multiplex = multiplex;
+            if (multiplex) outbound.multiplex = multiplex;
 
             applyNodeDialFields();
             outbounds.push(outbound);
@@ -2044,180 +2778,10 @@ function setupConfigCore(ctx) {
     });
 
     const getFullState = () => {
-        const defaultNode = ctx.makeNode();
-
         const cleanNodes = ctx.nodes.value.map((node) => {
             const cleanNode = { ...node };
-
-            if (cleanNode.type !== 'shadowsocks') {
-                delete cleanNode.ss_method;
-                delete cleanNode.ss_plugin;
-                delete cleanNode.ss_plugin_opts;
-                delete cleanNode.ss_udp_over_tcp;
-                delete cleanNode.ss_udp_over_tcp_version;
-            }
-            if (cleanNode.type !== 'tuic') {
-                delete cleanNode.tuic_password;
-                delete cleanNode.tuic_congestion;
-                delete cleanNode.tuic_udp_relay_mode;
-                delete cleanNode.tuic_network;
-                delete cleanNode.tuic_udp_over_stream;
-                delete cleanNode.tuic_zero_rtt_handshake;
-                delete cleanNode.tuic_heartbeat;
-            }
-            if (cleanNode.type !== 'hysteria') {
-                delete cleanNode.hy_up_mbps;
-                delete cleanNode.hy_down_mbps;
-                delete cleanNode.hy_up_text;
-                delete cleanNode.hy_down_text;
-                delete cleanNode.hy_obfs;
-                delete cleanNode.hy_auth_type;
-                delete cleanNode.hy_server_ports;
-                delete cleanNode.hy_hop_interval;
-                delete cleanNode.hy_recv_window_conn;
-                delete cleanNode.hy_recv_window;
-                delete cleanNode.hy_disable_mtu_discovery;
-                delete cleanNode.hy_network;
-            }
-            if (cleanNode.type !== 'hysteria2') {
-                delete cleanNode.hy2_up;
-                delete cleanNode.hy2_down;
-                delete cleanNode.hy2_obfs_type;
-                delete cleanNode.hy2_obfs_password;
-                delete cleanNode.hy2_server_ports;
-                delete cleanNode.hy2_hop_interval;
-                delete cleanNode.hy2_hop_interval_max;
-                delete cleanNode.hy2_network;
-                delete cleanNode.hy2_bbr_profile;
-                delete cleanNode.hy2_brutal_debug;
-            }
-            if (cleanNode.type !== 'wireguard') {
-                delete cleanNode.wg_private_key;
-                delete cleanNode.wg_peer_pubkey;
-                delete cleanNode.wg_local_address;
-                delete cleanNode.wg_psk;
-                delete cleanNode.wg_mtu;
-                delete cleanNode.wg_reserved;
-                delete cleanNode.wg_system_interface;
-                delete cleanNode.wg_interface_name;
-                delete cleanNode.wg_workers;
-                delete cleanNode.wg_network;
-            }
-            if (cleanNode.type !== 'socks') {
-                delete cleanNode.socks_version;
-                delete cleanNode.socks_network;
-                delete cleanNode.socks_udp_over_tcp;
-                delete cleanNode.socks_udp_over_tcp_version;
-            }
-            if (cleanNode.type !== 'http') {
-                delete cleanNode.http_path;
-                delete cleanNode.http_headers_text;
-            }
-            if (cleanNode.type !== 'ssh') {
-                delete cleanNode.ssh_auth_type;
-                delete cleanNode.ssh_private_key_path;
-                delete cleanNode.ssh_private_key_passphrase;
-                delete cleanNode.ssh_host_key_text;
-                delete cleanNode.ssh_host_key_algorithms;
-                delete cleanNode.ssh_client_version;
-            }
-            if (cleanNode.type !== 'shadowtls') {
-                delete cleanNode.shadowtls_version;
-                delete cleanNode.shadowtls_password;
-                delete cleanNode.shadowtls_handshake_server;
-                delete cleanNode.shadowtls_handshake_port;
-            }
-            if (cleanNode.type !== 'anytls') {
-                delete cleanNode.anytls_idle_session_check_interval;
-                delete cleanNode.anytls_idle_session_timeout;
-                delete cleanNode.anytls_min_idle_session;
-            }
-            if (cleanNode.type !== 'naive') {
-                delete cleanNode.naive_insecure_concurrency;
-                delete cleanNode.naive_extra_headers_text;
-                delete cleanNode.naive_udp_over_tcp;
-                delete cleanNode.naive_udp_over_tcp_version;
-                delete cleanNode.naive_quic;
-                delete cleanNode.naive_quic_congestion_control;
-            }
-            if (cleanNode.type !== 'tor') {
-                delete cleanNode.tor_executable_path;
-                delete cleanNode.tor_extra_args;
-                delete cleanNode.tor_data_directory;
-                delete cleanNode.tor_torrc_text;
-            }
-            if (!ctx.PROTO_SUPPORT_USER.includes(cleanNode.type)) delete cleanNode.username;
-            if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(cleanNode.type)) {
-                delete cleanNode.transport;
-                delete cleanNode.path;
-                delete cleanNode.ws_host;
-                delete cleanNode.transport_headers_text;
-                delete cleanNode.transport_method;
-                delete cleanNode.transport_idle_timeout;
-                delete cleanNode.transport_ping_timeout;
-                delete cleanNode.transport_max_early_data;
-                delete cleanNode.transport_early_data_header_name;
-                delete cleanNode.transport_permit_without_stream;
-            }
-            if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(cleanNode.type) || (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(cleanNode))) {
-                delete cleanNode.mux_enabled;
-                delete cleanNode.mux_protocol;
-                delete cleanNode.mux_max_connections;
-                delete cleanNode.mux_min_streams;
-                delete cleanNode.mux_max_streams;
-                delete cleanNode.mux_padding;
-                delete cleanNode.mux_brutal_enabled;
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (cleanNode.type !== 'vless') delete cleanNode.flow;
-            if (cleanNode.network === 'tcp') delete cleanNode.packet_encoding;
-            if (cleanNode.type === 'shadowsocks' && cleanNode.ss_udp_over_tcp) cleanNode.mux_enabled = false;
-            if (!['hysteria', 'hysteria2', 'tuic'].includes(cleanNode.type)) {
-                delete cleanNode.quic_initial_packet_size;
-                delete cleanNode.quic_disable_path_mtu_discovery;
-                delete cleanNode.quic_idle_timeout;
-                delete cleanNode.quic_keep_alive_period;
-                delete cleanNode.quic_stream_receive_window;
-                delete cleanNode.quic_connection_receive_window;
-                delete cleanNode.quic_max_concurrent_streams;
-            }
-
-            if (!cleanNode.reality) {
-                delete cleanNode.reality_pubkey;
-                delete cleanNode.reality_sid;
-            }
-            if (!cleanNode.mux_enabled) {
-                delete cleanNode.mux_protocol;
-                delete cleanNode.mux_max_connections;
-                delete cleanNode.mux_min_streams;
-                delete cleanNode.mux_max_streams;
-                delete cleanNode.mux_padding;
-                delete cleanNode.mux_brutal_enabled;
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (!cleanNode.mux_brutal_enabled) {
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (!cleanNode.ss_udp_over_tcp) delete cleanNode.ss_udp_over_tcp_version;
-            if (!cleanNode.socks_udp_over_tcp) delete cleanNode.socks_udp_over_tcp_version;
-            if (!cleanNode.naive_udp_over_tcp) delete cleanNode.naive_udp_over_tcp_version;
-            if (!cleanNode.naive_quic) delete cleanNode.naive_quic_congestion_control;
-            if (!['ws', 'http', 'httpupgrade', 'grpc'].includes(cleanNode.transport)) delete cleanNode.path;
-            if (!['ws', 'http', 'httpupgrade'].includes(cleanNode.transport)) delete cleanNode.ws_host;
-            if (cleanNode.transport !== 'ws') {
-                delete cleanNode.transport_max_early_data;
-                delete cleanNode.transport_early_data_header_name;
-            }
-            if (!['ws', 'http', 'httpupgrade'].includes(cleanNode.transport)) delete cleanNode.transport_headers_text;
-            if (cleanNode.transport !== 'http') delete cleanNode.transport_method;
-            if (!['http', 'grpc'].includes(cleanNode.transport)) {
-                delete cleanNode.transport_idle_timeout;
-                delete cleanNode.transport_ping_timeout;
-            }
-            if (cleanNode.transport !== 'grpc') delete cleanNode.transport_permit_without_stream;
+            sanitizeNodeByCapabilities(cleanNode);
+            const defaultNode = ctx.makeNode({ type: cleanNode.type });
 
             Object.keys(cleanNode).forEach((key) => {
                 if (['tag', 'type', 'server', 'port', 'insecure'].includes(key)) return;
@@ -2227,32 +2791,6 @@ function setupConfigCore(ctx) {
                     delete cleanNode[key];
                 }
             });
-
-            const usesTls = [...ctx.PROTO_SUPPORT_TLS, ...ctx.PROTO_ALWAYS_TLS].includes(cleanNode.type);
-            if (!usesTls) {
-                delete cleanNode.tls;
-                delete cleanNode.insecure;
-                delete cleanNode.reality;
-                delete cleanNode.alpn;
-                delete cleanNode.utls_fingerprint;
-                delete cleanNode.sni;
-            }
-            if (cleanNode.type === 'naive') {
-                delete cleanNode.insecure;
-                delete cleanNode.alpn;
-                delete cleanNode.utls_fingerprint;
-                delete cleanNode.disable_sni;
-                delete cleanNode.tls_min_version;
-                delete cleanNode.tls_max_version;
-                delete cleanNode.cipher_suites;
-                delete cleanNode.tls_fragment;
-                delete cleanNode.tls_fragment_fallback_delay;
-                delete cleanNode.tls_record_fragment;
-            }
-            if (['tor', 'dns'].includes(cleanNode.type)) {
-                delete cleanNode.server;
-                delete cleanNode.port;
-            }
 
             return cleanNode;
         });
@@ -2379,6 +2917,7 @@ window.__SINGBOX_BUNDLE__.setupConfigCore = setupConfigCore;
 
 (() => {
 window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { getNodeCapabilityIssues, sanitizeNodeByCapabilities } = window.__SINGBOX_BUNDLE__;
 const { computed, watch } = window.Vue;
 
 function setupImportExportCore(ctx) {
@@ -2602,6 +3141,12 @@ function setupImportExportCore(ctx) {
         if (ctx.duplicateOutboundTags.value.length > 0) warnings.push(`出站 tag 重名: ${ctx.duplicateOutboundTags.value.join(', ')}`);
         const emptyRuleSets = ctx.ruleSets.value.filter((ruleSet) => ruleSet.tag && !ruleSet.url);
         if (emptyRuleSets.length > 0) warnings.push(`${emptyRuleSets.length} 个规则集 URL 为空（已自动忽略）`);
+        ctx.nodes.value.forEach((node, index) => {
+            const label = node.tag ? `节点 "${node.tag}"` : `第 ${index + 1} 个节点`;
+            getNodeCapabilityIssues(node).forEach((issue) => {
+                warnings.push(`${label} ${issue.message}`);
+            });
+        });
         return warnings;
     };
 
@@ -2798,10 +3343,6 @@ function setupImportExportCore(ctx) {
         } else if (type === 'shadowtls') {
             node.shadowtls_password = outbound.password || '';
             node.shadowtls_version = String(outbound.version || '3');
-            if (outbound.handshake) {
-                node.shadowtls_handshake_server = outbound.handshake.server || '';
-                node.shadowtls_handshake_port = outbound.handshake.server_port || 443;
-            }
         } else if (type === 'tor') {
             node.tor_executable_path = outbound.executable_path || '';
             node.tor_data_directory = outbound.data_directory || '';
@@ -2850,7 +3391,7 @@ function setupImportExportCore(ctx) {
         parseRuntimeTls(node, outbound.tls);
         parseRuntimeTransport(node, outbound.transport);
         parseRuntimeMultiplex(node, outbound.multiplex);
-        return node;
+        return sanitizeNodeByCapabilities(node);
     };
 
     const runtimeOutboundToGroup = (outbound = {}) => {
@@ -3955,6 +4496,7 @@ window.__SINGBOX_BUNDLE__.setupGroupsModule = setupGroupsModule;
 
 (() => {
 window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { getNodeAvailableNetworkOptions: resolveNodeAvailableNetworkOptions, getNodeCapabilityIssues: resolveNodeCapabilityIssues, getNodeAvailableTransportOptions: resolveNodeAvailableTransportOptions, getNodeCurrentNetworkValue: resolveNodeCurrentNetworkValue, isNodeTransportFieldVisible: resolveNodeTransportFieldVisible, isNodeTlsDefaultOn, resolveNodeCapabilities, sanitizeNodeByCapabilities, setNodeCurrentNetworkValue: resolveSetNodeCurrentNetworkValue, shouldShowNodeTransportSection: resolveShouldShowNodeTransportSection } = window.__SINGBOX_BUNDLE__;
 const { ref, nextTick } = window.Vue;
 
 function setupNodesModule(ctx) {
@@ -3994,7 +4536,7 @@ function setupNodesModule(ctx) {
 
     const makeNode = (overrides = {}) => {
         const type = overrides.type || 'vless';
-        const tlsDefault = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'].includes(type);
+        const tlsDefault = isNodeTlsDefaultOn({ type });
         const node = {
             tag: '',
             type: 'vless',
@@ -4081,8 +4623,6 @@ function setupNodesModule(ctx) {
             hy2_brutal_debug: false,
             shadowtls_version: '3',
             shadowtls_password: '',
-            shadowtls_handshake_server: '',
-            shadowtls_handshake_port: 443,
             anytls_idle_session_check_interval: '',
             anytls_idle_session_timeout: '',
             anytls_min_idle_session: '',
@@ -4159,7 +4699,7 @@ function setupNodesModule(ctx) {
         node.hy2_server_ports = Array.isArray(node.hy2_server_ports) ? node.hy2_server_ports.join(', ') : String(node.hy2_server_ports || '');
         node.wg_workers = node.wg_workers === null || node.wg_workers === undefined ? '' : String(node.wg_workers);
 
-        return node;
+        return sanitizeNodeByCapabilities(node);
     };
 
     const nodes = ref([]);
@@ -4222,83 +4762,48 @@ function setupNodesModule(ctx) {
         onNodeDragEnd();
     };
 
-    const PROTO_TLS_OPTIONAL = ['vless', 'vmess', 'trojan', 'http'];
-    const PROTO_TLS_DEFAULT_ON = [...PROTO_TLS_OPTIONAL, 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_MULTIPLEX_STREAM_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const DEFAULT_NETWORK_OPTIONS = [
-        { value: '', label: '默认 (TCP + UDP)' },
-        { value: 'tcp', label: 'tcp' },
-        { value: 'udp', label: 'udp' },
-    ];
-    const TCP_ONLY_NETWORK_OPTIONS = [
-        { value: 'tcp', label: '仅 TCP' },
-    ];
-    const UDP_ONLY_NETWORK_OPTIONS = [
-        { value: 'udp', label: '仅 UDP' },
-    ];
-
-    const getNodeTransportNetwork = (node = {}) => {
-        if (!node) return '';
-        if (node.type === 'socks') return node.socks_network || '';
-        if (node.type === 'tuic') return node.tuic_network || '';
-        if (node.type === 'hysteria') return node.hy_network || '';
-        if (node.type === 'hysteria2') return node.hy2_network || '';
-        if (node.type === 'wireguard') return node.wg_network || '';
-        return node.network || '';
+    const isNodeStreamTransport = (node = {}) => resolveNodeCapabilities(node).supportsStreamTransport;
+    const isNodeDatagramTransport = (node = {}) => resolveNodeCapabilities(node).supportsDatagramTransport;
+    const isNodeTlsSupported = (node = {}) => resolveNodeCapabilities(node).supportsTls;
+    const isNodeTlsToggleVisible = (node = {}) => resolveNodeCapabilities(node).tlsToggleVisible;
+    const isNodeMultiplexSupported = (node = {}) => resolveNodeCapabilities(node).supportsMultiplex;
+    const isNodeQuicFieldSupported = (node = {}) => resolveNodeCapabilities(node).supportsQuicAdvancedFields;
+    const isNodeTlsInsecureSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsInsecure;
+    const isNodeTlsAlpnSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsAlpn;
+    const isNodeTlsDisableSniSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsDisableSni;
+    const isNodeTlsVersionSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsVersion;
+    const isNodeTlsFragmentSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsFragment;
+    const isNodeTlsContext = (node = {}) => resolveNodeCapabilities(node).hasTlsContext;
+    const isNodeQuicTlsContext = (node = {}) => resolveNodeCapabilities(node).isQuicTlsContext;
+    const isNodeTcpTlsContext = (node = {}) => resolveNodeCapabilities(node).isTcpTlsContext;
+    const isNodeUtlsSupported = (node = {}) => resolveNodeCapabilities(node).supportsUtls;
+    const isNodeRealitySupported = (node = {}) => resolveNodeCapabilities(node).supportsReality;
+    const isNodeShadowtlsPasswordSupported = (node = {}) => resolveNodeCapabilities(node).supportsShadowtlsPassword;
+    const isNodeTransportSectionVisible = (node = {}) => resolveShouldShowNodeTransportSection(node);
+    const isNodeTransportFieldVisible = (node = {}, field = '') => resolveNodeTransportFieldVisible(node, field);
+    const getNodeResolvedTransport = (node = {}) => resolveNodeCapabilities(node).transport;
+    const isNodeTransport = (node = {}, transport = '') => getNodeResolvedTransport(node) === String(transport || '').trim();
+    const getNodeAvailableTransportOptions = (node = {}) => resolveNodeAvailableTransportOptions(node);
+    const getNodeCapabilityIssues = (node = {}) => resolveNodeCapabilityIssues(node);
+    const hasNodeCapabilityIssues = (node = {}) => getNodeCapabilityIssues(node).length > 0;
+    const getNodeCapabilityMessages = (node = {}) => getNodeCapabilityIssues(node).map((issue) => issue.message);
+    const getNodeCapabilityFieldMessages = (node = {}, field = '') => {
+        const targetField = String(field || '').trim();
+        return getNodeCapabilityIssues(node)
+            .filter((issue) => issue.field === targetField)
+            .map((issue) => issue.message);
     };
-
-    const isUdpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'udp';
-    const isTcpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'tcp';
-    const isNodeNativeQuicProtocol = (node = {}) => ['hysteria', 'hysteria2', 'tuic'].includes(node.type || '');
-
-    const isNodeStreamTransport = (node = {}) => {
-        const type = node.type || '';
-        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return false;
-        if (type === 'naive') return !node.naive_quic;
-        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport !== 'quic' && !isUdpOnlyTransportNetwork(node);
-        if (type === 'shadowsocks') return !isUdpOnlyTransportNetwork(node) || !!node.ss_udp_over_tcp;
-        if (type === 'socks') return !isUdpOnlyTransportNetwork(node);
-        if (['http', 'ssh', 'shadowtls', 'anytls', 'naive', 'tor'].includes(type)) return true;
-        return false;
+    const isNodeCapabilityFieldInvalid = (node = {}, field = '') => getNodeCapabilityFieldMessages(node, field).length > 0;
+    const isNodeServerEndpointVisible = (node = {}) => resolveNodeCapabilities(node).supportsServerEndpoint;
+    const getNodeDisplayEndpoint = (node = {}) => {
+        if (!isNodeServerEndpointVisible(node)) {
+            return node.type === 'tor' ? 'local tor' : 'internal dns';
+        }
+        return `${node.server || '未设置'}${node.port ? `:${node.port}` : ''}`;
     };
-
-    const isNodeDatagramTransport = (node = {}) => {
-        const type = node.type || '';
-        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return !isTcpOnlyTransportNetwork(node);
-        if (type === 'naive') return !!node.naive_quic;
-        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport === 'quic';
-        if (type === 'shadowsocks') return !isTcpOnlyTransportNetwork(node) && !node.ss_udp_over_tcp;
-        if (type === 'socks') return !isTcpOnlyTransportNetwork(node);
-        return false;
-    };
-
-    const isNodeTlsSupported = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '') || PROTO_ALWAYS_TLS.includes(node.type || '');
-    const isNodeTlsToggleVisible = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '');
-    const isNodeMultiplexSupported = (node = {}) => PROTO_MULTIPLEX_STREAM_TYPES.includes(node.type || '') && isNodeStreamTransport(node);
-    const isNodeQuicFieldSupported = (node = {}) => isNodeNativeQuicProtocol(node);
-    const isNodeTlsInsecureSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsAlpnSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsDisableSniSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsVersionSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsFragmentSupported = (node = {}) => isNodeTcpTlsContext(node) && node.type !== 'naive';
-
-    const isNodeTlsContext = (node = {}) => {
-        if (!node) return false;
-        return !!(PROTO_ALWAYS_TLS.includes(node.type || '') || (PROTO_TLS_OPTIONAL.includes(node.type || '') && node.tls));
-    };
-
-    const isNodeQuicTlsContext = (node = {}) => {
-        if (!isNodeTlsContext(node)) return false;
-        const type = node.type || '';
-        return ['hysteria', 'hysteria2', 'tuic'].includes(type) || node.transport === 'quic';
-    };
-
-    const isNodeTcpTlsContext = (node = {}) => isNodeTlsContext(node) && !isNodeQuicTlsContext(node);
-
-    const isNodeUtlsSupported = (node = {}) => isNodeTcpTlsContext(node) && ['vless', 'vmess', 'trojan'].includes(node.type || '');
-
-    const isNodeRealitySupported = (node = {}) => isNodeTcpTlsContext(node) && ['vless', 'trojan'].includes(node.type || '');
+    const isNodeSharedSecretSectionVisible = (node = {}) => ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2'].includes(node.type || '');
+    const getNodeSharedSecretLabel = (node = {}) => (['vless', 'vmess', 'tuic'].includes(node.type || '') ? 'UUID' : '密码 (Password)');
+    const isNodeCredentialSniVisible = (node = {}) => isNodeTlsContext(node) && ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria'].includes(node.type || '');
 
     const getNodeDialVisibleFields = (node = {}) => {
         const fields = new Set();
@@ -4377,82 +4882,23 @@ function setupNodesModule(ctx) {
         return false;
     };
 
-    const getNodeAvailableNetworkOptions = (node = {}) => {
-        const type = node.type || '';
-        if (['vless', 'vmess', 'trojan'].includes(type)) {
-            if (node.transport === 'quic') return UDP_ONLY_NETWORK_OPTIONS;
-            if (['ws', 'http', 'grpc', 'httpupgrade'].includes(node.transport)) return TCP_ONLY_NETWORK_OPTIONS;
-            return DEFAULT_NETWORK_OPTIONS;
-        }
-        if (type === 'socks') {
-            if (String(node.socks_version || '5') !== '5') return TCP_ONLY_NETWORK_OPTIONS;
-            return DEFAULT_NETWORK_OPTIONS;
-        }
-        if (['shadowsocks', 'hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return DEFAULT_NETWORK_OPTIONS;
-        return [];
-    };
-
-    const getNodeCurrentNetworkValue = (node = {}) => {
-        const type = node.type || '';
-        if (type === 'socks') return node.socks_network || '';
-        if (type === 'tuic') return node.tuic_network || '';
-        if (type === 'hysteria') return node.hy_network || '';
-        if (type === 'hysteria2') return node.hy2_network || '';
-        if (type === 'wireguard') return node.wg_network || '';
-        return node.network || '';
-    };
-
-    const setNodeCurrentNetworkValue = (node = {}, value = '') => {
-        const type = node.type || '';
-        if (type === 'socks') node.socks_network = value;
-        else if (type === 'tuic') node.tuic_network = value;
-        else if (type === 'hysteria') node.hy_network = value;
-        else if (type === 'hysteria2') node.hy2_network = value;
-        else if (type === 'wireguard') node.wg_network = value;
-        else node.network = value;
-    };
+    const getNodeAvailableNetworkOptions = (node = {}) => resolveNodeAvailableNetworkOptions(node);
+    const getNodeCurrentNetworkValue = (node = {}) => resolveNodeCurrentNetworkValue(node);
+    const setNodeCurrentNetworkValue = (node = {}, value = '') => resolveSetNodeCurrentNetworkValue(node, value);
 
     const syncNodeNetworkConstraints = (node = {}) => {
-        const options = getNodeAvailableNetworkOptions(node);
-        if (options.length === 0) return;
-        const allowedValues = options.map((item) => item.value);
-        const current = getNodeCurrentNetworkValue(node);
-        if (!allowedValues.includes(current)) {
-            const nextValue = allowedValues.includes('') ? '' : (allowedValues[0] || '');
-            setNodeCurrentNetworkValue(node, nextValue);
-        }
-        if (['vless', 'vmess'].includes(node.type) && !allowedValues.includes('udp')) {
-            node.packet_encoding = '';
-        }
-        if (node.type === 'socks' && String(node.socks_version || '5') !== '5') {
-            node.socks_udp_over_tcp = false;
-            node.socks_udp_over_tcp_version = '2';
-        }
+        sanitizeNodeByCapabilities(node);
     };
 
     const onNodeTypeChange = (node) => {
-        if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) node.transport = '';
-        if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) {
-            node.path = '';
-            node.ws_host = '';
-            node.transport_headers_text = '';
-            node.transport_method = '';
-            node.transport_idle_timeout = '';
-            node.transport_ping_timeout = '';
-            node.transport_max_early_data = '';
-            node.transport_early_data_header_name = '';
-            node.transport_permit_without_stream = false;
-        }
         if (['tor', 'dns'].includes(node.type)) {
             node.server = '';
             node.port = 0;
         } else if (!node.port) {
             node.port = 443;
         }
-        if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(node.type) || !isNodeMultiplexSupported(node)) node.mux_enabled = false;
-        if (PROTO_TLS_DEFAULT_ON.includes(node.type)) node.tls = true;
-        else node.tls = false;
-        syncNodeNetworkConstraints(node);
+        node.tls = isNodeTlsDefaultOn(node);
+        sanitizeNodeByCapabilities(node);
     };
 
     const removeNode = (index) => {
@@ -4507,6 +4953,11 @@ function setupNodesModule(ctx) {
         isNodeTcpTlsContext,
         isNodeUtlsSupported,
         isNodeRealitySupported,
+        isNodeShadowtlsPasswordSupported,
+        isNodeTransportSectionVisible,
+        isNodeTransportFieldVisible,
+        getNodeResolvedTransport,
+        isNodeTransport,
         isNodeMultiplexSupported,
         isNodeQuicFieldSupported,
         isNodeTlsInsecureSupported,
@@ -4519,8 +4970,19 @@ function setupNodesModule(ctx) {
         nodeHasDetourOverride,
         nodeHasBindingOverride,
         isNodeDialFieldEffectivelyMuted,
+        getNodeAvailableTransportOptions,
         getNodeAvailableNetworkOptions,
         getNodeCurrentNetworkValue,
+        getNodeCapabilityIssues,
+        hasNodeCapabilityIssues,
+        getNodeCapabilityMessages,
+        getNodeCapabilityFieldMessages,
+        isNodeCapabilityFieldInvalid,
+        isNodeServerEndpointVisible,
+        getNodeDisplayEndpoint,
+        isNodeSharedSecretSectionVisible,
+        getNodeSharedSecretLabel,
+        isNodeCredentialSniVisible,
         setNodeCurrentNetworkValue,
         syncNodeNetworkConstraints,
         onNodeTypeChange,
@@ -6312,7 +6774,166 @@ const createInjectedComponent = (name, template) => ({
     },
     template,
 });
+window.__SINGBOX_BUNDLE__.createInjectedComponent = createInjectedComponent;
+})();
 
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
+const AdvancedTab = createInjectedComponent('AdvancedTab', `                <div v-show="currentTab==='advanced'" class="space-y-5">
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm" @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">Clash API + Web 面板</div>
+                                <span class="badge bg-orange-100 text-orange-700 border border-orange-200">Experimental</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="clashApi.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="clashApi.enabled" class="space-y-5">
+                            <div>
+                                <p class="text-sm font-bold text-gray-600 mb-3">选择前端控制面板</p>
+                                <div class="grid grid-cols-2 gap-3 mb-4">
+                                    <div v-for="p in panels" :key="p.id" @click="pickPanel(p)" class="panel-card" :class="{selected:clashApi.panel===p.id}">
+                                        <div class="flex items-center gap-3">
+                                            <i :class="p.icon" class="text-indigo-500 w-6 text-center text-lg"></i>
+                                            <div><div class="text-sm font-extrabold text-gray-800">{{ p.name }}</div><div class="text-[10px] text-gray-500 mt-1">{{ p.desc }}</div></div>
+                                        </div>
+                                    </div>
+                                    <div @click="pickPanel({id:'custom',url:''})" class="panel-card" :class="{selected:clashApi.panel==='custom'}">
+                                        <div class="flex items-center gap-3">
+                                            <i class="fas fa-code text-gray-400 w-6 text-center text-lg"></i>
+                                            <div><div class="text-sm font-extrabold text-gray-800">自定义 URL</div><div class="text-[10px] text-gray-500 mt-1">填写任意前端 ZIP 链接</div></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="clashApi.panel">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">external_ui_download_url</label>
+                                    <input v-model="clashApi.download_url" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label><input v-model="clashApi.external_controller" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密钥 (Secret)</label><input v-model="clashApi.secret" placeholder="可选" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地 external_ui 目录</label><input v-model="clashApi.external_ui" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">默认模式 (default_mode)</label>
+                                    <select v-model="clashApi.default_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
+                                        <option value="rule">rule（按规则分流）</option>
+                                        <option value="global">global（全部走代理）</option>
+                                        <option value="direct">direct（全部直连）</option>
+                                    </select>
+                                    <p class="text-[11px] text-gray-400 mt-1 leading-relaxed"><i class="fas fa-info-circle mr-1"></i>global / direct 需通过 <code class="bg-gray-100 px-1 rounded">clash_mode</code> 路由规则实现，配置文件会自动在路由最前端插入对应规则。</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-5 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.allow_lan" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">允许局域网设备访问 API</span></label>
+                            </div>
+                            <div v-if="clashApi.panel" class="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 shadow-sm">
+                                <p class="text-xs text-indigo-800 font-bold mb-2"><i class="fas fa-link mr-1"></i>面板在线访问地址快捷链接</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <a v-for="link in panelLinks" :key="link.name" :href="link.url" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-indigo-700 hover:text-white hover:bg-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors shadow-sm">
+                                        <i class="fas fa-external-link-alt mr-1"></i>{{ link.name }}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
+                        <div class="stitle mb-4">缓存配置 (Cache File) <span class="badge bg-orange-100 text-orange-700 border border-orange-200 ml-2">Experimental</span></div>
+                        <p class="text-xs text-gray-500 mb-3">用于持久化保存 FakeIP 等运行时缓存数据。</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">缓存文件路径 (path)</label>
+                                <input v-model="settings.cache_file_path" placeholder="/var/lib/sing-box/cache.db" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                            </div>
+                            <div class="flex flex-col justify-center gap-3 mt-1 md:mt-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="clashApi.store_fakeip" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm font-bold text-gray-700">保存 FakeIP 缓存 (store_fakeip)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" v-model="settings.store_rdrc" class="w-4 h-4 text-indigo-600 rounded">
+                                    <span class="text-sm font-bold text-gray-700">保存 Reject 缓存 (store_rdrc)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="stitle mb-0">NTP 时间同步</div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="ntp.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+                        <div v-if="ntp.enabled" class="space-y-4">
+                            <div class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                                NTP 通常只需要服务器、端口、同步间隔和出站；下方高级拨号项更偏多网卡、策略路由或 Linux 场景。
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 (Server)</label><input v-model="ntp.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口 (Port)</label><input type="number" v-model.number="ntp.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">同步间隔 (Interval)</label><input v-model="ntp.interval" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站 (Detour)</label>
+                                    <select v-model="ntp.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:bg-white focus:ring-1">
+                                        <option value="direct">direct</option>
+                                        <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <details class="group">
+                                <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
+                                    <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
+                                    <i class="fas fa-network-wired text-emerald-400 mr-0.5"></i>NTP 高级拨号选项
+                                    <span v-if="ntp.bind_interface||ntp.inet4_bind_address||ntp.inet6_bind_address||ntp.routing_mark||ntp.reuse_addr||ntp.netns||ntp.connect_timeout||ntp.tcp_fast_open||ntp.tcp_multi_path||ntp.udp_fragment||ntp.domain_resolver||ntp.network_strategy||ntp.network_type||ntp.fallback_network_type||ntp.fallback_delay||ntp.domain_strategy" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
+                                </summary>
+                                <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时 (Connect Timeout)</label>
+                                            <input v-model="ntp.connect_timeout" placeholder="5s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">限制连接 NTP 服务器的等待时间；这是最常用的高级项之一。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口 (Bind Interface)</label>
+                                            <input v-model="ntp.bind_interface" placeholder="eth0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">多网卡或策略路由场景更常见。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 绑定地址 (IPv4 Bind Address)</label>
+                                            <input v-model="ntp.inet4_bind_address" placeholder="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv4 出口地址。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 绑定地址 (IPv6 Bind Address)</label>
+                                            <input v-model="ntp.inet6_bind_address" placeholder="2001:db8::10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv6 出口地址。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 (Routing Mark)</label>
+                                            <input v-model="ntp.routing_mark" placeholder="255 / 0xff" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；用于 fwmark / policy routing。</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间 (NetNS)</label>
+                                            <input v-model="ntp.netns" placeholder="singbox" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；指定网络命名空间。</p>
+                                        </div>
+                                    </div>
+                                    <div class="pt-3 border-t border-gray-200 text-[10px] font-medium text-gray-500 bg-white rounded-lg px-3 py-2">
+                                        更偏平台依赖或低频场景的字段，如 <code>network_strategy</code>、<code>network_type</code>、<code>fallback_*</code>、<code>domain_resolver</code>、<code>domain_strategy</code>、<code>tcp_fast_open</code>、<code>tcp_multi_path</code>、<code>udp_fragment</code>，当前界面暂不突出展示。
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+`);
+window.__SINGBOX_BUNDLE__.AdvancedTab = AdvancedTab;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
 const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="currentTab==='dns'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                         <div class="stitle">基础设置</div>
@@ -6778,6 +7399,104 @@ const DnsTab = createInjectedComponent('DnsTab', `                <div v-show="c
                     </div>
                 </div>
 `);
+window.__SINGBOX_BUNDLE__.DnsTab = DnsTab;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
+const GroupsTab = createInjectedComponent('GroupsTab', `                <div v-show="currentTab==='groups'" class="space-y-5">
+                    <div class="sticky top-0 z-20 flex flex-wrap justify-between items-center gap-3 bg-white/95 backdrop-blur p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="text-base font-extrabold text-gray-800"><i class="fas fa-layer-group mr-2 text-indigo-500"></i>策略组管理</span>
+                            <span v-if="duplicateOutboundTags.length>0" class="badge bg-red-100 text-red-700 border border-red-200"><i class="fas fa-exclamation-triangle mr-1"></i>Tag 重名: {{ duplicateOutboundTags.join(', ') }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-3">
+                            <button @click="generateCountryGroups" class="text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-100 transition"><i class="fas fa-globe-asia mr-2"></i>自动生成地区组</button>
+                            <button @click="collapseAllGroups" class="text-sm font-bold bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition"><i class="fas fa-compress-alt mr-2"></i>一键折叠</button>
+                            <button @click="expandAllGroups" class="text-sm font-bold bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition"><i class="fas fa-expand-alt mr-2"></i>一键展开</button>
+                            <button @click="addGroup" class="text-sm font-bold bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 shadow-md transition"><i class="fas fa-plus mr-2"></i>新建策略组</button>
+                        </div>
+                    </div>
+                    
+                    <div v-for="(group,gIdx) in groups" :key="group.id" 
+                         @focusin.capture="queueJsonScrollToTarget('group', group, $event)"
+                         @input.capture="queueJsonScrollToTarget('group', group, $event)"
+                         @change.capture="queueJsonScrollToTarget('group', group, $event)"
+                         :data-group-card-id="group.id"
+                         :draggable="group.draggable || false"
+                         @dragstart="onGroupDragStart(gIdx, $event)"
+                         @dragenter.prevent="onGroupDragEnter(gIdx)"
+                         @dragover.prevent
+                         @drop="onGroupDrop(gIdx)"
+                         @dragend="onGroupDragEnd"
+                         :class="{
+                             'opacity-40 border-dashed border-indigo-400': draggedGroupIndex === gIdx,
+                             'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex > gIdx,
+                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex < gIdx,
+                             'ring-2 ring-indigo-200 border-indigo-300': highlightedGroupId === group.id
+                         }"
+                         class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative hover:border-indigo-300 transition-all">
+                        
+                        <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
+                            <button @click="toggleGroupCollapsed(gIdx)" class="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 w-7 h-7 flex justify-center items-center rounded-lg transition-colors" :title="group.collapsed ? '展开卡片' : '折叠卡片'">
+                                <i :class="group.collapsed ? 'fas fa-chevron-down text-sm' : 'fas fa-chevron-up text-sm'"></i>
+                            </button>
+                            <button @click="removeGroup(gIdx)" class="text-red-400 hover:text-white hover:bg-red-500 w-7 h-7 flex justify-center items-center rounded-lg transition-colors"><i class="fas fa-trash-alt text-sm"></i></button>
+                        </div>
+                        
+                        <div class="flex items-start gap-4 pr-20" :class="group.collapsed ? 'mb-1' : 'mb-4'">
+                            <div class="flex items-center justify-center shrink-0 w-8 h-8 cursor-move text-gray-400 hover:text-indigo-600 bg-gray-50 border border-gray-200 rounded-lg shadow-sm transition-colors mt-6" 
+                                 title="按住此处拖动排顺"
+                                 @mouseenter="group.draggable = true"
+                                 @mouseleave="group.draggable = false"
+                                 @mousedown="group.draggable = true"
+                                 @mouseup="group.draggable = false">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            
+                            <div class="flex-1 grid grid-cols-12 gap-3">
+                                <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">组名称</label><input type="text" data-group-name-input="true" :value="group.tag" @change="updateGroupTag(gIdx, $event.target.value)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:bg-white focus:ring-1"></div>
+                                <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">策略</label>
+                                    <select v-model="group.type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 outline-none focus:bg-white focus:ring-1">
+                                        <option value="selector">手动选择</option><option value="urltest">自动测速</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-4"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">正则过滤 (匹配节点名称)</label><input type="text" v-model="group.regex" placeholder="港|HK" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-emerald-600 font-mono focus:bg-white focus:ring-1"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="ml-12 flex flex-wrap items-center gap-2" :class="group.collapsed ? '' : 'mb-4'">
+                            <span class="badge bg-gray-100 text-gray-600 border border-gray-200">节点选择 {{ group.members.length }} 项</span>
+                            <span v-if="group.type==='urltest'" class="badge bg-blue-50 text-blue-700 border border-blue-200">自动测速组</span>
+                            <span v-if="group.collapsed" class="text-xs text-gray-400 font-semibold">下半部分已折叠</span>
+                        </div>
+
+                        <div v-if="!group.collapsed" class="ml-12 space-y-4">
+                            <div v-if="group.type==='urltest'" class="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">URL</label><input type="text" v-model="group.url" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">测速间隔</label><input type="text" v-model="group.interval" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">容差(ms)</label><input type="number" v-model.number="group.tolerance" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
+                            </div>
+                            <div class="border-t border-gray-100 pt-3">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">节点选择</label>
+                                <div class="flex flex-wrap gap-2">
+                                    <label v-for="tag in getAllPossibleMembers(group.tag)" :key="'m'+tag" class="inline-flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-white hover:border-indigo-300 transition-colors shadow-sm">
+                                        <input type="checkbox" :value="tag" v-model="group.members" class="w-3.5 h-3.5 text-indigo-600 rounded mr-2">
+                                        <span class="text-xs font-semibold text-gray-700">{{ tag }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+`);
+window.__SINGBOX_BUNDLE__.GroupsTab = GroupsTab;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
 const NodesTab = createInjectedComponent('NodesTab', `                <div v-show="currentTab==='nodes'" class="space-y-5">
                     <div class="bg-emerald-50/50 p-5 rounded-xl border border-emerald-200 shadow-sm">
                         <div class="flex items-center gap-2 mb-3">
@@ -6849,7 +7568,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                          :class="{
                              'opacity-40 border-dashed border-indigo-400': draggedNodeIndex === idx,
                              'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex > idx,
-                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex < idx
+                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex < idx,
+                             'border-rose-300': hasNodeCapabilityIssues(node)
                          }"
                          class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-all">
                         <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
@@ -6872,7 +7592,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <div v-if="node.collapsed" class="flex flex-wrap items-center gap-2 min-h-[42px]">
                                     <span class="text-sm font-extrabold text-gray-800">{{ node.tag || '未命名节点' }}</span>
                                     <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
-                                    <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                                    <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ getNodeDisplayEndpoint(node) }}</span>
+                                    <span v-if="hasNodeCapabilityIssues(node)" class="badge bg-rose-100 text-rose-700 border border-rose-200">{{ getNodeCapabilityMessages(node).length }} 项待修正</span>
                                 </div>
                                 <div v-else class="grid grid-cols-12 gap-3">
                                     <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">节点名称</label><input type="text" v-model="node.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-1 focus:bg-white"></div>
@@ -6906,9 +7627,17 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                             </optgroup>
                                         </select>
                                     </div>
-                                    <div v-if="!['tor','dns'].includes(node.type)" class="col-span-4 grid grid-cols-3 gap-2">
-                                        <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                                    <div v-if="isNodeServerEndpointVisible(node)" class="col-span-4 grid grid-cols-3 gap-2">
+                                        <div class="col-span-2">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label>
+                                            <input type="text" v-model="node.server" :class="isNodeCapabilityFieldInvalid(node, 'server') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-gray-50'" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono">
+                                            <p v-for="message in getNodeCapabilityFieldMessages(node, 'server')" :key="'server-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label>
+                                            <input type="number" v-model.number="node.port" :class="isNodeCapabilityFieldInvalid(node, 'port') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-gray-50'" class="w-full px-2 py-2 border rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono">
+                                            <p v-for="message in getNodeCapabilityFieldMessages(node, 'port')" :key="'port-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                                        </div>
                                     </div>
                                     <div v-else class="col-span-4 flex items-end justify-end">
                                         <div class="text-[10px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">当前协议不使用 server / port</div>
@@ -6919,28 +7648,49 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
 
                         <div v-if="!node.collapsed" class="ml-12 flex flex-wrap items-center gap-2 mb-3">
                             <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
-                            <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                            <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ getNodeDisplayEndpoint(node) }}</span>
+                            <span v-if="hasNodeCapabilityIssues(node)" class="badge bg-rose-100 text-rose-700 border border-rose-200">待修正 {{ getNodeCapabilityMessages(node).length }} 项</span>
+                        </div>
+
+                        <div v-if="!node.collapsed && hasNodeCapabilityIssues(node)" class="ml-12 mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                            <div class="text-[11px] font-bold text-rose-800"><i class="fas fa-exclamation-circle mr-1.5"></i>当前节点还有以下问题</div>
+                            <ul class="mt-2 space-y-1">
+                                <li v-for="message in getNodeCapabilityMessages(node)" :key="'node-issue-' + idx + '-' + message" class="text-[11px] text-rose-700">• {{ message }}</li>
+                            </ul>
                         </div>
 
                         <div v-if="!node.collapsed" class="ml-12">
 
-                        <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ ['vless','vmess','tuic'].includes(node.type)?'UUID':'密码 (Password)' }}</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                            <div v-show="isNodeTlsContext(node) && ['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
-                            <div v-show="isNodeTlsContext(node) && ['hysteria2','hysteria'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                        <div v-if="isNodeSharedSecretSectionVisible(node)" class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ getNodeSharedSecretLabel(node) }}</label>
+                                <input type="text" v-model="node.secret" :class="isNodeCapabilityFieldInvalid(node, 'secret') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-white'" class="w-full px-3 py-2 border rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                <p v-for="message in getNodeCapabilityFieldMessages(node, 'secret')" :key="'secret-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                            </div>
+                            <div v-show="isNodeCredentialSniVisible(node)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
                         </div>
 
                         <div v-if="node.type==='shadowsocks'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法</label>
                                 <select v-model="node.ss_method" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="none">none</option>
                                     <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+                                    <option value="xchacha20-ietf-poly1305">xchacha20-ietf-poly1305</option>
                                     <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="aes-192-gcm">aes-192-gcm</option>
                                     <option value="aes-256-gcm">aes-256-gcm</option>
                                     <option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm</option>
                                     <option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
                                     <option value="2022-blake3-chacha20-poly1305">2022-blake3-chacha20-poly1305</option>
+                                    <option value="aes-128-ctr">aes-128-ctr (legacy)</option>
+                                    <option value="aes-192-ctr">aes-192-ctr (legacy)</option>
+                                    <option value="aes-256-ctr">aes-256-ctr (legacy)</option>
                                     <option value="rc4-md5">rc4-md5 (不推荐)</option>
                                     <option value="aes-128-cfb">aes-128-cfb (不推荐)</option>
+                                    <option value="aes-192-cfb">aes-192-cfb (legacy)</option>
+                                    <option value="aes-256-cfb">aes-256-cfb (legacy)</option>
+                                    <option value="chacha20-ietf">chacha20-ietf (legacy)</option>
+                                    <option value="xchacha20">xchacha20 (legacy)</option>
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
@@ -7133,24 +7883,20 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
 
                         <!-- ShadowTLS -->
                         <div v-if="node.type==='shadowtls'" class="grid grid-cols-2 gap-3 mb-3">
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
-                                <input type="text" v-model="node.shadowtls_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                            </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本 (Version)</label>
                                 <select v-model="node.shadowtls_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="3">v3 (推荐)</option>
                                     <option value="2">v2</option>
                                     <option value="1">v1</option>
                                 </select>
+                                <p v-if="node.shadowtls_version==='1'" class="mt-1 text-[10px] font-medium text-gray-500">官方出站文档中，v1 没有 <code>password</code> 字段。</p>
                             </div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标服务器 (Handshake Server)</label>
-                                <input type="text" v-model="node.shadowtls_handshake_server" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
-                            </div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标端口</label>
-                                <input type="number" v-model.number="node.shadowtls_handshake_port" placeholder="443" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            <div v-if="isNodeShadowtlsPasswordSupported(node)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                <input type="text" v-model="node.shadowtls_password" :class="isNodeCapabilityFieldInvalid(node, 'shadowtls_password') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-white'" class="w-full px-3 py-2 border rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                <p v-for="message in getNodeCapabilityFieldMessages(node, 'shadowtls_password')" :key="'shadowtls-password-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
                             </div>
                             <div class="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1.5"></i><strong>ShadowTLS</strong> 是一个流量混淆协议，需套在其他代理协议（如 Shadowsocks）外层使用。<code class="bg-blue-100 px-1 rounded">server/port</code> 填写 ShadowTLS 服务器地址，<code class="bg-blue-100 px-1 rounded">handshake</code> 填写用于模仿握手的真实 TLS 站点。</p>
+                                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1.5"></i><strong>ShadowTLS</strong> 是一个流量混淆协议，需套在其他代理协议（如 Shadowsocks）外层使用。<code class="bg-blue-100 px-1 rounded">server/port</code> 填写 ShadowTLS 服务器地址；<code class="bg-blue-100 px-1 rounded">password</code> 仅适用于 v2 / v3 客户端。</p>
                             </div>
                         </div>
 
@@ -7264,22 +8010,15 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
+                        <div v-if="isNodeTransportSectionVisible(node)" class="mb-3">
                             <div class="grid grid-cols-3 gap-3 mb-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
                                     <select v-model="node.transport" @change="syncNodeNetworkConstraints(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
-                                        <option value="">TCP (默认)</option>
-                                        <option value="ws">WebSocket</option>
-                                        <option value="grpc">gRPC</option>
-                                        <option value="http">HTTP</option>
-                                        <option value="httpupgrade">HTTPUpgrade</option>
-                                        <option value="quic">QUIC</option>
+                                        <option v-for="item in getNodeAvailableTransportOptions(node)" :key="'transport-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
-                                <div v-if="['ws','http','httpupgrade'].includes(node.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input type="text" v-model="node.path" placeholder="/ws" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Service Name</label><input type="text" v-model="node.path" placeholder="grpc" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">WS Host Header</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP Host</label><input type="text" v-model="node.ws_host" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div v-if="isNodeTransportFieldVisible(node, 'path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ isNodeTransport(node, 'grpc') ? 'Service Name' : '路径 (Path)' }}</label><input type="text" v-model="node.path" :placeholder="isNodeTransport(node, 'grpc') ? 'grpc' : '/ws'" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div v-if="isNodeTransportFieldVisible(node, 'ws_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ isNodeTransport(node, 'http') ? 'HTTP Host' : 'WS Host Header' }}</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label>
                                     <select v-model="node.flow" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
                                         <option value="">不启用（默认）</option>
@@ -7287,32 +8026,32 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     </select>
                                 </div>
                             </div>
-                            <div v-if="['ws','http','httpupgrade'].includes(node.transport)" class="mt-2">
+                            <div v-if="isNodeTransportFieldVisible(node, 'transport_headers_text')" class="mt-2">
                                 <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层请求头 (Headers)</label>
                                 <textarea v-model="node.transport_headers_text" rows="3" placeholder="Host: example.com&#10;User-Agent: sing-box" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
                             </div>
-                            <div v-if="node.transport==='ws'" class="grid grid-cols-2 gap-3 mt-2">
+                            <div v-if="isNodeTransportFieldVisible(node, 'transport_max_early_data')" class="grid grid-cols-2 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大 Early Data</label><input type="number" v-model.number="node.transport_max_early_data" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Early Data Header</label><input type="text" v-model="node.transport_early_data_header_name" placeholder="Sec-WebSocket-Protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             </div>
-                            <div v-if="node.transport==='http'" class="grid grid-cols-3 gap-3 mt-2">
+                            <div v-if="isNodeTransport(node, 'http')" class="grid grid-cols-3 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><input type="text" v-model="node.transport_method" placeholder="PUT" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             </div>
-                            <div v-if="node.transport==='grpc'" class="grid grid-cols-3 gap-3 mt-2">
+                            <div v-if="isNodeTransport(node, 'grpc')" class="grid grid-cols-3 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Permit Without Stream</span></label></div>
                             </div>
                             <!-- network + packet_encoding 行 -->
                             <div class="grid grid-cols-3 gap-3 mt-2">
-                                <div v-if="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
+                                <div v-if="isNodeTransportFieldVisible(node, 'network')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
                                     <select v-model="node.network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                         <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'v2ray-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
-                                <div v-if="['vless','vmess'].includes(node.type) && node.network !== 'tcp'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
+                                <div v-if="isNodeTransportFieldVisible(node, 'packet_encoding')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
                                     <select v-model="node.packet_encoding" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-mono">
                                         <option value="xudp">xudp (默认，xray)</option>
                                         <option value="packetaddr">packetaddr (v2ray 5+)</option>
@@ -7641,92 +8380,12 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                     </div>
                 </div>
 `);
-const GroupsTab = createInjectedComponent('GroupsTab', `                <div v-show="currentTab==='groups'" class="space-y-5">
-                    <div class="sticky top-0 z-20 flex flex-wrap justify-between items-center gap-3 bg-white/95 backdrop-blur p-5 rounded-xl border border-gray-200 shadow-sm">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-base font-extrabold text-gray-800"><i class="fas fa-layer-group mr-2 text-indigo-500"></i>策略组管理</span>
-                            <span v-if="duplicateOutboundTags.length>0" class="badge bg-red-100 text-red-700 border border-red-200"><i class="fas fa-exclamation-triangle mr-1"></i>Tag 重名: {{ duplicateOutboundTags.join(', ') }}</span>
-                        </div>
-                        <div class="flex flex-wrap gap-3">
-                            <button @click="generateCountryGroups" class="text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-100 transition"><i class="fas fa-globe-asia mr-2"></i>自动生成地区组</button>
-                            <button @click="collapseAllGroups" class="text-sm font-bold bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition"><i class="fas fa-compress-alt mr-2"></i>一键折叠</button>
-                            <button @click="expandAllGroups" class="text-sm font-bold bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition"><i class="fas fa-expand-alt mr-2"></i>一键展开</button>
-                            <button @click="addGroup" class="text-sm font-bold bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 shadow-md transition"><i class="fas fa-plus mr-2"></i>新建策略组</button>
-                        </div>
-                    </div>
-                    
-                    <div v-for="(group,gIdx) in groups" :key="group.id" 
-                         @focusin.capture="queueJsonScrollToTarget('group', group, $event)"
-                         @input.capture="queueJsonScrollToTarget('group', group, $event)"
-                         @change.capture="queueJsonScrollToTarget('group', group, $event)"
-                         :data-group-card-id="group.id"
-                         :draggable="group.draggable || false"
-                         @dragstart="onGroupDragStart(gIdx, $event)"
-                         @dragenter.prevent="onGroupDragEnter(gIdx)"
-                         @dragover.prevent
-                         @drop="onGroupDrop(gIdx)"
-                         @dragend="onGroupDragEnd"
-                         :class="{
-                             'opacity-40 border-dashed border-indigo-400': draggedGroupIndex === gIdx,
-                             'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex > gIdx,
-                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverGroupIndex === gIdx && draggedGroupIndex < gIdx,
-                             'ring-2 ring-indigo-200 border-indigo-300': highlightedGroupId === group.id
-                         }"
-                         class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative hover:border-indigo-300 transition-all">
-                        
-                        <div class="absolute top-4 right-4 flex items-center gap-2 z-20">
-                            <button @click="toggleGroupCollapsed(gIdx)" class="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 w-7 h-7 flex justify-center items-center rounded-lg transition-colors" :title="group.collapsed ? '展开卡片' : '折叠卡片'">
-                                <i :class="group.collapsed ? 'fas fa-chevron-down text-sm' : 'fas fa-chevron-up text-sm'"></i>
-                            </button>
-                            <button @click="removeGroup(gIdx)" class="text-red-400 hover:text-white hover:bg-red-500 w-7 h-7 flex justify-center items-center rounded-lg transition-colors"><i class="fas fa-trash-alt text-sm"></i></button>
-                        </div>
-                        
-                        <div class="flex items-start gap-4 pr-20" :class="group.collapsed ? 'mb-1' : 'mb-4'">
-                            <div class="flex items-center justify-center shrink-0 w-8 h-8 cursor-move text-gray-400 hover:text-indigo-600 bg-gray-50 border border-gray-200 rounded-lg shadow-sm transition-colors mt-6" 
-                                 title="按住此处拖动排顺"
-                                 @mouseenter="group.draggable = true"
-                                 @mouseleave="group.draggable = false"
-                                 @mousedown="group.draggable = true"
-                                 @mouseup="group.draggable = false">
-                                <i class="fas fa-grip-vertical"></i>
-                            </div>
-                            
-                            <div class="flex-1 grid grid-cols-12 gap-3">
-                                <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">组名称</label><input type="text" data-group-name-input="true" :value="group.tag" @change="updateGroupTag(gIdx, $event.target.value)" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:bg-white focus:ring-1"></div>
-                                <div class="col-span-3"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">策略</label>
-                                    <select v-model="group.type" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-gray-700 outline-none focus:bg-white focus:ring-1">
-                                        <option value="selector">手动选择</option><option value="urltest">自动测速</option>
-                                    </select>
-                                </div>
-                                <div class="col-span-4"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1.5 tracking-wider">正则过滤 (匹配节点名称)</label><input type="text" v-model="group.regex" placeholder="港|HK" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-emerald-600 font-mono focus:bg-white focus:ring-1"></div>
-                            </div>
-                        </div>
-                        
-                        <div class="ml-12 flex flex-wrap items-center gap-2" :class="group.collapsed ? '' : 'mb-4'">
-                            <span class="badge bg-gray-100 text-gray-600 border border-gray-200">节点选择 {{ group.members.length }} 项</span>
-                            <span v-if="group.type==='urltest'" class="badge bg-blue-50 text-blue-700 border border-blue-200">自动测速组</span>
-                            <span v-if="group.collapsed" class="text-xs text-gray-400 font-semibold">下半部分已折叠</span>
-                        </div>
+window.__SINGBOX_BUNDLE__.NodesTab = NodesTab;
+})();
 
-                        <div v-if="!group.collapsed" class="ml-12 space-y-4">
-                            <div v-if="group.type==='urltest'" class="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">URL</label><input type="text" v-model="group.url" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs outline-none font-mono"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">测速间隔</label><input type="text" v-model="group.interval" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">容差(ms)</label><input type="number" v-model.number="group.tolerance" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm outline-none"></div>
-                            </div>
-                            <div class="border-t border-gray-100 pt-3">
-                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-wider">节点选择</label>
-                                <div class="flex flex-wrap gap-2">
-                                    <label v-for="tag in getAllPossibleMembers(group.tag)" :key="'m'+tag" class="inline-flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-white hover:border-indigo-300 transition-colors shadow-sm">
-                                        <input type="checkbox" :value="tag" v-model="group.members" class="w-3.5 h-3.5 text-indigo-600 rounded mr-2">
-                                        <span class="text-xs font-semibold text-gray-700">{{ tag }}</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-`);
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
 const RulesTab = createInjectedComponent('RulesTab', `                <div v-show="currentTab==='rules'" class="space-y-5">
                     
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -8261,6 +8920,187 @@ const RulesTab = createInjectedComponent('RulesTab', `                <div v-sho
                     </div>
                 </div>
 `);
+window.__SINGBOX_BUNDLE__.RulesTab = RulesTab;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
+const TproxyTab = createInjectedComponent('TproxyTab', `                <div v-show="currentTab==='tproxy'" class="space-y-5">
+
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                            <div class="flex items-center gap-2">
+                                <div class="stitle mb-0">TProxy 透明代理</div>
+                                <span class="badge bg-blue-100 text-blue-700 border border-blue-200">Linux 专用</span>
+                            </div>
+                            <label class="toggle-switch"><input type="checkbox" v-model="tproxy.enabled"><span class="toggle-slider"></span></label>
+                        </div>
+
+                        <div v-if="!tproxy.enabled" class="text-center py-8 text-gray-400">
+                            <i class="fas fa-network-wired text-4xl mb-3 block text-gray-300"></i>
+                            <p class="text-sm font-semibold">开启后将在 sing-box 配置中生成 tproxy inbound</p>
+                            <p class="text-xs mt-1">并在下方生成对应的 NFTables 规则文件</p>
+                        </div>
+
+                        <div v-if="tproxy.enabled" class="space-y-5">
+                            <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 font-medium leading-relaxed">
+                                <i class="fas fa-info-circle mr-1.5"></i>
+                                TProxy 模式需要 sing-box 以 <code class="bg-blue-100 px-1 rounded">root</code> 或具备 <code class="bg-blue-100 px-1 rounded">CAP_NET_ADMIN</code> 权限的用户运行，并配合 NFTables + 策略路由使用。
+                                内核需支持 <code class="bg-blue-100 px-1 rounded">CONFIG_NETFILTER_XT_TARGET_TPROXY</code>。
+                            </div>
+
+                            <div v-if="tproxyConflicts.length > 0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                                <p class="text-xs font-extrabold text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>检测到 {{ tproxyConflicts.length }} 个配置冲突</p>
+                                <div v-for="c in tproxyConflicts" :key="c.key" class="flex items-center justify-between py-1.5 border-b border-red-200 last:border-0">
+                                    <span class="text-xs text-red-700 font-semibold">{{ c.label }}</span>
+                                    <button @click="c.fix()" class="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition shrink-0 ml-3">{{ c.fixLabel }}</button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TProxy 监听端口</label>
+                                    <input type="number" v-model.number="tproxy.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">NFTables 表名</label>
+                                    <input type="text" v-model="tproxy.nft_table" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Mark (hex/dec) <span class="normal-case font-normal text-gray-300">代理流量</span></label>
+                                    <input type="text" v-model="tproxy.mark" @blur="sanitizeTproxyMarks" placeholder="111" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Route Mark (hex/dec) <span class="normal-case font-normal text-gray-300">自身出站</span></label>
+                                    <input type="text" v-model="tproxy.route_mark" @blur="sanitizeTproxyMarks" placeholder="112" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">sing-box 自身出站流量标记，不触发策略路由，需与 proxy mark 不同</p>
+                                </div>
+                                
+                                <div class="col-span-2">
+                                    <div v-if="tproxyMarkIssues.length>0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                                        <p class="text-xs font-black text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>Mark 参数检查</p>
+                                        <ul class="list-disc pl-5 text-[11px] text-red-700 leading-6">
+                                            <li v-for="(msg, midx) in tproxyMarkIssues" :key="'mk-'+midx">{{ msg }}</li>
+                                        </ul>
+                                        <button @click="resetTproxyMarksSafe" class="mt-2 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition">
+                                            一键恢复 111 / 112
+                                        </button>
+                                    </div>
+                                    <div v-else class="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2">
+                                        <p class="text-[11px] text-emerald-700 font-semibold"><i class="fas fa-check-circle mr-1.5"></i>Mark 检查通过。避免使用保留值 0/253/254/255，且 Mark 与 Route Mark 不可相同。</p>
+                                    </div>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box UID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
+                                    <input type="text" v-model="tproxy.proxy_uid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_uid ? 'border-amber-300' : 'border-gray-300'">
+                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -u sing-box</code>（无需 sing-box 运行，仅需系统存在该用户）</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box GID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
+                                    <input type="text" v-model="tproxy.proxy_gid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_gid ? 'border-amber-300' : 'border-gray-300'">
+                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -g sing-box</code>（无需 sing-box 运行，仅需系统存在该用户组）</p>
+                                    <p v-if="!tproxy.proxy_uid || !tproxy.proxy_gid" class="text-[10px] text-amber-600 mt-1 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>未填写时将使用 oifname lo 兜底防回环，需确保已开启 auto_detect_interface，否则仍可能出现 DNS 死循环</p>
+                                    <p v-else class="text-[10px] text-emerald-600 mt-1"><i class="fas fa-check-circle mr-1"></i>已启用 skuid/skgid 精准防回环</p>
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">DNS 接管方式</label>
+                                    <select v-model="tproxy.dns_hijack_mode" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                        <option value="tproxy">53 直接进入 TProxy（推荐）</option>
+                                        <option value="nat">NAT DNAT 到 dns-in（兼容旧方案）</option>
+                                    </select>
+                                    <p class="text-[10px] text-gray-400 mt-1">
+                                        {{ tproxy.dns_hijack_mode === 'nat'
+                                            ? '将生成 dns-in + DNS NAT 规则（53 -> dns-in 端口）'
+                                            : '不生成 DNS NAT，53 端口直接进入 tproxy-in' }}
+                                    </p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">入站接口</label>
+                                    <input type="text" v-model.trim="tproxy.ingress_iface" placeholder="br-lan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅处理来自此接口的入站/转发流量。留空则处理所有入站接口。路由常见为 br-lan，单网卡主机可留空或填写实际网卡名，比如 eth0。</p>
+                                </div>
+                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出口接口</label>
+                                    <input type="text" v-model.trim="tproxy.egress_iface" placeholder="pppoe-wan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅对最终从此接口发出的本机流量应用 output 标记。留空表示不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、VPN、隧道等虚拟接口。通常建议填写实际的物理/WAN 出口接口，如 pppoe-wan、eth0、enp1s0。</p>
+                                </div>
+
+                                <div v-if="!tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                                    <span class="font-semibold">出口接口未填写：</span>当前将不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、WireGuard、Tailscale、OpenVPN 等虚拟/隧道接口。通常建议填写实际的 WAN/物理出口接口，如 <code class="font-mono">pppoe-wan</code>、<code class="font-mono">eth0</code>、<code class="font-mono">enp1s0</code>。
+                                </div>
+                                <div v-if="tproxy.ingress_iface.trim() && tproxy.egress_iface.trim() && tproxy.ingress_iface.trim() === tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800">
+                                    <span class="font-semibold">单网卡场景提示：</span>当前入站接口与出口接口相同，通常见于单网卡主机、VPS 或仅代理本机流量的部署，属于正常配置。生成器会自动保留 <code class="font-mono">lo</code> 回注路径，确保本机 output 流量经策略路由回注后仍可进入 TProxy。若部署在软路由上，通常应改为“入站接口 = LAN/bridge（如 <code class="font-mono">br-lan</code>），出口接口 = WAN/默认路由接口（如 <code class="font-mono">pppoe-wan</code> / <code class="font-mono">eth0</code>）”。
+                                </div>
+                                <div v-if="tproxy.dns_hijack_mode === 'nat'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box DNS 入站端口 <span class="text-indigo-400 normal-case font-normal">(dns-in)</span></label>
+                                    <input type="number" v-model.number="tproxy.dns_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
+                                    <p class="text-[10px] text-gray-400 mt-1">仅 NAT 模式使用：nft 将 53 DNAT 到该端口</p>
+                                </div>
+                            </div>
+                            <label class="flex items-center gap-3 cursor-pointer px-4 py-3 mt-4 rounded-xl border transition-colors"
+                                   :class="settings.auto_detect_interface ? 'bg-teal-50 border-teal-200 hover:border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-teal-300'">
+                                <input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-teal-600 rounded shrink-0">
+                                <div class="flex-1">
+                                    <span class="block text-sm font-extrabold"
+                                          :class="settings.auto_detect_interface ? 'text-teal-800' : 'text-gray-700'">
+                                        自动检测出口接口 (auto_detect_interface)
+                                    </span>
+                                    <span class="block text-xs mt-0.5 text-gray-400">
+                                        TProxy 防环路的主要机制：开启后 sing-box 出站连接自动绑定物理网卡，不走策略路由表，避免代理流量被再次拦截。<strong class="text-teal-700">TProxy 模式下必须开启。</strong>
+                                    </span>
+                                </div>
+                            </label>
+                            <div class="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
+                                    <input type="checkbox" v-model="tproxy.bypass_private" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">绕过私有地址</span><span class="block text-xs text-gray-400">10.x / 192.168.x / 127.x 等直连</span></div>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
+                                    <input type="checkbox" v-model="tproxy.ipv6" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">启用 IPv6 规则</span><span class="block text-xs text-gray-400">生成对应 ip6 规则链</span></div>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition col-span-2">
+                                    <input type="checkbox" v-model="tproxy.udp_fragment" class="w-4 h-4 text-blue-600 rounded">
+                                    <div><span class="block text-sm font-bold text-gray-700">启用 UDP 分片 <code class="text-[11px] font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 ml-1">udp_fragment</code></span><span class="block text-xs text-gray-400">QUIC / Hysteria2 / TUIC 等基于 UDP 的协议必须开启，否则大包传输会丢失</span></div>
+                                </label>
+                            </div>
+
+                            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                <p class="text-xs font-black text-amber-800 mb-2"><i class="fas fa-terminal mr-1.5"></i>策略路由（加载 NFT 规则后在 Shell 中执行）</p>
+                                <pre class="text-xs font-mono text-amber-900 bg-amber-100 rounded-lg p-3 select-all leading-relaxed">ip rule add fwmark {{ tproxy.mark || '111' }} lookup {{ tproxy.mark || '111' }}
+ip route add local 0.0.0.0/0 dev lo table {{ tproxy.mark || '111' }}{{ tproxy.ipv6 ? '\\nip -6 rule add fwmark ' + (tproxy.mark||'111') + ' lookup ' + (tproxy.mark||'111') + '\\nip -6 route add local ::/0 dev lo table ' + (tproxy.mark||'111') : '' }}</pre>
+                                <p class="text-[10px] text-amber-700 mt-2">这两条命令在重启后失效，建议写入 <code>/etc/network/interfaces</code> 或 systemd 服务。路由表号与 fwmark 值保持一致，方便排查。</p>
+                            </div>
+                            <div v-if="tproxy.dns_hijack_mode==='tproxy' && settings.hijack_dns" class="mt-4 bg-rose-50 border-2 border-rose-300 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs font-black text-rose-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>DNS 53 直接进入 tproxy-in：注意事项</p>
+                                <ul class="text-[11px] text-rose-700 leading-6 list-disc pl-5">
+                                    <li>sing-box 需具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_BIND_SERVICE</code>（建议同时具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_ADMIN</code> / <code class="bg-rose-100 px-1 rounded">CAP_NET_RAW</code>）。</li>
+                                    <li>开启示例：<code class="bg-rose-100 px-1 rounded">sudo systemctl edit sing-box</code>，在 <code class="bg-rose-100 px-1 rounded">[Service]</code> 中添加 <code class="bg-rose-100 px-1 rounded">AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code> 与 <code class="bg-rose-100 px-1 rounded">CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code>，然后执行 <code class="bg-rose-100 px-1 rounded">sudo systemctl daemon-reload && sudo systemctl restart sing-box</code>。</li>
+                                    <li>建议开启 <code class="bg-rose-100 px-1 rounded">net.ipv4.ip_nonlocal_bind=1</code>（如使用 IPv6 同时开启 <code class="bg-rose-100 px-1 rounded">net.ipv6.ip_nonlocal_bind=1</code>）。</li>
+                                    <li>必须执行上方 fwmark 策略路由命令，且 mark/table 与 NFT、sing-box 保持一致。</li>
+                                    <li>此模式不会生成 <code class="bg-rose-100 px-1 rounded">dns-in</code> 与 DNS NAT 规则，请勿再手动追加 DNAT 53。</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="tproxy.enabled" class="bg-[#1e1e1e] rounded-xl border border-gray-700 overflow-hidden shadow-xl">
+                        <div class="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b border-[#3d3d3d]">
+                            <span class="text-gray-200 font-mono text-sm font-bold"><i class="fas fa-file-code mr-2 text-blue-400"></i>{{ tproxy.nft_table || 'singbox' }}.nft</span>
+                            <div class="flex gap-2">
+                                <button @click="copyNft" class="text-xs bg-[#3d3d3d] hover:bg-indigo-600 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
+                                    <i :class="nftCopyIcon"></i>{{ nftCopyText }}
+                                </button>
+                                <button @click="downloadNft" class="text-xs bg-[#3d3d3d] hover:bg-emerald-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
+                                    <i class="fas fa-download"></i>下载 .nft
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-y-auto max-h-[480px] dark-scroll">
+                            <pre class="p-5 text-[12px] font-mono leading-relaxed text-[#9cdcfe] whitespace-pre-wrap break-words">{{ generatedNft }}</pre>
+                        </div>
+                    </div>
+
+                </div>
+`);
+window.__SINGBOX_BUNDLE__.TproxyTab = TproxyTab;
+})();
+
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { createInjectedComponent } = window.__SINGBOX_BUNDLE__;
 const TunTab = createInjectedComponent('TunTab', `                <div v-show="currentTab==='tun'" class="space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm" @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'tun-in' }, $event)">
                         <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
@@ -8434,324 +9274,12 @@ const TunTab = createInjectedComponent('TunTab', `                <div v-show="c
                     </div>
                 </div>
 `);
-const AdvancedTab = createInjectedComponent('AdvancedTab', `                <div v-show="currentTab==='advanced'" class="space-y-5">
+window.__SINGBOX_BUNDLE__.TunTab = TunTab;
+})();
 
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm" @focusin.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @input.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)" @change.capture="queueJsonScrollToTarget('inbound', { tag: 'tproxy-in' }, $event)">
-                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-                            <div class="flex items-center gap-2">
-                                <div class="stitle mb-0">Clash API + Web 面板</div>
-                                <span class="badge bg-orange-100 text-orange-700 border border-orange-200">Experimental</span>
-                            </div>
-                            <label class="toggle-switch"><input type="checkbox" v-model="clashApi.enabled"><span class="toggle-slider"></span></label>
-                        </div>
-                        <div v-if="clashApi.enabled" class="space-y-5">
-                            <div>
-                                <p class="text-sm font-bold text-gray-600 mb-3">选择前端控制面板</p>
-                                <div class="grid grid-cols-2 gap-3 mb-4">
-                                    <div v-for="p in panels" :key="p.id" @click="pickPanel(p)" class="panel-card" :class="{selected:clashApi.panel===p.id}">
-                                        <div class="flex items-center gap-3">
-                                            <i :class="p.icon" class="text-indigo-500 w-6 text-center text-lg"></i>
-                                            <div><div class="text-sm font-extrabold text-gray-800">{{ p.name }}</div><div class="text-[10px] text-gray-500 mt-1">{{ p.desc }}</div></div>
-                                        </div>
-                                    </div>
-                                    <div @click="pickPanel({id:'custom',url:''})" class="panel-card" :class="{selected:clashApi.panel==='custom'}">
-                                        <div class="flex items-center gap-3">
-                                            <i class="fas fa-code text-gray-400 w-6 text-center text-lg"></i>
-                                            <div><div class="text-sm font-extrabold text-gray-800">自定义 URL</div><div class="text-[10px] text-gray-500 mt-1">填写任意前端 ZIP 链接</div></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-if="clashApi.panel">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">external_ui_download_url</label>
-                                    <input v-model="clashApi.download_url" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-xs outline-none font-mono focus:bg-white focus:ring-1">
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">监听地址</label><input v-model="clashApi.external_controller" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密钥 (Secret)</label><input v-model="clashApi.secret" placeholder="可选" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">本地 external_ui 目录</label><input v-model="clashApi.external_ui" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">默认模式 (default_mode)</label>
-                                    <select v-model="clashApi.default_mode" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1">
-                                        <option value="rule">rule（按规则分流）</option>
-                                        <option value="global">global（全部走代理）</option>
-                                        <option value="direct">direct（全部直连）</option>
-                                    </select>
-                                    <p class="text-[11px] text-gray-400 mt-1 leading-relaxed"><i class="fas fa-info-circle mr-1"></i>global / direct 需通过 <code class="bg-gray-100 px-1 rounded">clash_mode</code> 路由规则实现，配置文件会自动在路由最前端插入对应规则。</p>
-                                </div>
-                            </div>
-                            <div class="flex flex-wrap gap-5 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="clashApi.allow_lan" class="w-4 h-4 text-orange-600 rounded"><span class="text-sm font-bold text-gray-700">允许局域网设备访问 API</span></label>
-                            </div>
-                            <div v-if="clashApi.panel" class="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 shadow-sm">
-                                <p class="text-xs text-indigo-800 font-bold mb-2"><i class="fas fa-link mr-1"></i>面板在线访问地址快捷链接</p>
-                                <div class="flex flex-wrap gap-2">
-                                    <a v-for="link in panelLinks" :key="link.name" :href="link.url" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-indigo-700 hover:text-white hover:bg-indigo-600 bg-white px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors shadow-sm">
-                                        <i class="fas fa-external-link-alt mr-1"></i>{{ link.name }}
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
-                        <div class="stitle mb-4">缓存配置 (Cache File) <span class="badge bg-orange-100 text-orange-700 border border-orange-200 ml-2">Experimental</span></div>
-                        <p class="text-xs text-gray-500 mb-3">用于持久化保存 FakeIP 等运行时缓存数据。</p>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">缓存文件路径 (path)</label>
-                                <input v-model="settings.cache_file_path" placeholder="/var/lib/sing-box/cache.db" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                            </div>
-                            <div class="flex flex-col justify-center gap-3 mt-1 md:mt-4">
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" v-model="clashApi.store_fakeip" class="w-4 h-4 text-indigo-600 rounded">
-                                    <span class="text-sm font-bold text-gray-700">保存 FakeIP 缓存 (store_fakeip)</span>
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" v-model="settings.store_rdrc" class="w-4 h-4 text-indigo-600 rounded">
-                                    <span class="text-sm font-bold text-gray-700">保存 Reject 缓存 (store_rdrc)</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm mt-5">
-                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-                            <div class="stitle mb-0">NTP 时间同步</div>
-                            <label class="toggle-switch"><input type="checkbox" v-model="ntp.enabled"><span class="toggle-slider"></span></label>
-                        </div>
-                        <div v-if="ntp.enabled" class="space-y-4">
-                            <div class="text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                                NTP 通常只需要服务器、端口、同步间隔和出站；下方高级拨号项更偏多网卡、策略路由或 Linux 场景。
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 (Server)</label><input v-model="ntp.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口 (Port)</label><input type="number" v-model.number="ntp.server_port" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">同步间隔 (Interval)</label><input v-model="ntp.interval" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:bg-white focus:ring-1"></div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出站 (Detour)</label>
-                                    <select v-model="ntp.detour" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none font-bold text-gray-700 focus:bg-white focus:ring-1">
-                                        <option value="direct">direct</option>
-                                        <option v-for="tag in availableOutboundTags" :value="tag">{{ tag }}</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <details class="group">
-                                <summary class="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors text-xs font-bold text-gray-500">
-                                    <i class="fas fa-chevron-right group-open:rotate-90 transition-transform text-[10px]"></i>
-                                    <i class="fas fa-network-wired text-emerald-400 mr-0.5"></i>NTP 高级拨号选项
-                                    <span v-if="ntp.bind_interface||ntp.inet4_bind_address||ntp.inet6_bind_address||ntp.routing_mark||ntp.reuse_addr||ntp.netns||ntp.connect_timeout||ntp.tcp_fast_open||ntp.tcp_multi_path||ntp.udp_fragment||ntp.domain_resolver||ntp.network_strategy||ntp.network_type||ntp.fallback_network_type||ntp.fallback_delay||ntp.domain_strategy" class="ml-auto badge bg-emerald-100 text-emerald-700 border border-emerald-200">已配置</span>
-                                </summary>
-                                <div class="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">连接超时 (Connect Timeout)</label>
-                                            <input v-model="ntp.connect_timeout" placeholder="5s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-gray-500">限制连接 NTP 服务器的等待时间；这是最常用的高级项之一。</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">绑定接口 (Bind Interface)</label>
-                                            <input v-model="ntp.bind_interface" placeholder="eth0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-gray-500">多网卡或策略路由场景更常见。</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv4 绑定地址 (IPv4 Bind Address)</label>
-                                            <input v-model="ntp.inet4_bind_address" placeholder="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv4 出口地址。</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">IPv6 绑定地址 (IPv6 Bind Address)</label>
-                                            <input v-model="ntp.inet6_bind_address" placeholder="2001:db8::10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-gray-500">显式绑定本地 IPv6 出口地址。</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 (Routing Mark)</label>
-                                            <input v-model="ntp.routing_mark" placeholder="255 / 0xff" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；用于 fwmark / policy routing。</p>
-                                        </div>
-                                        <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络命名空间 (NetNS)</label>
-                                            <input v-model="ntp.netns" placeholder="singbox" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                                            <p class="mt-1 text-[10px] font-medium text-amber-700">Linux only；指定网络命名空间。</p>
-                                        </div>
-                                    </div>
-                                    <div class="pt-3 border-t border-gray-200 text-[10px] font-medium text-gray-500 bg-white rounded-lg px-3 py-2">
-                                        更偏平台依赖或低频场景的字段，如 <code>network_strategy</code>、<code>network_type</code>、<code>fallback_*</code>、<code>domain_resolver</code>、<code>domain_strategy</code>、<code>tcp_fast_open</code>、<code>tcp_multi_path</code>、<code>udp_fragment</code>，当前界面暂不突出展示。
-                                    </div>
-                                </div>
-                            </details>
-                        </div>
-                    </div>
-                </div>
-`);
-const TproxyTab = createInjectedComponent('TproxyTab', `                <div v-show="currentTab==='tproxy'" class="space-y-5">
-
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-                        <div class="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-                            <div class="flex items-center gap-2">
-                                <div class="stitle mb-0">TProxy 透明代理</div>
-                                <span class="badge bg-blue-100 text-blue-700 border border-blue-200">Linux 专用</span>
-                            </div>
-                            <label class="toggle-switch"><input type="checkbox" v-model="tproxy.enabled"><span class="toggle-slider"></span></label>
-                        </div>
-
-                        <div v-if="!tproxy.enabled" class="text-center py-8 text-gray-400">
-                            <i class="fas fa-network-wired text-4xl mb-3 block text-gray-300"></i>
-                            <p class="text-sm font-semibold">开启后将在 sing-box 配置中生成 tproxy inbound</p>
-                            <p class="text-xs mt-1">并在下方生成对应的 NFTables 规则文件</p>
-                        </div>
-
-                        <div v-if="tproxy.enabled" class="space-y-5">
-                            <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 font-medium leading-relaxed">
-                                <i class="fas fa-info-circle mr-1.5"></i>
-                                TProxy 模式需要 sing-box 以 <code class="bg-blue-100 px-1 rounded">root</code> 或具备 <code class="bg-blue-100 px-1 rounded">CAP_NET_ADMIN</code> 权限的用户运行，并配合 NFTables + 策略路由使用。
-                                内核需支持 <code class="bg-blue-100 px-1 rounded">CONFIG_NETFILTER_XT_TARGET_TPROXY</code>。
-                            </div>
-
-                            <div v-if="tproxyConflicts.length > 0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
-                                <p class="text-xs font-extrabold text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>检测到 {{ tproxyConflicts.length }} 个配置冲突</p>
-                                <div v-for="c in tproxyConflicts" :key="c.key" class="flex items-center justify-between py-1.5 border-b border-red-200 last:border-0">
-                                    <span class="text-xs text-red-700 font-semibold">{{ c.label }}</span>
-                                    <button @click="c.fix()" class="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition shrink-0 ml-3">{{ c.fixLabel }}</button>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-4">
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">TProxy 监听端口</label>
-                                    <input type="number" v-model.number="tproxy.listen_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">NFTables 表名</label>
-                                    <input type="text" v-model="tproxy.nft_table" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Mark (hex/dec) <span class="normal-case font-normal text-gray-300">代理流量</span></label>
-                                    <input type="text" v-model="tproxy.mark" @blur="sanitizeTproxyMarks" placeholder="111" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路由标记 Route Mark (hex/dec) <span class="normal-case font-normal text-gray-300">自身出站</span></label>
-                                    <input type="text" v-model="tproxy.route_mark" @blur="sanitizeTproxyMarks" placeholder="112" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">sing-box 自身出站流量标记，不触发策略路由，需与 proxy mark 不同</p>
-                                </div>
-                                
-                                <div class="col-span-2">
-                                    <div v-if="tproxyMarkIssues.length>0" class="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
-                                        <p class="text-xs font-black text-red-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>Mark 参数检查</p>
-                                        <ul class="list-disc pl-5 text-[11px] text-red-700 leading-6">
-                                            <li v-for="(msg, midx) in tproxyMarkIssues" :key="'mk-'+midx">{{ msg }}</li>
-                                        </ul>
-                                        <button @click="resetTproxyMarksSafe" class="mt-2 text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition">
-                                            一键恢复 111 / 112
-                                        </button>
-                                    </div>
-                                    <div v-else class="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2">
-                                        <p class="text-[11px] text-emerald-700 font-semibold"><i class="fas fa-check-circle mr-1.5"></i>Mark 检查通过。避免使用保留值 0/253/254/255，且 Mark 与 Route Mark 不可相同。</p>
-                                    </div>
-                                </div>
-<div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box UID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
-                                    <input type="text" v-model="tproxy.proxy_uid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_uid ? 'border-amber-300' : 'border-gray-300'">
-                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -u sing-box</code>（无需 sing-box 运行，仅需系统存在该用户）</p>
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box GID <span class="normal-case font-normal text-red-400">★ 强烈建议填写，防 DNS 死循环</span></label>
-                                    <input type="text" v-model="tproxy.proxy_gid" placeholder="用 id sing-box 查看" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1" :class="!tproxy.proxy_gid ? 'border-amber-300' : 'border-gray-300'">
-                                    <p class="text-[10px] text-indigo-700 mt-1 font-bold"><i class="fas fa-info-circle mr-1"></i>建议命令：<code class="bg-indigo-50 px-1 rounded">id -g sing-box</code>（无需 sing-box 运行，仅需系统存在该用户组）</p>
-                                    <p v-if="!tproxy.proxy_uid || !tproxy.proxy_gid" class="text-[10px] text-amber-600 mt-1 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>未填写时将使用 oifname lo 兜底防回环，需确保已开启 auto_detect_interface，否则仍可能出现 DNS 死循环</p>
-                                    <p v-else class="text-[10px] text-emerald-600 mt-1"><i class="fas fa-check-circle mr-1"></i>已启用 skuid/skgid 精准防回环</p>
-                                </div>
-                                <div class="col-span-2">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">DNS 接管方式</label>
-                                    <select v-model="tproxy.dns_hijack_mode" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                        <option value="tproxy">53 直接进入 TProxy（推荐）</option>
-                                        <option value="nat">NAT DNAT 到 dns-in（兼容旧方案）</option>
-                                    </select>
-                                    <p class="text-[10px] text-gray-400 mt-1">
-                                        {{ tproxy.dns_hijack_mode === 'nat'
-                                            ? '将生成 dns-in + DNS NAT 规则（53 -> dns-in 端口）'
-                                            : '不生成 DNS NAT，53 端口直接进入 tproxy-in' }}
-                                    </p>
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">入站接口</label>
-                                    <input type="text" v-model.trim="tproxy.ingress_iface" placeholder="br-lan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">仅处理来自此接口的入站/转发流量。留空则处理所有入站接口。路由常见为 br-lan，单网卡主机可留空或填写实际网卡名，比如 eth0。</p>
-                                </div>
-                                <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">出口接口</label>
-                                    <input type="text" v-model.trim="tproxy.egress_iface" placeholder="pppoe-wan / eth0" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">仅对最终从此接口发出的本机流量应用 output 标记。留空表示不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、VPN、隧道等虚拟接口。通常建议填写实际的物理/WAN 出口接口，如 pppoe-wan、eth0、enp1s0。</p>
-                                </div>
-
-                                <div v-if="!tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                                    <span class="font-semibold">出口接口未填写：</span>当前将不限制本机出口接口，所有本机出口流量都可能参与 output 标记，可能影响 Docker、WireGuard、Tailscale、OpenVPN 等虚拟/隧道接口。通常建议填写实际的 WAN/物理出口接口，如 <code class="font-mono">pppoe-wan</code>、<code class="font-mono">eth0</code>、<code class="font-mono">enp1s0</code>。
-                                </div>
-                                <div v-if="tproxy.ingress_iface.trim() && tproxy.egress_iface.trim() && tproxy.ingress_iface.trim() === tproxy.egress_iface.trim()" class="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-800">
-                                    <span class="font-semibold">单网卡场景提示：</span>当前入站接口与出口接口相同，通常见于单网卡主机、VPS 或仅代理本机流量的部署，属于正常配置。生成器会自动保留 <code class="font-mono">lo</code> 回注路径，确保本机 output 流量经策略路由回注后仍可进入 TProxy。若部署在软路由上，通常应改为“入站接口 = LAN/bridge（如 <code class="font-mono">br-lan</code>），出口接口 = WAN/默认路由接口（如 <code class="font-mono">pppoe-wan</code> / <code class="font-mono">eth0</code>）”。
-                                </div>
-                                <div v-if="tproxy.dns_hijack_mode === 'nat'" class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">sing-box DNS 入站端口 <span class="text-indigo-400 normal-case font-normal">(dns-in)</span></label>
-                                    <input type="number" v-model.number="tproxy.dns_port" class="w-full px-3 py-2 bg-gray-50 border rounded-lg text-sm outline-none font-mono focus:bg-white focus:ring-1">
-                                    <p class="text-[10px] text-gray-400 mt-1">仅 NAT 模式使用：nft 将 53 DNAT 到该端口</p>
-                                </div>
-                            </div>
-							<label class="flex items-center gap-3 cursor-pointer px-4 py-3 mt-4 rounded-xl border transition-colors"
-								   :class="settings.auto_detect_interface ? 'bg-teal-50 border-teal-200 hover:border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-teal-300'">
-								<input type="checkbox" v-model="settings.auto_detect_interface" class="w-4 h-4 text-teal-600 rounded shrink-0">
-								<div class="flex-1">
-									<span class="block text-sm font-extrabold"
-										  :class="settings.auto_detect_interface ? 'text-teal-800' : 'text-gray-700'">
-										自动检测出口接口 (auto_detect_interface)
-									</span>
-									<span class="block text-xs mt-0.5 text-gray-400">
-										TProxy 防环路的主要机制：开启后 sing-box 出站连接自动绑定物理网卡，不走策略路由表，避免代理流量被再次拦截。<strong class="text-teal-700">TProxy 模式下必须开启。</strong>
-									</span>
-								</div>
-							</label>
-                            <div class="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
-                                    <input type="checkbox" v-model="tproxy.bypass_private" class="w-4 h-4 text-blue-600 rounded">
-                                    <div><span class="block text-sm font-bold text-gray-700">绕过私有地址</span><span class="block text-xs text-gray-400">10.x / 192.168.x / 127.x 等直连</span></div>
-                                </label>
-                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition">
-                                    <input type="checkbox" v-model="tproxy.ipv6" class="w-4 h-4 text-blue-600 rounded">
-                                    <div><span class="block text-sm font-bold text-gray-700">启用 IPv6 规则</span><span class="block text-xs text-gray-400">生成对应 ip6 规则链</span></div>
-                                </label>
-                                <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-white transition col-span-2">
-                                    <input type="checkbox" v-model="tproxy.udp_fragment" class="w-4 h-4 text-blue-600 rounded">
-                                    <div><span class="block text-sm font-bold text-gray-700">启用 UDP 分片 <code class="text-[11px] font-mono bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 ml-1">udp_fragment</code></span><span class="block text-xs text-gray-400">QUIC / Hysteria2 / TUIC 等基于 UDP 的协议必须开启，否则大包传输会丢失</span></div>
-                                </label>
-                            </div>
-
-                            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                <p class="text-xs font-black text-amber-800 mb-2"><i class="fas fa-terminal mr-1.5"></i>策略路由（加载 NFT 规则后在 Shell 中执行）</p>
-                                <pre class="text-xs font-mono text-amber-900 bg-amber-100 rounded-lg p-3 select-all leading-relaxed">ip rule add fwmark {{ tproxy.mark || '111' }} lookup {{ tproxy.mark || '111' }}
-ip route add local 0.0.0.0/0 dev lo table {{ tproxy.mark || '111' }}{{ tproxy.ipv6 ? '\\nip -6 rule add fwmark ' + (tproxy.mark||'111') + ' lookup ' + (tproxy.mark||'111') + '\\nip -6 route add local ::/0 dev lo table ' + (tproxy.mark||'111') : '' }}</pre>
-                                <p class="text-[10px] text-amber-700 mt-2">这两条命令在重启后失效，建议写入 <code>/etc/network/interfaces</code> 或 systemd 服务。路由表号与 fwmark 值保持一致，方便排查。</p>
-                            </div>
-                                                        <div v-if="tproxy.dns_hijack_mode==='tproxy' && settings.hijack_dns" class="mt-4 bg-rose-50 border-2 border-rose-300 rounded-xl p-4 shadow-sm">
-                                <p class="text-xs font-black text-rose-800 mb-2"><i class="fas fa-exclamation-triangle mr-1.5"></i>DNS 53 直接进入 tproxy-in：注意事项</p>
-                                <ul class="text-[11px] text-rose-700 leading-6 list-disc pl-5">
-                                    <li>sing-box 需具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_BIND_SERVICE</code>（建议同时具备 <code class="bg-rose-100 px-1 rounded">CAP_NET_ADMIN</code> / <code class="bg-rose-100 px-1 rounded">CAP_NET_RAW</code>）。</li>
-                                    <li>开启示例：<code class="bg-rose-100 px-1 rounded">sudo systemctl edit sing-box</code>，在 <code class="bg-rose-100 px-1 rounded">[Service]</code> 中添加 <code class="bg-rose-100 px-1 rounded">AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code> 与 <code class="bg-rose-100 px-1 rounded">CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE</code>，然后执行 <code class="bg-rose-100 px-1 rounded">sudo systemctl daemon-reload && sudo systemctl restart sing-box</code>。</li>
-                                    <li>建议开启 <code class="bg-rose-100 px-1 rounded">net.ipv4.ip_nonlocal_bind=1</code>（如使用 IPv6 同时开启 <code class="bg-rose-100 px-1 rounded">net.ipv6.ip_nonlocal_bind=1</code>）。</li>
-                                    <li>必须执行上方 fwmark 策略路由命令，且 mark/table 与 NFT、sing-box 保持一致。</li>
-                                    <li>此模式不会生成 <code class="bg-rose-100 px-1 rounded">dns-in</code> 与 DNS NAT 规则，请勿再手动追加 DNAT 53。</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div v-if="tproxy.enabled" class="bg-[#1e1e1e] rounded-xl border border-gray-700 overflow-hidden shadow-xl">
-                        <div class="bg-[#2d2d2d] px-5 py-3 flex justify-between items-center border-b border-[#3d3d3d]">
-                            <span class="text-gray-200 font-mono text-sm font-bold"><i class="fas fa-file-code mr-2 text-blue-400"></i>{{ tproxy.nft_table || 'singbox' }}.nft</span>
-                            <div class="flex gap-2">
-                                <button @click="copyNft" class="text-xs bg-[#3d3d3d] hover:bg-indigo-600 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
-                                    <i :class="nftCopyIcon"></i>{{ nftCopyText }}
-                                </button>
-                                <button @click="downloadNft" class="text-xs bg-[#3d3d3d] hover:bg-emerald-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5">
-                                    <i class="fas fa-download"></i>下载 .nft
-                                </button>
-                            </div>
-                        </div>
-                        <div class="overflow-y-auto max-h-[480px] dark-scroll">
-                            <pre class="p-5 text-[12px] font-mono leading-relaxed text-[#9cdcfe] whitespace-pre-wrap break-words">{{ generatedNft }}</pre>
-                        </div>
-                    </div>
-
-                </div>
-`);
-
+(() => {
+window.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};
+const { useSharedContext, AdvancedTab, DnsTab, GroupsTab, NodesTab, RulesTab, TproxyTab, TunTab } = window.__SINGBOX_BUNDLE__;
 const EditorPanel = {
     name: 'EditorPanel',
     components: {
