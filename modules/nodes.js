@@ -1,3 +1,16 @@
+import {
+    getNodeAvailableNetworkOptions as resolveNodeAvailableNetworkOptions,
+    getNodeCapabilityIssues as resolveNodeCapabilityIssues,
+    getNodeAvailableTransportOptions as resolveNodeAvailableTransportOptions,
+    getNodeCurrentNetworkValue as resolveNodeCurrentNetworkValue,
+    isNodeTransportFieldVisible as resolveNodeTransportFieldVisible,
+    isNodeTlsDefaultOn,
+    resolveNodeCapabilities,
+    sanitizeNodeByCapabilities,
+    setNodeCurrentNetworkValue as resolveSetNodeCurrentNetworkValue,
+    shouldShowNodeTransportSection as resolveShouldShowNodeTransportSection,
+} from '../core/node-capabilities.js';
+
 const { ref, nextTick } = window.Vue;
 
 export function setupNodesModule(ctx) {
@@ -37,7 +50,7 @@ export function setupNodesModule(ctx) {
 
     const makeNode = (overrides = {}) => {
         const type = overrides.type || 'vless';
-        const tlsDefault = ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'].includes(type);
+        const tlsDefault = isNodeTlsDefaultOn({ type });
         const node = {
             tag: '',
             type: 'vless',
@@ -124,8 +137,6 @@ export function setupNodesModule(ctx) {
             hy2_brutal_debug: false,
             shadowtls_version: '3',
             shadowtls_password: '',
-            shadowtls_handshake_server: '',
-            shadowtls_handshake_port: 443,
             anytls_idle_session_check_interval: '',
             anytls_idle_session_timeout: '',
             anytls_min_idle_session: '',
@@ -202,7 +213,7 @@ export function setupNodesModule(ctx) {
         node.hy2_server_ports = Array.isArray(node.hy2_server_ports) ? node.hy2_server_ports.join(', ') : String(node.hy2_server_ports || '');
         node.wg_workers = node.wg_workers === null || node.wg_workers === undefined ? '' : String(node.wg_workers);
 
-        return node;
+        return sanitizeNodeByCapabilities(node);
     };
 
     const nodes = ref([]);
@@ -265,83 +276,48 @@ export function setupNodesModule(ctx) {
         onNodeDragEnd();
     };
 
-    const PROTO_TLS_OPTIONAL = ['vless', 'vmess', 'trojan', 'http'];
-    const PROTO_TLS_DEFAULT_ON = [...PROTO_TLS_OPTIONAL, 'hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_MULTIPLEX_STREAM_TYPES = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const DEFAULT_NETWORK_OPTIONS = [
-        { value: '', label: '默认 (TCP + UDP)' },
-        { value: 'tcp', label: 'tcp' },
-        { value: 'udp', label: 'udp' },
-    ];
-    const TCP_ONLY_NETWORK_OPTIONS = [
-        { value: 'tcp', label: '仅 TCP' },
-    ];
-    const UDP_ONLY_NETWORK_OPTIONS = [
-        { value: 'udp', label: '仅 UDP' },
-    ];
-
-    const getNodeTransportNetwork = (node = {}) => {
-        if (!node) return '';
-        if (node.type === 'socks') return node.socks_network || '';
-        if (node.type === 'tuic') return node.tuic_network || '';
-        if (node.type === 'hysteria') return node.hy_network || '';
-        if (node.type === 'hysteria2') return node.hy2_network || '';
-        if (node.type === 'wireguard') return node.wg_network || '';
-        return node.network || '';
+    const isNodeStreamTransport = (node = {}) => resolveNodeCapabilities(node).supportsStreamTransport;
+    const isNodeDatagramTransport = (node = {}) => resolveNodeCapabilities(node).supportsDatagramTransport;
+    const isNodeTlsSupported = (node = {}) => resolveNodeCapabilities(node).supportsTls;
+    const isNodeTlsToggleVisible = (node = {}) => resolveNodeCapabilities(node).tlsToggleVisible;
+    const isNodeMultiplexSupported = (node = {}) => resolveNodeCapabilities(node).supportsMultiplex;
+    const isNodeQuicFieldSupported = (node = {}) => resolveNodeCapabilities(node).supportsQuicAdvancedFields;
+    const isNodeTlsInsecureSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsInsecure;
+    const isNodeTlsAlpnSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsAlpn;
+    const isNodeTlsDisableSniSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsDisableSni;
+    const isNodeTlsVersionSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsVersion;
+    const isNodeTlsFragmentSupported = (node = {}) => resolveNodeCapabilities(node).supportsTlsFragment;
+    const isNodeTlsContext = (node = {}) => resolveNodeCapabilities(node).hasTlsContext;
+    const isNodeQuicTlsContext = (node = {}) => resolveNodeCapabilities(node).isQuicTlsContext;
+    const isNodeTcpTlsContext = (node = {}) => resolveNodeCapabilities(node).isTcpTlsContext;
+    const isNodeUtlsSupported = (node = {}) => resolveNodeCapabilities(node).supportsUtls;
+    const isNodeRealitySupported = (node = {}) => resolveNodeCapabilities(node).supportsReality;
+    const isNodeShadowtlsPasswordSupported = (node = {}) => resolveNodeCapabilities(node).supportsShadowtlsPassword;
+    const isNodeTransportSectionVisible = (node = {}) => resolveShouldShowNodeTransportSection(node);
+    const isNodeTransportFieldVisible = (node = {}, field = '') => resolveNodeTransportFieldVisible(node, field);
+    const getNodeResolvedTransport = (node = {}) => resolveNodeCapabilities(node).transport;
+    const isNodeTransport = (node = {}, transport = '') => getNodeResolvedTransport(node) === String(transport || '').trim();
+    const getNodeAvailableTransportOptions = (node = {}) => resolveNodeAvailableTransportOptions(node);
+    const getNodeCapabilityIssues = (node = {}) => resolveNodeCapabilityIssues(node);
+    const hasNodeCapabilityIssues = (node = {}) => getNodeCapabilityIssues(node).length > 0;
+    const getNodeCapabilityMessages = (node = {}) => getNodeCapabilityIssues(node).map((issue) => issue.message);
+    const getNodeCapabilityFieldMessages = (node = {}, field = '') => {
+        const targetField = String(field || '').trim();
+        return getNodeCapabilityIssues(node)
+            .filter((issue) => issue.field === targetField)
+            .map((issue) => issue.message);
     };
-
-    const isUdpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'udp';
-    const isTcpOnlyTransportNetwork = (node = {}) => getNodeTransportNetwork(node) === 'tcp';
-    const isNodeNativeQuicProtocol = (node = {}) => ['hysteria', 'hysteria2', 'tuic'].includes(node.type || '');
-
-    const isNodeStreamTransport = (node = {}) => {
-        const type = node.type || '';
-        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return false;
-        if (type === 'naive') return !node.naive_quic;
-        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport !== 'quic' && !isUdpOnlyTransportNetwork(node);
-        if (type === 'shadowsocks') return !isUdpOnlyTransportNetwork(node) || !!node.ss_udp_over_tcp;
-        if (type === 'socks') return !isUdpOnlyTransportNetwork(node);
-        if (['http', 'ssh', 'shadowtls', 'anytls', 'naive', 'tor'].includes(type)) return true;
-        return false;
+    const isNodeCapabilityFieldInvalid = (node = {}, field = '') => getNodeCapabilityFieldMessages(node, field).length > 0;
+    const isNodeServerEndpointVisible = (node = {}) => resolveNodeCapabilities(node).supportsServerEndpoint;
+    const getNodeDisplayEndpoint = (node = {}) => {
+        if (!isNodeServerEndpointVisible(node)) {
+            return node.type === 'tor' ? 'local tor' : 'internal dns';
+        }
+        return `${node.server || '未设置'}${node.port ? `:${node.port}` : ''}`;
     };
-
-    const isNodeDatagramTransport = (node = {}) => {
-        const type = node.type || '';
-        if (['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return !isTcpOnlyTransportNetwork(node);
-        if (type === 'naive') return !!node.naive_quic;
-        if (['vless', 'vmess', 'trojan'].includes(type)) return node.transport === 'quic';
-        if (type === 'shadowsocks') return !isTcpOnlyTransportNetwork(node) && !node.ss_udp_over_tcp;
-        if (type === 'socks') return !isTcpOnlyTransportNetwork(node);
-        return false;
-    };
-
-    const isNodeTlsSupported = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '') || PROTO_ALWAYS_TLS.includes(node.type || '');
-    const isNodeTlsToggleVisible = (node = {}) => PROTO_TLS_OPTIONAL.includes(node.type || '');
-    const isNodeMultiplexSupported = (node = {}) => PROTO_MULTIPLEX_STREAM_TYPES.includes(node.type || '') && isNodeStreamTransport(node);
-    const isNodeQuicFieldSupported = (node = {}) => isNodeNativeQuicProtocol(node);
-    const isNodeTlsInsecureSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsAlpnSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsDisableSniSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsVersionSupported = (node = {}) => isNodeTlsContext(node) && node.type !== 'naive';
-    const isNodeTlsFragmentSupported = (node = {}) => isNodeTcpTlsContext(node) && node.type !== 'naive';
-
-    const isNodeTlsContext = (node = {}) => {
-        if (!node) return false;
-        return !!(PROTO_ALWAYS_TLS.includes(node.type || '') || (PROTO_TLS_OPTIONAL.includes(node.type || '') && node.tls));
-    };
-
-    const isNodeQuicTlsContext = (node = {}) => {
-        if (!isNodeTlsContext(node)) return false;
-        const type = node.type || '';
-        return ['hysteria', 'hysteria2', 'tuic'].includes(type) || node.transport === 'quic';
-    };
-
-    const isNodeTcpTlsContext = (node = {}) => isNodeTlsContext(node) && !isNodeQuicTlsContext(node);
-
-    const isNodeUtlsSupported = (node = {}) => isNodeTcpTlsContext(node) && ['vless', 'vmess', 'trojan'].includes(node.type || '');
-
-    const isNodeRealitySupported = (node = {}) => isNodeTcpTlsContext(node) && ['vless', 'trojan'].includes(node.type || '');
+    const isNodeSharedSecretSectionVisible = (node = {}) => ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2'].includes(node.type || '');
+    const getNodeSharedSecretLabel = (node = {}) => (['vless', 'vmess', 'tuic'].includes(node.type || '') ? 'UUID' : '密码 (Password)');
+    const isNodeCredentialSniVisible = (node = {}) => isNodeTlsContext(node) && ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria'].includes(node.type || '');
 
     const getNodeDialVisibleFields = (node = {}) => {
         const fields = new Set();
@@ -420,82 +396,23 @@ export function setupNodesModule(ctx) {
         return false;
     };
 
-    const getNodeAvailableNetworkOptions = (node = {}) => {
-        const type = node.type || '';
-        if (['vless', 'vmess', 'trojan'].includes(type)) {
-            if (node.transport === 'quic') return UDP_ONLY_NETWORK_OPTIONS;
-            if (['ws', 'http', 'grpc', 'httpupgrade'].includes(node.transport)) return TCP_ONLY_NETWORK_OPTIONS;
-            return DEFAULT_NETWORK_OPTIONS;
-        }
-        if (type === 'socks') {
-            if (String(node.socks_version || '5') !== '5') return TCP_ONLY_NETWORK_OPTIONS;
-            return DEFAULT_NETWORK_OPTIONS;
-        }
-        if (['shadowsocks', 'hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) return DEFAULT_NETWORK_OPTIONS;
-        return [];
-    };
-
-    const getNodeCurrentNetworkValue = (node = {}) => {
-        const type = node.type || '';
-        if (type === 'socks') return node.socks_network || '';
-        if (type === 'tuic') return node.tuic_network || '';
-        if (type === 'hysteria') return node.hy_network || '';
-        if (type === 'hysteria2') return node.hy2_network || '';
-        if (type === 'wireguard') return node.wg_network || '';
-        return node.network || '';
-    };
-
-    const setNodeCurrentNetworkValue = (node = {}, value = '') => {
-        const type = node.type || '';
-        if (type === 'socks') node.socks_network = value;
-        else if (type === 'tuic') node.tuic_network = value;
-        else if (type === 'hysteria') node.hy_network = value;
-        else if (type === 'hysteria2') node.hy2_network = value;
-        else if (type === 'wireguard') node.wg_network = value;
-        else node.network = value;
-    };
+    const getNodeAvailableNetworkOptions = (node = {}) => resolveNodeAvailableNetworkOptions(node);
+    const getNodeCurrentNetworkValue = (node = {}) => resolveNodeCurrentNetworkValue(node);
+    const setNodeCurrentNetworkValue = (node = {}, value = '') => resolveSetNodeCurrentNetworkValue(node, value);
 
     const syncNodeNetworkConstraints = (node = {}) => {
-        const options = getNodeAvailableNetworkOptions(node);
-        if (options.length === 0) return;
-        const allowedValues = options.map((item) => item.value);
-        const current = getNodeCurrentNetworkValue(node);
-        if (!allowedValues.includes(current)) {
-            const nextValue = allowedValues.includes('') ? '' : (allowedValues[0] || '');
-            setNodeCurrentNetworkValue(node, nextValue);
-        }
-        if (['vless', 'vmess'].includes(node.type) && !allowedValues.includes('udp')) {
-            node.packet_encoding = '';
-        }
-        if (node.type === 'socks' && String(node.socks_version || '5') !== '5') {
-            node.socks_udp_over_tcp = false;
-            node.socks_udp_over_tcp_version = '2';
-        }
+        sanitizeNodeByCapabilities(node);
     };
 
     const onNodeTypeChange = (node) => {
-        if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) node.transport = '';
-        if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(node.type)) {
-            node.path = '';
-            node.ws_host = '';
-            node.transport_headers_text = '';
-            node.transport_method = '';
-            node.transport_idle_timeout = '';
-            node.transport_ping_timeout = '';
-            node.transport_max_early_data = '';
-            node.transport_early_data_header_name = '';
-            node.transport_permit_without_stream = false;
-        }
         if (['tor', 'dns'].includes(node.type)) {
             node.server = '';
             node.port = 0;
         } else if (!node.port) {
             node.port = 443;
         }
-        if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(node.type) || !isNodeMultiplexSupported(node)) node.mux_enabled = false;
-        if (PROTO_TLS_DEFAULT_ON.includes(node.type)) node.tls = true;
-        else node.tls = false;
-        syncNodeNetworkConstraints(node);
+        node.tls = isNodeTlsDefaultOn(node);
+        sanitizeNodeByCapabilities(node);
     };
 
     const removeNode = (index) => {
@@ -550,6 +467,11 @@ export function setupNodesModule(ctx) {
         isNodeTcpTlsContext,
         isNodeUtlsSupported,
         isNodeRealitySupported,
+        isNodeShadowtlsPasswordSupported,
+        isNodeTransportSectionVisible,
+        isNodeTransportFieldVisible,
+        getNodeResolvedTransport,
+        isNodeTransport,
         isNodeMultiplexSupported,
         isNodeQuicFieldSupported,
         isNodeTlsInsecureSupported,
@@ -562,8 +484,19 @@ export function setupNodesModule(ctx) {
         nodeHasDetourOverride,
         nodeHasBindingOverride,
         isNodeDialFieldEffectivelyMuted,
+        getNodeAvailableTransportOptions,
         getNodeAvailableNetworkOptions,
         getNodeCurrentNetworkValue,
+        getNodeCapabilityIssues,
+        hasNodeCapabilityIssues,
+        getNodeCapabilityMessages,
+        getNodeCapabilityFieldMessages,
+        isNodeCapabilityFieldInvalid,
+        isNodeServerEndpointVisible,
+        getNodeDisplayEndpoint,
+        isNodeSharedSecretSectionVisible,
+        getNodeSharedSecretLabel,
+        isNodeCredentialSniVisible,
         setNodeCurrentNetworkValue,
         syncNodeNetworkConstraints,
         onNodeTypeChange,

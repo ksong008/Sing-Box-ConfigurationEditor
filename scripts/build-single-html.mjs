@@ -9,7 +9,8 @@ const rootDir = path.resolve(__dirname, '..');
 const htmlPath = path.join(rootDir, 'singbox.html');
 const mainPath = path.join(rootDir, 'main.js');
 const vendorDir = path.join(rootDir, 'vendor');
-const outputPath = path.resolve(process.argv[2] || path.join(rootDir, 'dist', 'singbox.html'));
+const defaultOutputPath = path.join(rootDir, 'dist', 'singbox.test.html');
+const outputPath = path.resolve(process.argv[2] || defaultOutputPath);
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 const mainSource = fs.readFileSync(mainPath, 'utf8');
@@ -65,7 +66,7 @@ function parseImportSpecifier(specifier) {
 }
 
 function parseNamedImports(source) {
-    return [...source.matchAll(/^import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"];?\s*$/gm)].map((match) => ({
+    return [...source.matchAll(/import\s+\{\s*([\s\S]*?)\s*\}\s+from\s+['"]([^'"]+)['"];?/gm)].map((match) => ({
         source: match[2],
         specifiers: match[1]
             .split(',')
@@ -76,7 +77,7 @@ function parseNamedImports(source) {
 }
 
 function stripImportStatements(source) {
-    return source.replace(/^import\s+.*$/gm, '').trim();
+    return source.replace(/^\s*import\s+\{\s*[\s\S]*?\s*\}\s+from\s+['"][^'"]+['"];?\s*$/gm, '').trim();
 }
 
 function collectExports(source) {

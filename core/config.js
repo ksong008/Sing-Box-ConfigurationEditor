@@ -1,3 +1,9 @@
+import {
+    getNodeCurrentNetworkValue,
+    resolveNodeCapabilities,
+    sanitizeNodeByCapabilities,
+} from './node-capabilities.js';
+
 const { computed, watch, nextTick, onUnmounted } = window.Vue;
 
 export function setupConfigCore(ctx) {
@@ -80,8 +86,7 @@ export function setupConfigCore(ctx) {
     const sanitizeNodeNetworkValue = (node = {}, rawValue = '') => {
         const value = String(rawValue || '').trim();
         if (!value) return '';
-        if (typeof ctx.getNodeAvailableNetworkOptions !== 'function') return value;
-        const allowedValues = ctx.getNodeAvailableNetworkOptions(node)
+        const allowedValues = resolveNodeCapabilities(node).networkOptions
             .map((item) => item.value)
             .filter(Boolean);
         return allowedValues.includes(value) ? value : '';
@@ -89,8 +94,7 @@ export function setupConfigCore(ctx) {
 
     const buildMultiplex = (node) => {
         if (!node.mux_enabled) return undefined;
-        if (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(node)) return undefined;
-        if (node.type === 'shadowsocks' && node.ss_udp_over_tcp) return undefined;
+        if (!resolveNodeCapabilities(node).supportsMultiplex) return undefined;
         const multiplex = {
             enabled: true,
             protocol: node.mux_protocol || 'h2mux',
@@ -709,6 +713,7 @@ export function setupConfigCore(ctx) {
         ctx.nodes.value.forEach((node) => {
             const outbound = { type: node.type, tag: node.tag };
             const applyNodeDialFields = () => applyDialFields(outbound, node, { validDnsTags: new Set(ctx.dnsList.value.map((dns) => dns.tag)) });
+            const caps = resolveNodeCapabilities(node);
 
             if (node.type === 'wireguard') {
                 outbound.private_key = node.wg_private_key;
@@ -754,12 +759,6 @@ export function setupConfigCore(ctx) {
                 outbound.server_port = node.port;
                 outbound.password = node.shadowtls_password;
                 outbound.version = parseInt(node.shadowtls_version, 10) || 3;
-                if (node.shadowtls_handshake_server) {
-                    outbound.handshake = {
-                        server: node.shadowtls_handshake_server,
-                        server_port: node.shadowtls_handshake_port || 443,
-                    };
-                }
                 applyNodeDialFields();
                 outbounds.push(outbound);
                 return;
@@ -925,13 +924,8 @@ export function setupConfigCore(ctx) {
                 if (node.type === 'vless' && node.flow) outbound.flow = node.flow;
             }
 
-            const optionalTlsProtocols = ['vless', 'vmess', 'trojan', 'http'];
-            const requiredTlsProtocols = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-            const needTls = requiredTlsProtocols.includes(node.type)
-                ? true
-                : (optionalTlsProtocols.includes(node.type) ? node.tls !== false : false);
-            if (needTls) {
-                const isQuicTlsContext = ['hysteria', 'hysteria2', 'tuic'].includes(node.type) || node.transport === 'quic';
+            if (caps.hasTlsContext) {
+                const isQuicTlsContext = caps.isQuicTlsContext;
                 outbound.tls = { enabled: true };
                 if (node.disable_sni) outbound.tls.disable_sni = true;
                 if (node.insecure) outbound.tls.insecure = true;
@@ -962,7 +956,7 @@ export function setupConfigCore(ctx) {
                     if (node.tls_record_fragment) outbound.tls.record_fragment = true;
                     if (node.tls_fragment_fallback_delay) outbound.tls.fragment_fallback_delay = node.tls_fragment_fallback_delay;
                 }
-                if (!isQuicTlsContext && node.reality && ['vless', 'trojan'].includes(node.type)) {
+                if (!isQuicTlsContext && node.reality && caps.supportsReality) {
                     outbound.tls.reality = {
                         enabled: true,
                         public_key: node.reality_pubkey,
@@ -972,8 +966,8 @@ export function setupConfigCore(ctx) {
                 }
             }
 
-            if (node.transport && ['vless', 'vmess', 'trojan'].includes(node.type)) {
-                if (node.transport === 'ws') {
+            if (caps.supportsTransport && caps.transport) {
+                if (caps.transport === 'ws') {
                     const headers = parseHeadersText(node.transport_headers_text) || {};
                     if (node.ws_host) headers.Host = node.ws_host;
                     outbound.transport = {
@@ -984,12 +978,12 @@ export function setupConfigCore(ctx) {
                     const maxEarlyData = parseOptionalInteger(node.transport_max_early_data);
                     if (maxEarlyData !== undefined && maxEarlyData >= 0) outbound.transport.max_early_data = maxEarlyData;
                     if (node.transport_early_data_header_name) outbound.transport.early_data_header_name = node.transport_early_data_header_name;
-                } else if (node.transport === 'grpc') {
+                } else if (caps.transport === 'grpc') {
                     outbound.transport = { type: 'grpc', service_name: node.path || '' };
                     if (node.transport_idle_timeout) outbound.transport.idle_timeout = node.transport_idle_timeout;
                     if (node.transport_ping_timeout) outbound.transport.ping_timeout = node.transport_ping_timeout;
                     if (node.transport_permit_without_stream) outbound.transport.permit_without_stream = true;
-                } else if (node.transport === 'http') {
+                } else if (caps.transport === 'http') {
                     const host = parseList(node.ws_host);
                     outbound.transport = {
                         type: 'http',
@@ -1001,7 +995,7 @@ export function setupConfigCore(ctx) {
                     if (headers) outbound.transport.headers = headers;
                     if (node.transport_idle_timeout) outbound.transport.idle_timeout = node.transport_idle_timeout;
                     if (node.transport_ping_timeout) outbound.transport.ping_timeout = node.transport_ping_timeout;
-                } else if (node.transport === 'httpupgrade') {
+                } else if (caps.transport === 'httpupgrade') {
                     outbound.transport = {
                         type: 'httpupgrade',
                         path: node.path || '/',
@@ -1009,25 +1003,23 @@ export function setupConfigCore(ctx) {
                     };
                     const headers = parseHeadersText(node.transport_headers_text);
                     if (headers) outbound.transport.headers = headers;
-                } else if (node.transport === 'quic') {
+                } else if (caps.transport === 'quic') {
                     outbound.transport = { type: 'quic' };
                 }
             }
 
-            if (node.network && ['vless', 'vmess', 'trojan'].includes(node.type)) {
-                const v2rayNetwork = sanitizeNodeNetworkValue(node, node.network);
+            if (caps.networkField === 'network') {
+                const v2rayNetwork = sanitizeNodeNetworkValue(node, getNodeCurrentNetworkValue(node));
                 if (v2rayNetwork) outbound.network = v2rayNetwork;
             }
 
-            if (['vless', 'vmess'].includes(node.type)) {
-                if (node.network !== 'tcp') {
-                    if (node.packet_encoding === '') outbound.packet_encoding = '';
-                    else if (node.packet_encoding && !(node.type === 'vless' && node.packet_encoding === 'xudp')) outbound.packet_encoding = node.packet_encoding;
-                }
+            if (caps.supportsPacketEncoding) {
+                if (node.packet_encoding === '') outbound.packet_encoding = '';
+                else if (node.packet_encoding && !(node.type === 'vless' && node.packet_encoding === 'xudp')) outbound.packet_encoding = node.packet_encoding;
             }
 
             const multiplex = buildMultiplex(node);
-            if (multiplex && ['vless', 'vmess', 'trojan', 'shadowsocks'].includes(node.type)) outbound.multiplex = multiplex;
+            if (multiplex) outbound.multiplex = multiplex;
 
             applyNodeDialFields();
             outbounds.push(outbound);
@@ -1476,180 +1468,10 @@ export function setupConfigCore(ctx) {
     });
 
     const getFullState = () => {
-        const defaultNode = ctx.makeNode();
-
         const cleanNodes = ctx.nodes.value.map((node) => {
             const cleanNode = { ...node };
-
-            if (cleanNode.type !== 'shadowsocks') {
-                delete cleanNode.ss_method;
-                delete cleanNode.ss_plugin;
-                delete cleanNode.ss_plugin_opts;
-                delete cleanNode.ss_udp_over_tcp;
-                delete cleanNode.ss_udp_over_tcp_version;
-            }
-            if (cleanNode.type !== 'tuic') {
-                delete cleanNode.tuic_password;
-                delete cleanNode.tuic_congestion;
-                delete cleanNode.tuic_udp_relay_mode;
-                delete cleanNode.tuic_network;
-                delete cleanNode.tuic_udp_over_stream;
-                delete cleanNode.tuic_zero_rtt_handshake;
-                delete cleanNode.tuic_heartbeat;
-            }
-            if (cleanNode.type !== 'hysteria') {
-                delete cleanNode.hy_up_mbps;
-                delete cleanNode.hy_down_mbps;
-                delete cleanNode.hy_up_text;
-                delete cleanNode.hy_down_text;
-                delete cleanNode.hy_obfs;
-                delete cleanNode.hy_auth_type;
-                delete cleanNode.hy_server_ports;
-                delete cleanNode.hy_hop_interval;
-                delete cleanNode.hy_recv_window_conn;
-                delete cleanNode.hy_recv_window;
-                delete cleanNode.hy_disable_mtu_discovery;
-                delete cleanNode.hy_network;
-            }
-            if (cleanNode.type !== 'hysteria2') {
-                delete cleanNode.hy2_up;
-                delete cleanNode.hy2_down;
-                delete cleanNode.hy2_obfs_type;
-                delete cleanNode.hy2_obfs_password;
-                delete cleanNode.hy2_server_ports;
-                delete cleanNode.hy2_hop_interval;
-                delete cleanNode.hy2_hop_interval_max;
-                delete cleanNode.hy2_network;
-                delete cleanNode.hy2_bbr_profile;
-                delete cleanNode.hy2_brutal_debug;
-            }
-            if (cleanNode.type !== 'wireguard') {
-                delete cleanNode.wg_private_key;
-                delete cleanNode.wg_peer_pubkey;
-                delete cleanNode.wg_local_address;
-                delete cleanNode.wg_psk;
-                delete cleanNode.wg_mtu;
-                delete cleanNode.wg_reserved;
-                delete cleanNode.wg_system_interface;
-                delete cleanNode.wg_interface_name;
-                delete cleanNode.wg_workers;
-                delete cleanNode.wg_network;
-            }
-            if (cleanNode.type !== 'socks') {
-                delete cleanNode.socks_version;
-                delete cleanNode.socks_network;
-                delete cleanNode.socks_udp_over_tcp;
-                delete cleanNode.socks_udp_over_tcp_version;
-            }
-            if (cleanNode.type !== 'http') {
-                delete cleanNode.http_path;
-                delete cleanNode.http_headers_text;
-            }
-            if (cleanNode.type !== 'ssh') {
-                delete cleanNode.ssh_auth_type;
-                delete cleanNode.ssh_private_key_path;
-                delete cleanNode.ssh_private_key_passphrase;
-                delete cleanNode.ssh_host_key_text;
-                delete cleanNode.ssh_host_key_algorithms;
-                delete cleanNode.ssh_client_version;
-            }
-            if (cleanNode.type !== 'shadowtls') {
-                delete cleanNode.shadowtls_version;
-                delete cleanNode.shadowtls_password;
-                delete cleanNode.shadowtls_handshake_server;
-                delete cleanNode.shadowtls_handshake_port;
-            }
-            if (cleanNode.type !== 'anytls') {
-                delete cleanNode.anytls_idle_session_check_interval;
-                delete cleanNode.anytls_idle_session_timeout;
-                delete cleanNode.anytls_min_idle_session;
-            }
-            if (cleanNode.type !== 'naive') {
-                delete cleanNode.naive_insecure_concurrency;
-                delete cleanNode.naive_extra_headers_text;
-                delete cleanNode.naive_udp_over_tcp;
-                delete cleanNode.naive_udp_over_tcp_version;
-                delete cleanNode.naive_quic;
-                delete cleanNode.naive_quic_congestion_control;
-            }
-            if (cleanNode.type !== 'tor') {
-                delete cleanNode.tor_executable_path;
-                delete cleanNode.tor_extra_args;
-                delete cleanNode.tor_data_directory;
-                delete cleanNode.tor_torrc_text;
-            }
-            if (!ctx.PROTO_SUPPORT_USER.includes(cleanNode.type)) delete cleanNode.username;
-            if (!ctx.PROTO_SUPPORT_TRANSPORT.includes(cleanNode.type)) {
-                delete cleanNode.transport;
-                delete cleanNode.path;
-                delete cleanNode.ws_host;
-                delete cleanNode.transport_headers_text;
-                delete cleanNode.transport_method;
-                delete cleanNode.transport_idle_timeout;
-                delete cleanNode.transport_ping_timeout;
-                delete cleanNode.transport_max_early_data;
-                delete cleanNode.transport_early_data_header_name;
-                delete cleanNode.transport_permit_without_stream;
-            }
-            if (!ctx.PROTO_SUPPORT_MULTIPLEX.includes(cleanNode.type) || (typeof ctx.isNodeMultiplexSupported === 'function' && !ctx.isNodeMultiplexSupported(cleanNode))) {
-                delete cleanNode.mux_enabled;
-                delete cleanNode.mux_protocol;
-                delete cleanNode.mux_max_connections;
-                delete cleanNode.mux_min_streams;
-                delete cleanNode.mux_max_streams;
-                delete cleanNode.mux_padding;
-                delete cleanNode.mux_brutal_enabled;
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (cleanNode.type !== 'vless') delete cleanNode.flow;
-            if (cleanNode.network === 'tcp') delete cleanNode.packet_encoding;
-            if (cleanNode.type === 'shadowsocks' && cleanNode.ss_udp_over_tcp) cleanNode.mux_enabled = false;
-            if (!['hysteria', 'hysteria2', 'tuic'].includes(cleanNode.type)) {
-                delete cleanNode.quic_initial_packet_size;
-                delete cleanNode.quic_disable_path_mtu_discovery;
-                delete cleanNode.quic_idle_timeout;
-                delete cleanNode.quic_keep_alive_period;
-                delete cleanNode.quic_stream_receive_window;
-                delete cleanNode.quic_connection_receive_window;
-                delete cleanNode.quic_max_concurrent_streams;
-            }
-
-            if (!cleanNode.reality) {
-                delete cleanNode.reality_pubkey;
-                delete cleanNode.reality_sid;
-            }
-            if (!cleanNode.mux_enabled) {
-                delete cleanNode.mux_protocol;
-                delete cleanNode.mux_max_connections;
-                delete cleanNode.mux_min_streams;
-                delete cleanNode.mux_max_streams;
-                delete cleanNode.mux_padding;
-                delete cleanNode.mux_brutal_enabled;
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (!cleanNode.mux_brutal_enabled) {
-                delete cleanNode.mux_brutal_up_mbps;
-                delete cleanNode.mux_brutal_down_mbps;
-            }
-            if (!cleanNode.ss_udp_over_tcp) delete cleanNode.ss_udp_over_tcp_version;
-            if (!cleanNode.socks_udp_over_tcp) delete cleanNode.socks_udp_over_tcp_version;
-            if (!cleanNode.naive_udp_over_tcp) delete cleanNode.naive_udp_over_tcp_version;
-            if (!cleanNode.naive_quic) delete cleanNode.naive_quic_congestion_control;
-            if (!['ws', 'http', 'httpupgrade', 'grpc'].includes(cleanNode.transport)) delete cleanNode.path;
-            if (!['ws', 'http', 'httpupgrade'].includes(cleanNode.transport)) delete cleanNode.ws_host;
-            if (cleanNode.transport !== 'ws') {
-                delete cleanNode.transport_max_early_data;
-                delete cleanNode.transport_early_data_header_name;
-            }
-            if (!['ws', 'http', 'httpupgrade'].includes(cleanNode.transport)) delete cleanNode.transport_headers_text;
-            if (cleanNode.transport !== 'http') delete cleanNode.transport_method;
-            if (!['http', 'grpc'].includes(cleanNode.transport)) {
-                delete cleanNode.transport_idle_timeout;
-                delete cleanNode.transport_ping_timeout;
-            }
-            if (cleanNode.transport !== 'grpc') delete cleanNode.transport_permit_without_stream;
+            sanitizeNodeByCapabilities(cleanNode);
+            const defaultNode = ctx.makeNode({ type: cleanNode.type });
 
             Object.keys(cleanNode).forEach((key) => {
                 if (['tag', 'type', 'server', 'port', 'insecure'].includes(key)) return;
@@ -1659,32 +1481,6 @@ export function setupConfigCore(ctx) {
                     delete cleanNode[key];
                 }
             });
-
-            const usesTls = [...ctx.PROTO_SUPPORT_TLS, ...ctx.PROTO_ALWAYS_TLS].includes(cleanNode.type);
-            if (!usesTls) {
-                delete cleanNode.tls;
-                delete cleanNode.insecure;
-                delete cleanNode.reality;
-                delete cleanNode.alpn;
-                delete cleanNode.utls_fingerprint;
-                delete cleanNode.sni;
-            }
-            if (cleanNode.type === 'naive') {
-                delete cleanNode.insecure;
-                delete cleanNode.alpn;
-                delete cleanNode.utls_fingerprint;
-                delete cleanNode.disable_sni;
-                delete cleanNode.tls_min_version;
-                delete cleanNode.tls_max_version;
-                delete cleanNode.cipher_suites;
-                delete cleanNode.tls_fragment;
-                delete cleanNode.tls_fragment_fallback_delay;
-                delete cleanNode.tls_record_fragment;
-            }
-            if (['tor', 'dns'].includes(cleanNode.type)) {
-                delete cleanNode.server;
-                delete cleanNode.port;
-            }
 
             return cleanNode;
         });

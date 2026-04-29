@@ -544,7 +544,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                          :class="{
                              'opacity-40 border-dashed border-indigo-400': draggedNodeIndex === idx,
                              'shadow-[0_-3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex > idx,
-                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex < idx
+                             'shadow-[0_3px_0_0_#4f46e5] border-indigo-300 z-10': dragOverNodeIndex === idx && draggedNodeIndex < idx,
+                             'border-rose-300': hasNodeCapabilityIssues(node)
                          }"
                          class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative group hover:border-indigo-300 transition-all">
                         <div class="absolute top-4 right-4 flex items-center gap-2 z-10">
@@ -567,7 +568,8 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                 <div v-if="node.collapsed" class="flex flex-wrap items-center gap-2 min-h-[42px]">
                                     <span class="text-sm font-extrabold text-gray-800">{{ node.tag || '未命名节点' }}</span>
                                     <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
-                                    <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                                    <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ getNodeDisplayEndpoint(node) }}</span>
+                                    <span v-if="hasNodeCapabilityIssues(node)" class="badge bg-rose-100 text-rose-700 border border-rose-200">{{ getNodeCapabilityMessages(node).length }} 项待修正</span>
                                 </div>
                                 <div v-else class="grid grid-cols-12 gap-3">
                                     <div class="col-span-5"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">节点名称</label><input type="text" v-model="node.tag" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-bold text-indigo-700 outline-none focus:ring-1 focus:bg-white"></div>
@@ -601,9 +603,17 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                             </optgroup>
                                         </select>
                                     </div>
-                                    <div v-if="!['tor','dns'].includes(node.type)" class="col-span-4 grid grid-cols-3 gap-2">
-                                        <div class="col-span-2"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label><input type="text" v-model="node.server" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono"></div>
-                                        <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label><input type="number" v-model.number="node.port" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono"></div>
+                                    <div v-if="isNodeServerEndpointVisible(node)" class="col-span-4 grid grid-cols-3 gap-2">
+                                        <div class="col-span-2">
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">服务器 IP/域名</label>
+                                            <input type="text" v-model="node.server" :class="isNodeCapabilityFieldInvalid(node, 'server') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-gray-50'" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:bg-white font-mono">
+                                            <p v-for="message in getNodeCapabilityFieldMessages(node, 'server')" :key="'server-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">端口</label>
+                                            <input type="number" v-model.number="node.port" :class="isNodeCapabilityFieldInvalid(node, 'port') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-gray-50'" class="w-full px-2 py-2 border rounded-lg text-sm outline-none text-center focus:ring-1 focus:bg-white font-mono">
+                                            <p v-for="message in getNodeCapabilityFieldMessages(node, 'port')" :key="'port-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                                        </div>
                                     </div>
                                     <div v-else class="col-span-4 flex items-end justify-end">
                                         <div class="text-[10px] font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">当前协议不使用 server / port</div>
@@ -614,28 +624,49 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
 
                         <div v-if="!node.collapsed" class="ml-12 flex flex-wrap items-center gap-2 mb-3">
                             <span class="badge bg-gray-100 text-gray-600 border border-gray-200">{{ node.type }}</span>
-                            <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ node.type==='tor' ? 'local tor' : node.type==='dns' ? 'internal dns' : ((node.server || '未设置') + (node.port ? ':' + node.port : '')) }}</span>
+                            <span class="badge bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">{{ getNodeDisplayEndpoint(node) }}</span>
+                            <span v-if="hasNodeCapabilityIssues(node)" class="badge bg-rose-100 text-rose-700 border border-rose-200">待修正 {{ getNodeCapabilityMessages(node).length }} 项</span>
+                        </div>
+
+                        <div v-if="!node.collapsed && hasNodeCapabilityIssues(node)" class="ml-12 mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                            <div class="text-[11px] font-bold text-rose-800"><i class="fas fa-exclamation-circle mr-1.5"></i>当前节点还有以下问题</div>
+                            <ul class="mt-2 space-y-1">
+                                <li v-for="message in getNodeCapabilityMessages(node)" :key="'node-issue-' + idx + '-' + message" class="text-[11px] text-rose-700">• {{ message }}</li>
+                            </ul>
                         </div>
 
                         <div v-if="!node.collapsed" class="ml-12">
 
-                        <div v-if="['vless','vmess','trojan','shadowsocks','tuic','hysteria2'].includes(node.type)" class="grid grid-cols-2 gap-3 mb-3">
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ ['vless','vmess','tuic'].includes(node.type)?'UUID':'密码 (Password)' }}</label><input type="text" v-model="node.secret" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                            <div v-show="isNodeTlsContext(node) && ['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
-                            <div v-show="isNodeTlsContext(node) && ['hysteria2','hysteria'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
+                        <div v-if="isNodeSharedSecretSectionVisible(node)" class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ getNodeSharedSecretLabel(node) }}</label>
+                                <input type="text" v-model="node.secret" :class="isNodeCapabilityFieldInvalid(node, 'secret') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-white'" class="w-full px-3 py-2 border rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                <p v-for="message in getNodeCapabilityFieldMessages(node, 'secret')" :key="'secret-msg-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
+                            </div>
+                            <div v-show="isNodeCredentialSniVisible(node)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">SNI (Server Name Indication)</label><input type="text" v-model="node.sni" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1"></div>
                         </div>
 
                         <div v-if="node.type==='shadowsocks'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">加密方法</label>
                                 <select v-model="node.ss_method" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                    <option value="none">none</option>
                                     <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+                                    <option value="xchacha20-ietf-poly1305">xchacha20-ietf-poly1305</option>
                                     <option value="aes-128-gcm">aes-128-gcm</option>
+                                    <option value="aes-192-gcm">aes-192-gcm</option>
                                     <option value="aes-256-gcm">aes-256-gcm</option>
                                     <option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm</option>
                                     <option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
                                     <option value="2022-blake3-chacha20-poly1305">2022-blake3-chacha20-poly1305</option>
+                                    <option value="aes-128-ctr">aes-128-ctr (legacy)</option>
+                                    <option value="aes-192-ctr">aes-192-ctr (legacy)</option>
+                                    <option value="aes-256-ctr">aes-256-ctr (legacy)</option>
                                     <option value="rc4-md5">rc4-md5 (不推荐)</option>
                                     <option value="aes-128-cfb">aes-128-cfb (不推荐)</option>
+                                    <option value="aes-192-cfb">aes-192-cfb (legacy)</option>
+                                    <option value="aes-256-cfb">aes-256-cfb (legacy)</option>
+                                    <option value="chacha20-ietf">chacha20-ietf (legacy)</option>
+                                    <option value="xchacha20">xchacha20 (legacy)</option>
                                 </select>
                             </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">网络 (Network)</label>
@@ -828,24 +859,20 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
 
                         <!-- ShadowTLS -->
                         <div v-if="node.type==='shadowtls'" class="grid grid-cols-2 gap-3 mb-3">
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
-                                <input type="text" v-model="node.shadowtls_password" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
-                            </div>
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本 (Version)</label>
                                 <select v-model="node.shadowtls_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="3">v3 (推荐)</option>
                                     <option value="2">v2</option>
                                     <option value="1">v1</option>
                                 </select>
+                                <p v-if="node.shadowtls_version==='1'" class="mt-1 text-[10px] font-medium text-gray-500">官方出站文档中，v1 没有 <code>password</code> 字段。</p>
                             </div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标服务器 (Handshake Server)</label>
-                                <input type="text" v-model="node.shadowtls_handshake_server" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1">
-                            </div>
-                            <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">握手目标端口</label>
-                                <input type="number" v-model.number="node.shadowtls_handshake_port" placeholder="443" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                            <div v-if="isNodeShadowtlsPasswordSupported(node)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">密码 (Password)</label>
+                                <input type="text" v-model="node.shadowtls_password" :class="isNodeCapabilityFieldInvalid(node, 'shadowtls_password') ? 'border-rose-300 bg-rose-50 focus:ring-rose-200' : 'border-gray-300 bg-white'" class="w-full px-3 py-2 border rounded-lg text-xs outline-none font-mono focus:ring-1">
+                                <p v-for="message in getNodeCapabilityFieldMessages(node, 'shadowtls_password')" :key="'shadowtls-password-' + idx + '-' + message" class="mt-1 text-[10px] font-medium text-rose-700">{{ message }}</p>
                             </div>
                             <div class="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1.5"></i><strong>ShadowTLS</strong> 是一个流量混淆协议，需套在其他代理协议（如 Shadowsocks）外层使用。<code class="bg-blue-100 px-1 rounded">server/port</code> 填写 ShadowTLS 服务器地址，<code class="bg-blue-100 px-1 rounded">handshake</code> 填写用于模仿握手的真实 TLS 站点。</p>
+                                <p class="text-xs text-blue-700"><i class="fas fa-info-circle mr-1.5"></i><strong>ShadowTLS</strong> 是一个流量混淆协议，需套在其他代理协议（如 Shadowsocks）外层使用。<code class="bg-blue-100 px-1 rounded">server/port</code> 填写 ShadowTLS 服务器地址；<code class="bg-blue-100 px-1 rounded">password</code> 仅适用于 v2 / v3 客户端。</p>
                             </div>
                         </div>
 
@@ -959,22 +986,15 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                             </div>
                         </div>
 
-                        <div v-if="['vless','vmess','trojan'].includes(node.type)" class="mb-3">
+                        <div v-if="isNodeTransportSectionVisible(node)" class="mb-3">
                             <div class="grid grid-cols-3 gap-3 mb-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层</label>
                                     <select v-model="node.transport" @change="syncNodeNetworkConstraints(node)" class="w-full px-2 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm outline-none focus:ring-1 focus:bg-white">
-                                        <option value="">TCP (默认)</option>
-                                        <option value="ws">WebSocket</option>
-                                        <option value="grpc">gRPC</option>
-                                        <option value="http">HTTP</option>
-                                        <option value="httpupgrade">HTTPUpgrade</option>
-                                        <option value="quic">QUIC</option>
+                                        <option v-for="item in getNodeAvailableTransportOptions(node)" :key="'transport-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
-                                <div v-if="['ws','http','httpupgrade'].includes(node.transport)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">路径 (Path)</label><input type="text" v-model="node.path" placeholder="/ws" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='grpc'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Service Name</label><input type="text" v-model="node.path" placeholder="grpc" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='ws'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">WS Host Header</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
-                                <div v-if="node.transport==='http'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">HTTP Host</label><input type="text" v-model="node.ws_host" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
+                                <div v-if="isNodeTransportFieldVisible(node, 'path')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ isNodeTransport(node, 'grpc') ? 'Service Name' : '路径 (Path)' }}</label><input type="text" v-model="node.path" :placeholder="isNodeTransport(node, 'grpc') ? 'grpc' : '/ws'" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
+                                <div v-if="isNodeTransportFieldVisible(node, 'ws_host')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">{{ isNodeTransport(node, 'http') ? 'HTTP Host' : 'WS Host Header' }}</label><input type="text" v-model="node.ws_host" placeholder="example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div v-if="node.type==='vless'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Flow (XTLS)</label>
                                     <select v-model="node.flow" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1">
                                         <option value="">不启用（默认）</option>
@@ -982,32 +1002,32 @@ const NodesTab = createInjectedComponent('NodesTab', `                <div v-sho
                                     </select>
                                 </div>
                             </div>
-                            <div v-if="['ws','http','httpupgrade'].includes(node.transport)" class="mt-2">
+                            <div v-if="isNodeTransportFieldVisible(node, 'transport_headers_text')" class="mt-2">
                                 <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">传输层请求头 (Headers)</label>
                                 <textarea v-model="node.transport_headers_text" rows="3" placeholder="Host: example.com&#10;User-Agent: sing-box" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white resize-none focus:ring-1"></textarea>
                             </div>
-                            <div v-if="node.transport==='ws'" class="grid grid-cols-2 gap-3 mt-2">
+                            <div v-if="isNodeTransportFieldVisible(node, 'transport_max_early_data')" class="grid grid-cols-2 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">最大 Early Data</label><input type="number" v-model.number="node.transport_max_early_data" min="0" placeholder="0" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Early Data Header</label><input type="text" v-model="node.transport_early_data_header_name" placeholder="Sec-WebSocket-Protocol" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             </div>
-                            <div v-if="node.transport==='http'" class="grid grid-cols-3 gap-3 mt-2">
+                            <div v-if="isNodeTransport(node, 'http')" class="grid grid-cols-3 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">方法 (Method)</label><input type="text" v-model="node.transport_method" placeholder="PUT" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                             </div>
-                            <div v-if="node.transport==='grpc'" class="grid grid-cols-3 gap-3 mt-2">
+                            <div v-if="isNodeTransport(node, 'grpc')" class="grid grid-cols-3 gap-3 mt-2">
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">空闲超时</label><input type="text" v-model="node.transport_idle_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Ping 超时</label><input type="text" v-model="node.transport_ping_timeout" placeholder="15s" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none font-mono bg-white focus:ring-1"></div>
                                 <div class="flex items-end pb-2"><label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" v-model="node.transport_permit_without_stream" class="w-4 h-4 text-indigo-600 rounded"><span class="text-xs font-bold text-gray-700">Permit Without Stream</span></label></div>
                             </div>
                             <!-- network + packet_encoding 行 -->
                             <div class="grid grid-cols-3 gap-3 mt-2">
-                                <div v-if="['vless','vmess','trojan'].includes(node.type)"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
+                                <div v-if="isNodeTransportFieldVisible(node, 'network')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">Network <span class="normal-case font-normal text-gray-400">(启用的网络)</span></label>
                                     <select v-model="node.network" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                         <option v-for="item in getNodeAvailableNetworkOptions(node)" :key="'v2ray-network-' + item.value" :value="item.value">{{ item.label }}</option>
                                     </select>
                                 </div>
-                                <div v-if="['vless','vmess'].includes(node.type) && node.network !== 'tcp'"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
+                                <div v-if="isNodeTransportFieldVisible(node, 'packet_encoding')"><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">packet_encoding <span class="normal-case font-normal text-gray-400">(UDP 封包)</span></label>
                                     <select v-model="node.packet_encoding" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1 font-mono">
                                         <option value="xudp">xudp (默认，xray)</option>
                                         <option value="packetaddr">packetaddr (v2ray 5+)</option>
