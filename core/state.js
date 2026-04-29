@@ -3,13 +3,6 @@ const { ref, computed } = window.Vue;
 export function createBaseState() {
     const generateId = (prefix) => prefix + '_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
 
-    const PROTO_SUPPORT_TRANSPORT = ['vless', 'vmess', 'trojan'];
-    const PROTO_SUPPORT_MULTIPLEX = ['vless', 'vmess', 'trojan', 'shadowsocks'];
-    const PROTO_SUPPORT_TLS = ['vless', 'vmess', 'trojan', 'http'];
-    const PROTO_ALWAYS_TLS = ['hysteria2', 'hysteria', 'tuic', 'naive', 'anytls', 'shadowtls'];
-    const PROTO_SUPPORT_SECRET = ['vless', 'vmess', 'trojan', 'shadowsocks', 'tuic', 'hysteria2', 'hysteria', 'shadowtls', 'anytls'];
-    const PROTO_SUPPORT_USER = ['socks', 'http', 'ssh', 'naive'];
-
     const showToast = (msg, type = 'ok', duration = 2800) => {
         const icons = {
             ok: 'fas fa-check-circle',
@@ -302,12 +295,6 @@ export function createBaseState() {
     });
 
         return {
-        PROTO_SUPPORT_TRANSPORT,
-        PROTO_SUPPORT_MULTIPLEX,
-        PROTO_SUPPORT_TLS,
-        PROTO_ALWAYS_TLS,
-        PROTO_SUPPORT_SECRET,
-        PROTO_SUPPORT_USER,
         generateId,
         showToast,
         showConfirm,

@@ -71,7 +71,7 @@ NOTE：sing-box v1.12 only
   node scripts/build-single-html.mjs
   ```
 
-- The generated `dist/singbox.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
+- The generated `dist/singbox.test.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
 
 
 ## Usage

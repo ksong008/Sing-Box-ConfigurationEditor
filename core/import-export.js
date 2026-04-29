@@ -1,3 +1,8 @@
+import {
+    getNodeCapabilityIssues,
+    sanitizeNodeByCapabilities,
+} from './node-capabilities.js';
+
 const { computed, watch } = window.Vue;
 
 export function setupImportExportCore(ctx) {
@@ -221,6 +226,12 @@ export function setupImportExportCore(ctx) {
         if (ctx.duplicateOutboundTags.value.length > 0) warnings.push(`出站 tag 重名: ${ctx.duplicateOutboundTags.value.join(', ')}`);
         const emptyRuleSets = ctx.ruleSets.value.filter((ruleSet) => ruleSet.tag && !ruleSet.url);
         if (emptyRuleSets.length > 0) warnings.push(`${emptyRuleSets.length} 个规则集 URL 为空（已自动忽略）`);
+        ctx.nodes.value.forEach((node, index) => {
+            const label = node.tag ? `节点 "${node.tag}"` : `第 ${index + 1} 个节点`;
+            getNodeCapabilityIssues(node).forEach((issue) => {
+                warnings.push(`${label} ${issue.message}`);
+            });
+        });
         return warnings;
     };
 
@@ -417,10 +428,6 @@ export function setupImportExportCore(ctx) {
         } else if (type === 'shadowtls') {
             node.shadowtls_password = outbound.password || '';
             node.shadowtls_version = String(outbound.version || '3');
-            if (outbound.handshake) {
-                node.shadowtls_handshake_server = outbound.handshake.server || '';
-                node.shadowtls_handshake_port = outbound.handshake.server_port || 443;
-            }
         } else if (type === 'tor') {
             node.tor_executable_path = outbound.executable_path || '';
             node.tor_data_directory = outbound.data_directory || '';
@@ -469,7 +476,7 @@ export function setupImportExportCore(ctx) {
         parseRuntimeTls(node, outbound.tls);
         parseRuntimeTransport(node, outbound.transport);
         parseRuntimeMultiplex(node, outbound.multiplex);
-        return node;
+        return sanitizeNodeByCapabilities(node);
     };
 
     const runtimeOutboundToGroup = (outbound = {}) => {
