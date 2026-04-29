@@ -29,6 +29,20 @@ ui/
   register-components.js
   shared.js
   tab-panels.js
+  tabs/
+    advanced-tab.js
+    create-injected-component.js
+    dns-tab.js
+    groups-tab.js
+    nodes-tab.js
+    rules-tab.js
+    tproxy-tab.js
+    tun-tab.js
+scripts/
+  build-single-html.mjs
+  smoke-singbox.mjs
+  lib/
+    smoke-helpers.mjs
 main.js
 singbox.html
 ```
@@ -72,6 +86,13 @@ NOTE：sing-box v1.12 only
   ```
 
 - The generated `dist/singbox.test.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
+- To run smoke checks for both the live page and the offline bundle, run:
+
+  ```bash
+  node scripts/smoke-singbox.mjs
+  ```
+
+- The browser stage in `scripts/smoke-singbox.mjs` requires `playwright` to be resolvable from local `node_modules` or `NODE_PATH`. When it is unavailable, the script still performs build + syntax checks and reports that browser coverage was skipped.
 
 
 ## Usage
