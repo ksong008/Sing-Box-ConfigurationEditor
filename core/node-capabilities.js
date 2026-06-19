@@ -280,7 +280,7 @@ export function sanitizeNodeByCapabilities(node = {}) {
                 delete node.tls_min_version;
                 delete node.tls_max_version;
             }
-            if (!caps.isTcpTlsContext) delete node.cipher_suites;
+            if (!caps.isTcpTlsContext || node.tls_min_version === '1.3') delete node.cipher_suites;
             if (!caps.supportsTlsFragment) {
                 delete node.tls_fragment;
                 delete node.tls_record_fragment;

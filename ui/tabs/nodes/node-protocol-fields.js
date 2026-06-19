@@ -212,7 +212,7 @@ export const nodeProtocolFieldsTemplate = `                        <div v-if="no
                         <!-- ShadowTLS -->
                         <div v-if="node.type==='shadowtls'" class="grid grid-cols-2 gap-3 mb-3">
                             <div><label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">版本 (Version)</label>
-                                <select v-model="node.shadowtls_version" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
+                                <select v-model="node.shadowtls_version" @change="syncNodeNetworkConstraints(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none bg-white focus:ring-1">
                                     <option value="3">v3 (推荐)</option>
                                     <option value="2">v2</option>
                                     <option value="1">v1</option>
