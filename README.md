@@ -77,6 +77,11 @@ ui/
     advanced-tab.js
     create-injected-component.js
     dns-tab.js
+    dns/
+      basic-settings-section.js
+      dns-servers-section.js
+      extra-inbounds-section.js
+      fakeip-section.js
     groups-tab.js
     nodes-tab.js
     nodes/
