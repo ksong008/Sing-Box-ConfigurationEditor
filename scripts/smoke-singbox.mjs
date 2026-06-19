@@ -5,11 +5,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     assert,
+    collectBrowserErrors,
     extractLastInlineScript,
     logStep,
     resolveOptionalModule,
+    waitForRenderedApp,
     withStaticServer,
 } from './lib/smoke-helpers.mjs';
+import { runNodeUiCapabilityRegression } from './lib/node-ui-regression.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,54 +30,9 @@ function runNodeCommand(args) {
     });
 }
 
-async function waitForRenderedApp(page, label) {
-    const deadline = Date.now() + 15000;
-    let lastButtons = 0;
-    let lastHeadings = 0;
-    let lastMounted = null;
-
-    while (Date.now() < deadline) {
-        lastButtons = await page.locator('button').count();
-        lastHeadings = await page.locator('h1').count();
-        lastMounted = await page.locator('#app').getAttribute('data-v-app');
-
-        if (lastButtons >= 10 && lastHeadings >= 1 && lastMounted !== null) {
-            return {
-                buttons: lastButtons,
-                headings: lastHeadings,
-            };
-        }
-
-        await page.waitForTimeout(250);
-    }
-
-    throw new Error(
-        `[${label}] app did not render expected controls within timeout (buttons=${lastButtons}, h1=${lastHeadings}, data-v-app=${lastMounted})`,
-    );
-}
-
 async function runRenderCheck(browser, url, label) {
     const page = await browser.newPage();
-    const errors = [];
-    const ignoredWarningPatterns = [
-        /cdn\.tailwindcss\.com should not be used in production/i,
-        /parser-blocking, cross site .* invoked via document\.write/i,
-    ];
-
-    page.on('pageerror', (error) => {
-        errors.push(`pageerror: ${error.stack || error.message}`);
-    });
-
-    page.on('console', (msg) => {
-        const text = msg.text();
-        if (msg.type() === 'error') {
-            errors.push(`console:error: ${text}`);
-            return;
-        }
-        if (msg.type() === 'warning' && !ignoredWarningPatterns.some((pattern) => pattern.test(text))) {
-            errors.push(`console:warning: ${text}`);
-        }
-    });
+    const errors = collectBrowserErrors(page);
 
     await page.goto(url, { waitUntil: 'load' });
     const stats = await waitForRenderedApp(page, label);
@@ -85,6 +43,29 @@ async function runRenderCheck(browser, url, label) {
 
     logStep(`${label} page rendered (${stats.buttons} buttons, ${stats.headings} heading)`);
     await page.close();
+}
+
+async function runNodeUiRegressionCheck(browser, url, label) {
+    const page = await browser.newPage();
+    const errors = collectBrowserErrors(page);
+
+    try {
+        await page.addInitScript(() => {
+            localStorage.clear();
+            sessionStorage.clear();
+        });
+        await page.goto(url, { waitUntil: 'load' });
+        await waitForRenderedApp(page, `${label} node UI regression`);
+        await runNodeUiCapabilityRegression(page, { assert, logStep, label: `${label} node UI` });
+
+        if (errors.length > 0) {
+            throw new Error(`[${label}] node UI regression browser reported errors:\n${errors.join('\n')}`);
+        }
+
+        logStep(`${label} node UI regression passed`);
+    } finally {
+        await page.close();
+    }
 }
 
 async function runBrowserStages() {
@@ -108,6 +89,7 @@ async function runBrowserStages() {
         });
 
         await runRenderCheck(browser, pathToFileURL(distHtmlPath).href, 'offline');
+        await runNodeUiRegressionCheck(browser, pathToFileURL(distHtmlPath).href, 'offline');
     } finally {
         await browser.close();
     }

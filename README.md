@@ -135,8 +135,10 @@ ui/
 scripts/
   build-single-html.mjs
   smoke-singbox.mjs
+  test-node-ui.mjs
   test-node-capabilities.mjs
   lib/
+    node-ui-regression.mjs
     smoke-helpers.mjs
 main.js
 singbox.html
@@ -193,6 +195,14 @@ NOTE：sing-box v1.12 only
   ```bash
   node scripts/test-node-capabilities.mjs
   ```
+
+- To run the focused node UI regression for protocol/transport visibility, run:
+
+  ```bash
+  node scripts/test-node-ui.mjs
+  ```
+
+  Add `--require-playwright` when the command should fail instead of skipping if Playwright is unavailable.
 
 
 ## Usage
