@@ -85,6 +85,14 @@ ui/
       nodes-footer.js
       nodes-toolbar.js
       providers-section.js
+    rules/
+      route-options-fields.js
+      route-rule-card.js
+      route-rules-toolbar.js
+      rule-action-fields.js
+      rule-conditions.js
+      rule-sets-section.js
+      rules-footer.js
     rules-tab.js
     tproxy-tab.js
     tun-tab.js
