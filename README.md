@@ -12,7 +12,12 @@ Current code structure:
 core/
   state.js
   config.js
+  config-utils.js
   import-export.js
+  json-scroll.js
+  node-capabilities.js
+  runtime-import.js
+  state-snapshot.js
   storage.js
 modules/
   dns.js

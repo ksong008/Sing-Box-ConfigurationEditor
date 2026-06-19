@@ -14,9 +14,13 @@
                 './main.js',
                 './core/state.js',
                 './core/config.js',
+                './core/config-utils.js',
                 './core/import-export.js',
+                './core/json-scroll.js',
                 './core/storage.js',
                 './core/node-capabilities.js',
+                './core/runtime-import.js',
+                './core/state-snapshot.js',
                 './modules/dns.js',
                 './modules/groups.js',
                 './modules/nodes.js',
@@ -29,7 +33,15 @@
                 './ui/json-preview.js',
                 './ui/register-components.js',
                 './ui/shared.js',
-                './ui/tab-panels.js'
+                './ui/tab-panels.js',
+                './ui/tabs/advanced-tab.js',
+                './ui/tabs/create-injected-component.js',
+                './ui/tabs/dns-tab.js',
+                './ui/tabs/groups-tab.js',
+                './ui/tabs/nodes-tab.js',
+                './ui/tabs/rules-tab.js',
+                './ui/tabs/tproxy-tab.js',
+                './ui/tabs/tun-tab.js'
             ];
 
             const imports = Object.fromEntries(moduleAssets.map((path) => [path, `${path}?${assetQuery}`]));
