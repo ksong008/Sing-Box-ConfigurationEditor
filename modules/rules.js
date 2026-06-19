@@ -1,93 +1,20 @@
+import { createDefaultRouteRules, createDefaultRuleSets } from './rules/defaults.js';
+import { migrateRule as migrateRuleBase, normalizeRule as normalizeRuleBase, csvString } from './rules/normalize.js';
+import {
+    getRuleActionDisabledReason,
+    hasRuleRouteOptions,
+    hasSuggestedRouteOptions,
+    isRuleActionSelectable,
+    shouldShowRuleRouteOptions,
+    shouldSuggestRouteOptionField,
+} from './rules/route-options.js';
+import { RULE_ACTIONS, SNIFF_PROTOCOLS } from './rules/schema.js';
+
 const { ref, watch, nextTick, computed } = window.Vue;
 
 export function setupRulesModule(ctx) {
-    const RULE_ACTIONS = ['route', 'reject', 'hijack-dns', 'sniff', 'resolve'];
-    const SNIFF_PROTOCOLS = ['http', 'tls', 'quic', 'stun', 'dns', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp'];
-
-    const csvString = (value) => (
-        Array.isArray(value)
-            ? value.map((item) => String(item).trim()).filter(Boolean).join(', ')
-            : String(value || '')
-    );
-
-    const splitCsv = (value) => csvString(value)
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-    const normalizeCondition = (cond = {}) => ({
-        type: typeof cond.type === 'string' && cond.type ? cond.type : 'domain_suffix',
-        value: csvString(cond.value)
-            .split(/\r?\n/)
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .join(', '),
-    });
-
-    const normalizeRule = (rule = {}) => {
-        const normalizedConditions = Array.isArray(rule.conditions) && rule.conditions.length > 0
-            ? rule.conditions.map(normalizeCondition)
-            : [{ type: 'rule_set', value: '' }];
-        const normalizedAction = RULE_ACTIONS.includes(rule.action)
-            ? rule.action
-            : (rule.outbound === '__reject__' ? 'reject' : 'route');
-
-        return {
-            id: rule.id || ctx.generateId('r'),
-            enabled: rule.enabled !== false,
-            name: typeof rule.name === 'string' && rule.name ? rule.name : '自定义规则',
-            mode: rule.mode === 'or' ? 'or' : 'and',
-            invert: !!rule.invert,
-            conditions: normalizedConditions,
-            action: normalizedAction,
-            outbound: typeof rule.outbound === 'string' && rule.outbound && rule.outbound !== '__reject__' ? rule.outbound : 'direct',
-            reject_method: ['default', 'drop', 'reply'].includes(rule.reject_method) ? rule.reject_method : 'default',
-            reject_no_drop: !!rule.reject_no_drop,
-            sniff_sniffer: csvString(rule.sniffer || rule.sniff_sniffer),
-            sniff_timeout: typeof rule.sniff_timeout === 'string'
-                ? rule.sniff_timeout
-                : (typeof rule.timeout === 'string' ? rule.timeout : ''),
-            resolve_server: typeof rule.resolve_server === 'string'
-                ? rule.resolve_server
-                : (typeof rule.server === 'string' ? rule.server : ''),
-            resolve_strategy: typeof rule.resolve_strategy === 'string'
-                ? rule.resolve_strategy
-                : (typeof rule.strategy === 'string' ? rule.strategy : ''),
-            resolve_disable_cache: !!(rule.resolve_disable_cache || rule.disable_cache),
-            resolve_rewrite_ttl: rule.resolve_rewrite_ttl === null || rule.resolve_rewrite_ttl === undefined
-                ? (rule.rewrite_ttl === null || rule.rewrite_ttl === undefined ? '' : String(rule.rewrite_ttl))
-                : String(rule.resolve_rewrite_ttl),
-            resolve_client_subnet: typeof rule.resolve_client_subnet === 'string'
-                ? rule.resolve_client_subnet
-                : (typeof rule.client_subnet === 'string' ? rule.client_subnet : ''),
-            option_override_address: typeof rule.option_override_address === 'string'
-                ? rule.option_override_address
-                : (typeof rule.override_address === 'string' ? rule.override_address : ''),
-            option_override_port: rule.option_override_port === 0
-                ? '0'
-                : (rule.option_override_port ? String(rule.option_override_port) : (rule.override_port ? String(rule.override_port) : '')),
-            option_network_strategy: typeof rule.option_network_strategy === 'string'
-                ? rule.option_network_strategy
-                : (typeof rule.network_strategy === 'string' ? rule.network_strategy : ''),
-            option_network_type: csvString(rule.option_network_type || rule.network_type),
-            option_fallback_network_type: csvString(rule.option_fallback_network_type || rule.fallback_network_type),
-            option_fallback_delay: typeof rule.option_fallback_delay === 'string'
-                ? rule.option_fallback_delay
-                : (typeof rule.fallback_delay === 'string' ? rule.fallback_delay : ''),
-            option_udp_disable_domain_unmapping: !!(rule.option_udp_disable_domain_unmapping || rule.udp_disable_domain_unmapping),
-            option_udp_connect: !!(rule.option_udp_connect || rule.udp_connect),
-            option_udp_timeout: typeof rule.option_udp_timeout === 'string'
-                ? rule.option_udp_timeout
-                : (typeof rule.udp_timeout === 'string' ? rule.udp_timeout : ''),
-            option_tls_fragment: !!(rule.option_tls_fragment || rule.tls_fragment),
-            option_tls_fragment_fallback_delay: typeof rule.option_tls_fragment_fallback_delay === 'string'
-                ? rule.option_tls_fragment_fallback_delay
-                : (typeof rule.tls_fragment_fallback_delay === 'string' ? rule.tls_fragment_fallback_delay : ''),
-            option_tls_record_fragment: !!(rule.option_tls_record_fragment || rule.tls_record_fragment),
-            isEditing: !!rule.isEditing,
-            draggable: !!rule.draggable,
-        };
-    };
+    const normalizeRule = (rule) => normalizeRuleBase(rule, ctx.generateId);
+    const migrateRule = (rule) => migrateRuleBase(rule, ctx.generateId);
 
     const onRuleActionChange = (rule) => {
         if (!rule) return;
@@ -100,30 +27,7 @@ export function setupRulesModule(ctx) {
         }
     };
 
-    const ruleSets = ref([
-        { id: ctx.generateId('rs'), tag: 'geosite-category-ads-all', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ads-all.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-ad', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/ad.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-youtube', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/youtube.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-category-ai-!cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/category-ai-!cn.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/google.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-google', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/google.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/telegram.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-telegram', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/telegram.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-twitter', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/twitter.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-twitter', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/twitter.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/netflix.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-netflix', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/netflix.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-spotify', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/spotify.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-proxymedia', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo-lite/geosite/proxymedia.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-github', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/github.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-microsoft@cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/microsoft@cn.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-microsoft', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/microsoft.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-apple-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple-cn.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-apple', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/apple.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/cn.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geoip-cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geoip/cn.srs', detour: 'direct', update_interval: '1d' },
-        { id: ctx.generateId('rs'), tag: 'geosite-geolocation-!cn', format: 'binary', url: 'https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@sing/geo/geosite/geolocation-!cn.srs', detour: 'direct', update_interval: '1d' },
-    ]);
+    const ruleSets = ref(createDefaultRuleSets(ctx.generateId));
 
     watch(() => ruleSets.value.length, (newLen, oldLen) => {
         if (newLen > 0 && oldLen === 0) ctx.settings.value.store_rdrc = true;
@@ -218,40 +122,7 @@ export function setupRulesModule(ctx) {
         });
     });
 
-    const migrateRule = (rule) => {
-        if (rule.conditions) return normalizeRule(rule);
-        const conds = [];
-        if (rule.tagsStr) {
-            conds.push({ type: rule.matchType || 'rule_set', value: rule.tagsStr });
-        }
-        return normalizeRule({
-            ...rule,
-            mode: 'and',
-            invert: false,
-            conditions: conds.length ? conds : [{ type: 'rule_set', value: '' }],
-        });
-    };
-
-    const defaultRouteRules = [
-        { id: ctx.generateId('r'), enabled: true, name: '拦截广告', conditions: [{ type: 'rule_set', value: 'geosite-category-ads-all,geoip-ad' }], mode: 'or', invert: false, action: 'reject', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'YouTube', conditions: [{ type: 'rule_set', value: 'geosite-youtube' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'AI 服务', conditions: [{ type: 'rule_set', value: 'geosite-category-ai-!cn' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Google', conditions: [{ type: 'rule_set', value: 'geosite-google,geoip-google' }], mode: 'or', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Telegram', conditions: [{ type: 'rule_set', value: 'geosite-telegram,geoip-telegram' }], mode: 'or', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Twitter / X', conditions: [{ type: 'rule_set', value: 'geosite-twitter,geoip-twitter' }], mode: 'or', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Netflix', conditions: [{ type: 'rule_set', value: 'geosite-netflix,geoip-netflix' }], mode: 'or', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Spotify', conditions: [{ type: 'rule_set', value: 'geosite-spotify' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: '海外流媒体', conditions: [{ type: 'rule_set', value: 'geosite-proxymedia' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'GitHub', conditions: [{ type: 'rule_set', value: 'geosite-github' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: '微软(国内)', conditions: [{ type: 'rule_set', value: 'geosite-microsoft@cn' }], mode: 'and', invert: false, action: 'route', outbound: 'direct', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: '微软', conditions: [{ type: 'rule_set', value: 'geosite-microsoft' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Apple(国内)', conditions: [{ type: 'rule_set', value: 'geosite-apple-cn' }], mode: 'and', invert: false, action: 'route', outbound: 'direct', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: 'Apple', conditions: [{ type: 'rule_set', value: 'geosite-apple' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: '中国直连', conditions: [{ type: 'rule_set', value: 'geosite-cn,geoip-cn' }], mode: 'or', invert: false, action: 'route', outbound: 'direct', isEditing: false, draggable: false },
-        { id: ctx.generateId('r'), enabled: true, name: '境外兜底代理', conditions: [{ type: 'rule_set', value: 'geosite-geolocation-!cn' }], mode: 'and', invert: false, action: 'route', outbound: '节点选择', isEditing: false, draggable: false },
-    ];
-
-    const routeRules = ref(defaultRouteRules.map(migrateRule));
+    const routeRules = ref(createDefaultRouteRules(ctx.generateId).map(migrateRule));
 
     const availableInboundTags = computed(() => {
         const tags = ['mixed-in'];
@@ -342,86 +213,6 @@ export function setupRulesModule(ctx) {
         obj[key] = tags.join(', ');
     };
 
-    const rangeIncludesPort = (raw, port) => {
-        const text = String(raw || '').trim();
-        if (!text) return false;
-        if (/^\d+$/.test(text)) return parseInt(text, 10) === port;
-        const match = text.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
-        if (!match) return false;
-        const start = parseInt(match[1], 10);
-        const end = parseInt(match[2], 10);
-        if (Number.isNaN(start) || Number.isNaN(end)) return false;
-        return port >= Math.min(start, end) && port <= Math.max(start, end);
-    };
-
-    const ruleTargetsDns = (rule = {}) => (Array.isArray(rule.conditions) ? rule.conditions : []).some((cond) => {
-        const values = splitCsv(cond?.value);
-        if (cond?.type === 'protocol') return values.includes('dns');
-        if (cond?.type === 'port' || cond?.type === 'source_port') return values.some((value) => parseInt(value, 10) === 53);
-        if (cond?.type === 'port_range' || cond?.type === 'source_port_range') return values.some((value) => rangeIncludesPort(value, 53));
-        if (cond?.type === 'inbound') return values.includes('dns-in');
-        return false;
-    });
-
-    const ruleHasResolvableTarget = (rule = {}) => {
-        const domainTypes = new Set(['rule_set', 'domain', 'domain_suffix', 'domain_keyword', 'domain_regex']);
-        return (Array.isArray(rule.conditions) ? rule.conditions : []).some((cond) => domainTypes.has(cond?.type));
-    };
-
-    const ruleCanSniff = (rule = {}) => {
-        const sniffDependentTypes = new Set(['rule_set', 'domain', 'domain_suffix', 'domain_keyword', 'domain_regex', 'protocol', 'client']);
-        return !(Array.isArray(rule.conditions) ? rule.conditions : []).some((cond) => sniffDependentTypes.has(cond?.type));
-    };
-
-    const ruleTargetsUdp = (rule = {}) => (Array.isArray(rule.conditions) ? rule.conditions : []).some((cond) => {
-        const values = splitCsv(cond?.value);
-        if (cond?.type === 'network') return values.includes('udp');
-        if (cond?.type === 'protocol') return values.some((value) => ['dns', 'quic', 'stun', 'ntp', 'dtls', 'bittorrent'].includes(value));
-        if (cond?.type === 'port' || cond?.type === 'source_port') return values.some((value) => [53, 123, 443, 3478].includes(parseInt(value, 10)));
-        if (cond?.type === 'port_range' || cond?.type === 'source_port_range') {
-            return values.some((value) => [53, 123, 443, 3478].some((port) => rangeIncludesPort(value, port)));
-        }
-        return false;
-    });
-
-    const ruleTargetsTlsLikeTraffic = (rule = {}) => (Array.isArray(rule.conditions) ? rule.conditions : []).some((cond) => {
-        const values = splitCsv(cond?.value);
-        if (cond?.type === 'protocol') return values.some((value) => ['tls', 'quic', 'dtls'].includes(value));
-        if (cond?.type === 'port' || cond?.type === 'source_port') return values.some((value) => parseInt(value, 10) === 443);
-        if (cond?.type === 'port_range' || cond?.type === 'source_port_range') return values.some((value) => rangeIncludesPort(value, 443));
-        return false;
-    });
-
-    const isRuleActionSelectable = (rule, action) => {
-        if (action === 'route' || action === 'reject') return true;
-        if (action === 'hijack-dns') return ruleTargetsDns(rule);
-        if (action === 'sniff') return ruleCanSniff(rule);
-        if (action === 'resolve') return ruleHasResolvableTarget(rule);
-        return false;
-    };
-
-    const getRuleActionDisabledReason = (rule, action) => {
-        if (action === 'hijack-dns' && !ruleTargetsDns(rule)) return '仅适用于 DNS 流量规则';
-        if (action === 'sniff' && !ruleCanSniff(rule)) return '当前规则已依赖域名、协议或客户端信息';
-        if (action === 'resolve' && !ruleHasResolvableTarget(rule)) return '仅适用于域名类规则';
-        return '';
-    };
-
-    const hasRuleRouteOptions = (rule = {}) => !!(
-        rule.option_override_address
-        || rule.option_override_port
-        || rule.option_network_strategy
-        || rule.option_network_type
-        || rule.option_fallback_network_type
-        || rule.option_fallback_delay
-        || rule.option_udp_disable_domain_unmapping
-        || rule.option_udp_connect
-        || rule.option_udp_timeout
-        || rule.option_tls_fragment
-        || rule.option_tls_fragment_fallback_delay
-        || rule.option_tls_record_fragment
-    );
-
     const hasRouteDefaultOptions = computed(() => !!(
         ctx.settings.value.find_process
         || ctx.settings.value.default_network_strategy
@@ -429,90 +220,6 @@ export function setupRulesModule(ctx) {
         || ctx.settings.value.default_fallback_network_type
         || ctx.settings.value.default_fallback_delay
     ));
-
-    const shouldSuggestRouteOptionField = (rule, field) => {
-        if (!rule || rule.action !== 'route') return false;
-
-        const hasValue = (() => {
-            const value = rule[field];
-            if (typeof value === 'boolean') return value;
-            return value !== null && value !== undefined && String(value).trim() !== '';
-        })();
-        if (hasValue) return true;
-
-        const conditionTypes = new Set((Array.isArray(rule.conditions) ? rule.conditions : []).map((cond) => cond?.type).filter(Boolean));
-        const portLikeTypes = new Set(['port', 'source_port', 'port_range', 'source_port_range']);
-        const contentRoutingTypes = new Set([
-            'rule_set',
-            'domain',
-            'domain_suffix',
-            'domain_keyword',
-            'domain_regex',
-            'geoip',
-            'source_geoip',
-            'ip_cidr',
-            'source_ip_cidr',
-            'auth_user',
-            'client',
-            'process_name',
-            'process_path',
-            'package_name',
-            'user',
-            'user_id',
-            'ip_version',
-        ]);
-
-        const onlyContentRouting = conditionTypes.size > 0 && [...conditionTypes].every((type) => contentRoutingTypes.has(type));
-        if (onlyContentRouting) return false;
-
-        const hasNetworkCond = conditionTypes.has('network');
-        const hasNetworkTypeCond = conditionTypes.has('network_type');
-        const hasPortLikeCond = [...conditionTypes].some((type) => portLikeTypes.has(type));
-        const hasProtocolCond = conditionTypes.has('protocol');
-        const hasInboundCond = conditionTypes.has('inbound');
-
-        if (['option_override_address', 'option_override_port'].includes(field)) {
-            return hasNetworkCond || hasPortLikeCond;
-        }
-
-        if (['option_network_strategy', 'option_network_type', 'option_fallback_network_type', 'option_fallback_delay'].includes(field)) {
-            return hasNetworkCond || hasNetworkTypeCond;
-        }
-
-        if (['option_udp_disable_domain_unmapping', 'option_udp_connect', 'option_udp_timeout'].includes(field)) {
-            if (hasNetworkCond || hasProtocolCond || hasPortLikeCond) return ruleTargetsUdp(rule);
-            if (hasInboundCond) {
-                const inboundValues = (Array.isArray(rule.conditions) ? rule.conditions : [])
-                    .filter((cond) => cond?.type === 'inbound')
-                    .flatMap((cond) => splitCsv(cond?.value));
-                return inboundValues.includes('dns-in');
-            }
-            return false;
-        }
-
-        if (['option_tls_fragment', 'option_tls_fragment_fallback_delay', 'option_tls_record_fragment'].includes(field)) {
-            return (hasProtocolCond || hasPortLikeCond) && ruleTargetsTlsLikeTraffic(rule);
-        }
-
-        return false;
-    };
-
-    const hasSuggestedRouteOptions = (rule = {}) => [
-        'option_override_address',
-        'option_override_port',
-        'option_network_strategy',
-        'option_network_type',
-        'option_fallback_network_type',
-        'option_fallback_delay',
-        'option_udp_disable_domain_unmapping',
-        'option_udp_connect',
-        'option_udp_timeout',
-        'option_tls_fragment',
-        'option_tls_fragment_fallback_delay',
-        'option_tls_record_fragment',
-    ].some((field) => shouldSuggestRouteOptionField(rule, field));
-
-    const shouldShowRuleRouteOptions = (rule = {}) => rule.action === 'route' && (hasRuleRouteOptions(rule) || hasSuggestedRouteOptions(rule));
 
     const draggedRuleIndex = ref(null);
     const dragOverRuleIndex = ref(null);

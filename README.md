@@ -53,6 +53,11 @@ modules/
     utils.js
     vless.js
     vmess.js
+  rules/
+    defaults.js
+    normalize.js
+    route-options.js
+    schema.js
   rules.js
   tproxy.js
   tun.js
