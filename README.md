@@ -48,6 +48,9 @@ core/
     vless.js
     vmess.js
     wireguard.js
+  runtime-import/
+    route-rules.js
+    utils.js
   runtime-import.js
   state-snapshot.js
   storage.js
