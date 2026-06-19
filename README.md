@@ -12,6 +12,7 @@ Current code structure:
 core/
   state.js
   config/
+    dns.js
     outbounds.js
   config.js
   config-utils.js
