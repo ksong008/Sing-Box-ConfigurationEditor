@@ -51,8 +51,10 @@ core/
   runtime-import/
     dns.js
     inbounds.js
+    outbounds.js
     route.js
     route-rules.js
+    settings.js
     utils.js
   runtime-import.js
   state-snapshot.js
