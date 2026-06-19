@@ -24,6 +24,58 @@ export function assert(condition, message) {
     if (!condition) throw new Error(message);
 }
 
+export const DEFAULT_IGNORED_BROWSER_WARNING_PATTERNS = Object.freeze([
+    /cdn\.tailwindcss\.com should not be used in production/i,
+    /parser-blocking, cross site .* invoked via document\.write/i,
+]);
+
+export function collectBrowserErrors(page, ignoredWarningPatterns = DEFAULT_IGNORED_BROWSER_WARNING_PATTERNS) {
+    const errors = [];
+
+    page.on('pageerror', (error) => {
+        errors.push(`pageerror: ${error.stack || error.message}`);
+    });
+
+    page.on('console', (msg) => {
+        const text = msg.text();
+        if (msg.type() === 'error') {
+            errors.push(`console:error: ${text}`);
+            return;
+        }
+        if (msg.type() === 'warning' && !ignoredWarningPatterns.some((pattern) => pattern.test(text))) {
+            errors.push(`console:warning: ${text}`);
+        }
+    });
+
+    return errors;
+}
+
+export async function waitForRenderedApp(page, label) {
+    const deadline = Date.now() + 15000;
+    let lastButtons = 0;
+    let lastHeadings = 0;
+    let lastMounted = null;
+
+    while (Date.now() < deadline) {
+        lastButtons = await page.locator('button').count();
+        lastHeadings = await page.locator('h1').count();
+        lastMounted = await page.locator('#app').getAttribute('data-v-app');
+
+        if (lastButtons >= 10 && lastHeadings >= 1 && lastMounted !== null) {
+            return {
+                buttons: lastButtons,
+                headings: lastHeadings,
+            };
+        }
+
+        await page.waitForTimeout(250);
+    }
+
+    throw new Error(
+        `[${label}] app did not render expected controls within timeout (buttons=${lastButtons}, h1=${lastHeadings}, data-v-app=${lastMounted})`,
+    );
+}
+
 function getMimeType(filePath) {
     return MIME_TYPES.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream';
 }
@@ -111,4 +163,3 @@ export function resolveOptionalModule(specifier, rootDir) {
         return null;
     }
 }
-
