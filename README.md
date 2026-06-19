@@ -15,6 +15,7 @@ core/
   config-utils.js
   import-export.js
   json-scroll.js
+  node-capability-schema.js
   node-capabilities.js
   protocol-codecs/
     anytls.js
