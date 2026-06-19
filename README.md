@@ -13,6 +13,7 @@ core/
   state.js
   config/
     dns.js
+    inbounds.js
     outbounds.js
     route.js
   config.js
