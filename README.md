@@ -60,6 +60,17 @@ ui/
     dns-tab.js
     groups-tab.js
     nodes-tab.js
+    nodes/
+      manual-import-section.js
+      node-card.js
+      node-dial-fields.js
+      node-multiplex-fields.js
+      node-protocol-fields.js
+      node-tls-fields.js
+      node-transport-fields.js
+      nodes-footer.js
+      nodes-toolbar.js
+      providers-section.js
     rules-tab.js
     tproxy-tab.js
     tun-tab.js
