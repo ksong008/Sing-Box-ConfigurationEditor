@@ -16,6 +16,25 @@ core/
   import-export.js
   json-scroll.js
   node-capabilities.js
+  protocol-codecs/
+    anytls.js
+    dns.js
+    http.js
+    hysteria.js
+    hysteria2.js
+    index.js
+    naive.js
+    shadowsocks.js
+    shadowtls.js
+    shared.js
+    socks.js
+    ssh.js
+    tor.js
+    trojan.js
+    tuic.js
+    vless.js
+    vmess.js
+    wireguard.js
   runtime-import.js
   state-snapshot.js
   storage.js
