@@ -21,6 +21,7 @@ core/
   config.js
   config-utils.js
   import-export/
+    panel-import.js
     validation.js
   import-export.js
   json-scroll/
