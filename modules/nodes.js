@@ -10,211 +10,21 @@ import {
     setNodeCurrentNetworkValue as resolveSetNodeCurrentNetworkValue,
     shouldShowNodeTransportSection as resolveShouldShowNodeTransportSection,
 } from '../core/node-capabilities.js';
+import { createNode } from './nodes/defaults.js';
+import {
+    getNodeDialVisibleFields as getNodeDialVisibleFieldsBase,
+    hasNodeDialConfig as hasNodeDialConfigBase,
+    hasNodeDialOptions as hasNodeDialOptionsBase,
+    isNodeDialFieldEffectivelyMuted,
+    isNodeDialFieldVisible as isNodeDialFieldVisibleBase,
+    nodeHasBindingOverride,
+    nodeHasDetourOverride,
+} from './nodes/dial-fields.js';
 
 const { ref, nextTick } = window.Vue;
 
 export function setupNodesModule(ctx) {
-    const COMMON_DIAL_FIELDS = ['detour', 'connect_timeout', 'bind_interface', 'routing_mark', 'inet4_bind_address', 'inet6_bind_address', 'reuse_addr', 'netns', 'network_strategy', 'network_type', 'fallback_network_type', 'fallback_delay'];
-    const DOMAIN_DIAL_FIELDS = ['domain_resolver'];
-    const LEGACY_DIAL_FIELDS = ['domain_strategy'];
-    const TCP_DIAL_FIELDS = ['tcp_fast_open', 'tcp_multi_path'];
-    const UDP_DIAL_FIELDS = ['udp_fragment'];
-    const PROTO_DIAL_FIELD_MATRIX = {
-        http: { common: true, domain: true, tcp: true },
-        socks: { common: true, domain: true, tcp: true, udp: true },
-        ssh: { common: true, domain: true, tcp: true },
-        shadowtls: { common: true, domain: true, tcp: true },
-        anytls: { common: true, domain: true, tcp: true },
-        naive: { common: true, domain: true, tcp: true, udp: true },
-        tor: { common: true, tcp: true },
-        wireguard: { common: true, domain: true, udp: true },
-        hysteria: { common: true, domain: true, udp: true },
-        hysteria2: { common: true, domain: true, udp: true },
-        tuic: { common: true, domain: true, udp: true },
-        dns: {},
-    };
-    const isNodeDialFieldConfigured = (node = {}, field) => {
-        const value = node[field];
-        if (typeof value === 'boolean') return value;
-        return value !== null && value !== undefined && String(value).trim() !== '';
-    };
-
-    const isLiteralIpAddress = (value = '') => {
-        const source = String(value || '').trim();
-        if (!source) return false;
-        if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(source)) return true;
-        if (/^\[[0-9a-fA-F:]+\]$/.test(source)) return true;
-        if (/^[0-9a-fA-F:]+$/.test(source) && source.includes(':')) return true;
-        return false;
-    };
-
-    const makeNode = (overrides = {}) => {
-        const type = overrides.type || 'vless';
-        const tlsDefault = isNodeTlsDefaultOn({ type });
-        const node = {
-            tag: '',
-            type: 'vless',
-            server: '',
-            port: 443,
-            secret: '',
-            sni: '',
-            transport: '',
-            path: '',
-            ws_host: '',
-            transport_headers_text: '',
-            transport_method: '',
-            transport_idle_timeout: '',
-            transport_ping_timeout: '',
-            transport_max_early_data: '',
-            transport_early_data_header_name: '',
-            transport_permit_without_stream: false,
-            flow: '',
-            mux_enabled: false,
-            mux_protocol: 'h2mux',
-            mux_max_connections: 4,
-            mux_min_streams: 4,
-            mux_max_streams: '',
-            mux_padding: false,
-            mux_brutal_enabled: false,
-            mux_brutal_up_mbps: '',
-            mux_brutal_down_mbps: '',
-            tls: tlsDefault,
-            insecure: false,
-            reality: false,
-            reality_pubkey: '',
-            reality_sid: '',
-            utls_fingerprint: '',
-            alpn: '',
-            alpn_custom: false,
-            network: '',
-            packet_encoding: 'xudp',
-            vmess_security: 'auto',
-            vmess_alter_id: 0,
-            vmess_global_padding: false,
-            vmess_authenticated_length: true,
-            disable_sni: false,
-            tls_min_version: '',
-            tls_max_version: '',
-            cipher_suites: '',
-            tls_fragment: false,
-            tls_record_fragment: false,
-            tls_fragment_fallback_delay: '',
-            ech_enabled: false,
-            ech_config: '',
-            ss_method: 'chacha20-ietf-poly1305',
-            ss_plugin: '',
-            ss_plugin_opts: '',
-            ss_udp_over_tcp: false,
-            ss_udp_over_tcp_version: '2',
-            tuic_password: '',
-            tuic_congestion: 'cubic',
-            tuic_udp_relay_mode: 'native',
-            tuic_network: '',
-            tuic_udp_over_stream: false,
-            tuic_zero_rtt_handshake: false,
-            tuic_heartbeat: '',
-            hy_up_mbps: 100,
-            hy_down_mbps: 100,
-            hy_up_text: '',
-            hy_down_text: '',
-            hy_obfs: '',
-            hy_auth_type: 'str',
-            hy_server_ports: '',
-            hy_hop_interval: '',
-            hy_recv_window_conn: '',
-            hy_recv_window: '',
-            hy_disable_mtu_discovery: false,
-            hy_network: '',
-            hy2_up: '',
-            hy2_down: '',
-            hy2_obfs_type: '',
-            hy2_obfs_password: '',
-            hy2_server_ports: '',
-            hy2_hop_interval: '',
-            hy2_hop_interval_max: '',
-            hy2_network: '',
-            hy2_bbr_profile: '',
-            hy2_brutal_debug: false,
-            shadowtls_version: '3',
-            shadowtls_password: '',
-            anytls_idle_session_check_interval: '',
-            anytls_idle_session_timeout: '',
-            anytls_min_idle_session: '',
-            username: '',
-            socks_version: '5',
-            socks_network: '',
-            socks_udp_over_tcp: false,
-            socks_udp_over_tcp_version: '2',
-            http_path: '',
-            http_headers_text: '',
-            naive_insecure_concurrency: '',
-            naive_extra_headers_text: '',
-            naive_udp_over_tcp: false,
-            naive_udp_over_tcp_version: '2',
-            naive_quic: false,
-            naive_quic_congestion_control: '',
-            wg_private_key: '',
-            wg_peer_pubkey: '',
-            wg_local_address: '',
-            wg_psk: '',
-            wg_mtu: 1280,
-            wg_reserved: '',
-            wg_system_interface: false,
-            wg_interface_name: '',
-            wg_workers: '',
-            wg_network: '',
-            ssh_auth_type: 'password',
-            ssh_private_key_path: '',
-            ssh_private_key_passphrase: '',
-            ssh_host_key_text: '',
-            ssh_host_key_algorithms: '',
-            ssh_client_version: '',
-            tor_executable_path: '',
-            tor_extra_args: '',
-            tor_data_directory: '',
-            tor_torrc_text: '',
-            quic_initial_packet_size: '',
-            quic_disable_path_mtu_discovery: false,
-            quic_idle_timeout: '',
-            quic_keep_alive_period: '',
-            quic_stream_receive_window: '',
-            quic_connection_receive_window: '',
-            quic_max_concurrent_streams: '',
-            dns_tag: '',
-            detour: '',
-            bind_interface: '',
-            inet4_bind_address: '',
-            inet6_bind_address: '',
-            routing_mark: '',
-            reuse_addr: false,
-            netns: '',
-            connect_timeout: '',
-            tcp_fast_open: false,
-            tcp_multi_path: false,
-            udp_fragment: false,
-            domain_resolver: '',
-            network_strategy: '',
-            network_type: '',
-            fallback_network_type: '',
-            fallback_delay: '',
-            domain_strategy: '',
-            collapsed: overrides.collapsed === undefined ? false : !!overrides.collapsed,
-            draggable: !!overrides.draggable,
-            ...overrides,
-        };
-
-        if (typeof node.domain_resolver === 'object' && node.domain_resolver !== null) {
-            node.domain_resolver = typeof node.domain_resolver.server === 'string' ? node.domain_resolver.server : '';
-        }
-        node.routing_mark = node.routing_mark === null || node.routing_mark === undefined ? '' : String(node.routing_mark);
-        node.network_type = Array.isArray(node.network_type) ? node.network_type.join(', ') : String(node.network_type || '');
-        node.fallback_network_type = Array.isArray(node.fallback_network_type) ? node.fallback_network_type.join(', ') : String(node.fallback_network_type || '');
-        node.hy_server_ports = Array.isArray(node.hy_server_ports) ? node.hy_server_ports.join(', ') : String(node.hy_server_ports || '');
-        node.hy2_server_ports = Array.isArray(node.hy2_server_ports) ? node.hy2_server_ports.join(', ') : String(node.hy2_server_ports || '');
-        node.wg_workers = node.wg_workers === null || node.wg_workers === undefined ? '' : String(node.wg_workers);
-
-        return sanitizeNodeByCapabilities(node);
-    };
+    const makeNode = (overrides = {}) => createNode(overrides);
 
     const nodes = ref([]);
     const draggedNodeIndex = ref(null);
@@ -319,44 +129,13 @@ export function setupNodesModule(ctx) {
     const getNodeSharedSecretLabel = (node = {}) => (['vless', 'vmess', 'tuic'].includes(node.type || '') ? 'UUID' : '密码 (Password)');
     const isNodeCredentialSniVisible = (node = {}) => isNodeTlsContext(node) && ['vless', 'vmess', 'trojan', 'hysteria2', 'hysteria'].includes(node.type || '');
 
-    const getNodeDialVisibleFields = (node = {}) => {
-        const fields = new Set();
-        const add = (items) => items.forEach((item) => fields.add(item));
-        const type = node.type || 'vless';
-        const usesQuicTransport = node.transport === 'quic';
-        const shouldShowDomainFields = type !== 'tor' && (!String(node.server || '').trim() || !isLiteralIpAddress(node.server));
-        const preset = PROTO_DIAL_FIELD_MATRIX[type];
-
-        if (preset) {
-            if (preset.common) add(COMMON_DIAL_FIELDS);
-            if (preset.domain && shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            if (preset.tcp && isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
-            if (preset.udp && isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
-        } else if (type === 'shadowsocks' || ['vless', 'vmess', 'trojan'].includes(type)) {
-            add(COMMON_DIAL_FIELDS);
-            if (shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            if (usesQuicTransport || isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
-            if (isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
-        } else {
-            add(COMMON_DIAL_FIELDS);
-            if (shouldShowDomainFields) add(DOMAIN_DIAL_FIELDS);
-            if (isNodeStreamTransport(node)) add(TCP_DIAL_FIELDS);
-            if (isNodeDatagramTransport(node)) add(UDP_DIAL_FIELDS);
-        }
-
-        [...COMMON_DIAL_FIELDS, ...DOMAIN_DIAL_FIELDS, ...TCP_DIAL_FIELDS, ...UDP_DIAL_FIELDS].forEach((field) => {
-            if (isNodeDialFieldConfigured(node, field)) fields.add(field);
-        });
-        LEGACY_DIAL_FIELDS.forEach((field) => {
-            if (isNodeDialFieldConfigured(node, field)) fields.add(field);
-        });
-
-        return fields;
-    };
-
-    const hasNodeDialOptions = (node = {}) => getNodeDialVisibleFields(node).size > 0;
-
-    const isNodeDialFieldVisible = (node = {}, field) => getNodeDialVisibleFields(node).has(field);
+    const getNodeDialDeps = () => ({
+        isNodeStreamTransport,
+        isNodeDatagramTransport,
+    });
+    const getNodeDialVisibleFields = (node = {}) => getNodeDialVisibleFieldsBase(node, getNodeDialDeps());
+    const hasNodeDialOptions = (node = {}) => hasNodeDialOptionsBase(node, getNodeDialDeps());
+    const isNodeDialFieldVisible = (node = {}, field) => isNodeDialFieldVisibleBase(node, field, getNodeDialDeps());
 
     const isNodeCipherSuitesMeaningful = (node = {}) => isNodeTcpTlsContext(node) && node.tls_min_version !== '1.3';
 
@@ -373,28 +152,7 @@ export function setupNodesModule(ctx) {
         );
     };
 
-    const hasNodeDialConfig = (node = {}) => {
-        const fields = getNodeDialVisibleFields(node);
-        return [...fields].some((field) => {
-            const value = node[field];
-            if (typeof value === 'boolean') return value;
-            return value !== null && value !== undefined && String(value).trim() !== '';
-        });
-    };
-
-    const nodeHasDetourOverride = (node = {}) => !!String(node.detour || '').trim();
-
-    const nodeHasBindingOverride = (node = {}) => !!(
-        String(node.bind_interface || '').trim()
-        || String(node.inet4_bind_address || '').trim()
-        || String(node.inet6_bind_address || '').trim()
-    );
-
-    const isNodeDialFieldEffectivelyMuted = (node = {}, field) => {
-        if (nodeHasDetourOverride(node) && field !== 'detour') return true;
-        if (nodeHasBindingOverride(node) && ['network_strategy', 'network_type', 'fallback_network_type', 'fallback_delay'].includes(field)) return true;
-        return false;
-    };
+    const hasNodeDialConfig = (node = {}) => hasNodeDialConfigBase(node, getNodeDialDeps());
 
     const getNodeAvailableNetworkOptions = (node = {}) => resolveNodeAvailableNetworkOptions(node);
     const getNodeCurrentNetworkValue = (node = {}) => resolveNodeCurrentNetworkValue(node);

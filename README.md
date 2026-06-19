@@ -42,6 +42,9 @@ core/
 modules/
   dns.js
   groups.js
+  nodes/
+    defaults.js
+    dial-fields.js
   nodes.js
   providers.js
   provider-parsers/
