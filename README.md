@@ -20,6 +20,8 @@ core/
     route.js
   config.js
   config-utils.js
+  import-export/
+    validation.js
   import-export.js
   json-scroll/
     field-inference.js
