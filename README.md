@@ -14,6 +14,7 @@ core/
   config/
     dns.js
     outbounds.js
+    route.js
   config.js
   config-utils.js
   import-export.js
