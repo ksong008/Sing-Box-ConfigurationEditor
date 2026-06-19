@@ -80,29 +80,59 @@ function stripImportStatements(source) {
     return source.replace(/^\s*import\s+\{\s*[\s\S]*?\s*\}\s+from\s+['"][^'"]+['"];?\s*$/gm, '').trim();
 }
 
+function parseExportSpecifier(specifier) {
+    const trimmed = specifier.trim();
+    const aliasMatch = trimmed.match(/^([A-Za-z0-9_$]+)\s+as\s+([A-Za-z0-9_$]+)$/);
+    if (aliasMatch) {
+        return {
+            local: aliasMatch[1],
+            exported: aliasMatch[2],
+        };
+    }
+
+    return {
+        local: trimmed,
+        exported: trimmed,
+    };
+}
+
 function collectExports(source) {
-    const exportNames = [];
+    const exportEntries = [];
+    const pushExport = (local, exported = local) => {
+        exportEntries.push({ local, exported });
+    };
+
     let transformed = source.replace(/^export function\s+([A-Za-z0-9_$]+)\s*\(/gm, (_, name) => {
-        exportNames.push(name);
+        pushExport(name);
         return `function ${name}(`;
     });
 
     transformed = transformed.replace(/^export const\s+([A-Za-z0-9_$]+)\s*=/gm, (_, name) => {
-        exportNames.push(name);
+        pushExport(name);
         return `const ${name} =`;
     });
 
     transformed = transformed.replace(/^export let\s+([A-Za-z0-9_$]+)\s*=/gm, (_, name) => {
-        exportNames.push(name);
+        pushExport(name);
         return `let ${name} =`;
     });
 
     transformed = transformed.replace(/^export class\s+([A-Za-z0-9_$]+)\b/gm, (_, name) => {
-        exportNames.push(name);
+        pushExport(name);
         return `class ${name}`;
     });
 
-    return { exportNames, transformed };
+    transformed = transformed.replace(/^\s*export\s+\{\s*([\s\S]*?)\s*\}\s*(?:from\s+['"][^'"]+['"])?;?\s*$/gm, (_, specifiers) => {
+        specifiers
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .map(parseExportSpecifier)
+            .forEach(({ local, exported }) => pushExport(local, exported));
+        return '';
+    });
+
+    return { exportEntries, transformed };
 }
 
 function resolveImportPath(fromFile, specifier) {
@@ -128,12 +158,12 @@ function bundleModule(modulePath) {
     }
 
     const importBindings = imports.flatMap((entry) => entry.specifiers.map((specifier) => specifier.destructure));
-    const { exportNames, transformed } = collectExports(stripImportStatements(source));
+    const { exportEntries, transformed } = collectExports(stripImportStatements(source));
     const importPrelude = importBindings.length > 0
         ? `const { ${importBindings.join(', ')} } = window.__SINGBOX_BUNDLE__;\n`
         : '';
-    const exportAssignments = exportNames
-        .map((name) => `window.__SINGBOX_BUNDLE__.${name} = ${name};`)
+    const exportAssignments = exportEntries
+        .map(({ local, exported }) => `window.__SINGBOX_BUNDLE__.${exported} = ${local};`)
         .join('\n');
 
     moduleBodies.push(`(() => {\nwindow.__SINGBOX_BUNDLE__ = window.__SINGBOX_BUNDLE__ || {};\n${importPrelude}${transformed}\n${exportAssignments}\n})();`);

@@ -1,0 +1,17 @@
+{
+  "name": "sing-box-configuration-editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-single-html.mjs",
+    "smoke": "node scripts/smoke-singbox.mjs",
+    "test": "node scripts/test-node-capabilities.mjs && node scripts/test-node-ui.mjs --require-playwright",
+    "test:capabilities": "node scripts/test-node-capabilities.mjs",
+    "test:node-ui": "node scripts/test-node-ui.mjs --require-playwright",
+    "test:node-ui:optional": "node scripts/test-node-ui.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
+  }
+}
