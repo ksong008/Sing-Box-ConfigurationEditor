@@ -50,6 +50,7 @@ core/
     wireguard.js
   runtime-import/
     dns.js
+    inbounds.js
     route-rules.js
     utils.js
   runtime-import.js
