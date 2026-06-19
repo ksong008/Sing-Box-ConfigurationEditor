@@ -91,22 +91,18 @@ export const nodeTlsFieldsTemplate = `                        <div v-if="isNodeT
                                         <div v-if="isNodeQuicTlsContext(node)" class="col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-medium text-sky-700">
                                             当前是 QUIC TLS 场景，实际通常只使用 <code>TLS 1.3</code>；保留 <code>min_version / max_version</code> 是为了和官方字段保持一致，但一般建议留空或显式设为 <code>1.3</code>。
                                         </div>
-                                        <div class="col-span-2">
+                                        <div v-if="isNodeCipherSuitesMeaningful(node)" class="col-span-2">
                                             <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-wider">
                                                 加密套件 <span class="normal-case font-normal text-gray-300">(cipher_suites · 逗号分隔 · 仅 TLS 1.0–1.2)</span>
                                             </label>
-                                            <select v-model="node.cipher_suites" :disabled="!isNodeCipherSuitesMeaningful(node)" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono disabled:opacity-40">
+                                            <select v-model="node.cipher_suites" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none bg-white focus:ring-1 font-mono">
                                                 <option value="">默认（推荐留空）</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256">AES-128-GCM (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384">AES-256-GCM (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">ChaCha20-Poly1305 (ECDHE)</option>
                                                 <option value="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256">AES-128-GCM + ChaCha20（均衡）</option>
                                             </select>
-                                            <p class="mt-1 text-[10px] font-medium text-amber-700">
-                                                仅对 TCP TLS 的 TLS 1.0–1.2 有意义；
-                                                <span v-if="isNodeQuicTlsContext(node)">当前是 QUIC TLS，实际使用 TLS 1.3，此项会自动禁用。</span>
-                                                <span v-else>如果最低 TLS 版本已设为 <code>1.3</code>，此项会自动禁用。</span>
-                                            </p>
+                                            <p class="mt-1 text-[10px] font-medium text-amber-700">仅对 TCP TLS 的 TLS 1.0–1.2 有意义；QUIC 或最低 TLS 版本为 <code>1.3</code> 时不会写入配置。</p>
                                         </div>
                                     </div>
 

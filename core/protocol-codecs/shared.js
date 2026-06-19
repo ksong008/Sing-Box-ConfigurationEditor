@@ -108,7 +108,7 @@ export const applyTlsFields = (outbound, node, caps = resolveNodeCapabilities(no
     const tlsMaxVersion = isQuicTlsContext && node.tls_max_version !== '1.3' ? '' : node.tls_max_version;
     if (tlsMinVersion) outbound.tls.min_version = tlsMinVersion;
     if (tlsMaxVersion) outbound.tls.max_version = tlsMaxVersion;
-    if (!isQuicTlsContext && node.cipher_suites) {
+    if (caps.isTcpTlsContext && node.tls_min_version !== '1.3' && node.cipher_suites) {
         const cipherSuites = node.cipher_suites.split(',').map((item) => item.trim()).filter(Boolean);
         if (cipherSuites.length) outbound.tls.cipher_suites = cipherSuites;
     }
