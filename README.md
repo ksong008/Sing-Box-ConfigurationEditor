@@ -59,6 +59,8 @@ modules/
     route-options.js
     schema.js
   rules.js
+  tproxy/
+    nft.js
   tproxy.js
   tun.js
 ui/
