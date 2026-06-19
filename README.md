@@ -49,6 +49,7 @@ core/
     vmess.js
     wireguard.js
   runtime-import/
+    dns.js
     route-rules.js
     utils.js
   runtime-import.js
