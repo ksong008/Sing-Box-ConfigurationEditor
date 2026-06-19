@@ -1,4 +1,7 @@
-import { sanitizeNodeByCapabilities } from './node-capabilities.js';
+import {
+    parseRuntimeGroupOutbound,
+    parseRuntimeOutbound,
+} from './protocol-codecs/index.js';
 
 const RESERVED_RUNTIME_INBOUND_TAGS = new Set(['mixed-in', 'tun-in', 'tproxy-in', 'dns-in']);
 
@@ -10,13 +13,6 @@ const toCsv = (value) => {
 const toLines = (value) => {
     if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean).join('\n');
     return String(value || '');
-};
-
-const headersToText = (headers) => {
-    if (!headers || typeof headers !== 'object') return '';
-    return Object.entries(headers)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join('\n');
 };
 
 export const looksLikeRuntimeConfig = (data) => Object.prototype.toString.call(data) === '[object Object]' && (
@@ -32,237 +28,6 @@ export function createRuntimeImporter(ctx, {
 } = {}) {
     const resetRuntime = typeof resetRuntimeImportState === 'function' ? resetRuntimeImportState : () => {};
     const absorbFakeip = typeof absorbFakeipServer === 'function' ? absorbFakeipServer : () => {};
-
-    const parseRuntimeDialFields = (target, source = {}) => {
-        target.detour = typeof source.detour === 'string' && source.detour !== 'direct' ? source.detour : '';
-        target.bind_interface = typeof source.bind_interface === 'string' ? source.bind_interface : '';
-        target.inet4_bind_address = typeof source.inet4_bind_address === 'string' ? source.inet4_bind_address : '';
-        target.inet6_bind_address = typeof source.inet6_bind_address === 'string' ? source.inet6_bind_address : '';
-        target.routing_mark = source.routing_mark === null || source.routing_mark === undefined ? '' : String(source.routing_mark);
-        target.reuse_addr = !!source.reuse_addr;
-        target.netns = typeof source.netns === 'string' ? source.netns : '';
-        target.connect_timeout = typeof source.connect_timeout === 'string' ? source.connect_timeout : '';
-        target.tcp_fast_open = !!source.tcp_fast_open;
-        target.tcp_multi_path = !!source.tcp_multi_path;
-        target.udp_fragment = !!source.udp_fragment;
-        target.domain_resolver = typeof source.domain_resolver === 'string'
-            ? source.domain_resolver
-            : (source.domain_resolver && typeof source.domain_resolver.server === 'string' ? source.domain_resolver.server : '');
-        target.network_strategy = typeof source.network_strategy === 'string' ? source.network_strategy : '';
-        target.network_type = toCsv(source.network_type);
-        target.fallback_network_type = toCsv(source.fallback_network_type);
-        target.fallback_delay = typeof source.fallback_delay === 'string' ? source.fallback_delay : '';
-        target.domain_strategy = typeof source.domain_strategy === 'string' ? source.domain_strategy : '';
-    };
-
-    const parseRuntimeTls = (node, tls = {}) => {
-        if (!tls || tls.enabled === false) return;
-        node.tls = true;
-        node.disable_sni = !!tls.disable_sni;
-        node.insecure = !!tls.insecure;
-        node.sni = typeof tls.server_name === 'string' ? tls.server_name : node.sni;
-        node.alpn = Array.isArray(tls.alpn) ? tls.alpn.join(', ') : String(tls.alpn || '');
-        node.tls_min_version = typeof tls.min_version === 'string' ? tls.min_version : '';
-        node.tls_max_version = typeof tls.max_version === 'string' ? tls.max_version : '';
-        node.cipher_suites = Array.isArray(tls.cipher_suites) ? tls.cipher_suites.join(', ') : String(tls.cipher_suites || '');
-        if (tls.utls && tls.utls.enabled) node.utls_fingerprint = tls.utls.fingerprint || '';
-        node.ech_enabled = !!(tls.ech && tls.ech.enabled);
-        node.ech_config = tls.ech && Array.isArray(tls.ech.config) ? tls.ech.config.join('\n') : '';
-        node.tls_fragment = !!tls.fragment;
-        node.tls_record_fragment = !!tls.record_fragment;
-        node.tls_fragment_fallback_delay = typeof tls.fragment_fallback_delay === 'string' ? tls.fragment_fallback_delay : '';
-        if (tls.reality && tls.reality.enabled) {
-            node.reality = true;
-            node.reality_pubkey = tls.reality.public_key || '';
-            node.reality_sid = tls.reality.short_id || '';
-        }
-    };
-
-    const parseRuntimeTransport = (node, transport = {}) => {
-        if (!transport || typeof transport.type !== 'string') return;
-        node.transport = transport.type;
-        if (transport.type === 'ws') {
-            node.path = transport.path || '/';
-            const headers = { ...(transport.headers || {}) };
-            if (headers.Host) {
-                node.ws_host = headers.Host;
-                delete headers.Host;
-            }
-            node.transport_headers_text = headersToText(headers);
-            node.transport_max_early_data = transport.max_early_data === null || transport.max_early_data === undefined ? '' : String(transport.max_early_data);
-            node.transport_early_data_header_name = transport.early_data_header_name || '';
-        } else if (transport.type === 'grpc') {
-            node.path = transport.service_name || '';
-            node.transport_idle_timeout = transport.idle_timeout || '';
-            node.transport_ping_timeout = transport.ping_timeout || '';
-            node.transport_permit_without_stream = !!transport.permit_without_stream;
-        } else if (transport.type === 'http') {
-            node.path = transport.path || '/';
-            node.ws_host = Array.isArray(transport.host) ? transport.host.join(', ') : String(transport.host || '');
-            node.transport_method = transport.method || '';
-            node.transport_headers_text = headersToText(transport.headers);
-            node.transport_idle_timeout = transport.idle_timeout || '';
-            node.transport_ping_timeout = transport.ping_timeout || '';
-        } else if (transport.type === 'httpupgrade') {
-            node.path = transport.path || '/';
-            node.ws_host = transport.host || '';
-            node.transport_headers_text = headersToText(transport.headers);
-        }
-    };
-
-    const parseRuntimeMultiplex = (node, multiplex = {}) => {
-        if (!multiplex || !multiplex.enabled) return;
-        node.mux_enabled = true;
-        node.mux_protocol = multiplex.protocol || 'h2mux';
-        node.mux_max_connections = multiplex.max_connections === null || multiplex.max_connections === undefined ? 4 : multiplex.max_connections;
-        node.mux_min_streams = multiplex.min_streams === null || multiplex.min_streams === undefined ? 4 : multiplex.min_streams;
-        node.mux_max_streams = multiplex.max_streams === null || multiplex.max_streams === undefined ? '' : String(multiplex.max_streams);
-        node.mux_padding = !!multiplex.padding;
-        if (multiplex.brutal && multiplex.brutal.enabled) {
-            node.mux_brutal_enabled = true;
-            node.mux_brutal_up_mbps = multiplex.brutal.up_mbps === null || multiplex.brutal.up_mbps === undefined ? '' : String(multiplex.brutal.up_mbps);
-            node.mux_brutal_down_mbps = multiplex.brutal.down_mbps === null || multiplex.brutal.down_mbps === undefined ? '' : String(multiplex.brutal.down_mbps);
-        }
-    };
-
-    const runtimeOutboundToNode = (outbound = {}) => {
-        if (!outbound || typeof outbound.type !== 'string' || !outbound.tag) return null;
-        const type = outbound.type;
-        if (['direct', 'block', 'selector', 'urltest'].includes(type)) return null;
-
-        const node = ctx.makeNode({
-            tag: outbound.tag,
-            type,
-            server: outbound.server || '',
-            port: outbound.server_port || 443,
-            collapsed: false,
-        });
-        parseRuntimeDialFields(node, outbound);
-
-        if (type === 'vless') {
-            node.secret = outbound.uuid || '';
-            node.flow = outbound.flow || '';
-        } else if (type === 'vmess') {
-            node.secret = outbound.uuid || '';
-            node.vmess_security = outbound.security || 'auto';
-            node.vmess_alter_id = outbound.alter_id || 0;
-            node.vmess_global_padding = !!outbound.global_padding;
-            node.vmess_authenticated_length = outbound.authenticated_length !== false;
-        } else if (type === 'trojan') {
-            node.secret = outbound.password || '';
-        } else if (type === 'shadowsocks') {
-            node.secret = outbound.password || '';
-            node.ss_method = outbound.method || node.ss_method;
-            node.network = typeof outbound.network === 'string' ? outbound.network : '';
-            node.ss_plugin = outbound.plugin || '';
-            node.ss_plugin_opts = outbound.plugin_opts || '';
-            if (outbound.udp_over_tcp && outbound.udp_over_tcp.enabled) {
-                node.ss_udp_over_tcp = true;
-                node.ss_udp_over_tcp_version = String(outbound.udp_over_tcp.version || '2');
-            }
-        } else if (type === 'socks') {
-            node.socks_version = String(outbound.version || '5');
-            node.username = outbound.username || '';
-            node.secret = outbound.password || '';
-            node.socks_network = typeof outbound.network === 'string' ? outbound.network : '';
-            if (outbound.udp_over_tcp && outbound.udp_over_tcp.enabled) {
-                node.socks_udp_over_tcp = true;
-                node.socks_udp_over_tcp_version = String(outbound.udp_over_tcp.version || '2');
-            }
-        } else if (type === 'http') {
-            node.username = outbound.username || '';
-            node.secret = outbound.password || '';
-            node.http_path = outbound.path || '';
-            node.http_headers_text = headersToText(outbound.headers);
-        } else if (type === 'wireguard') {
-            node.wg_private_key = outbound.private_key || '';
-            const peer = Array.isArray(outbound.peers) ? (outbound.peers[0] || {}) : {};
-            node.wg_peer_pubkey = peer.public_key || '';
-            node.server = peer.server || '';
-            node.port = peer.server_port || 443;
-            node.wg_psk = peer.pre_shared_key || '';
-            node.wg_local_address = Array.isArray(outbound.local_address) ? (outbound.local_address[0] || '') : '';
-            node.wg_mtu = outbound.mtu || node.wg_mtu;
-            node.wg_reserved = Array.isArray(outbound.reserved) ? outbound.reserved.join(',') : '';
-            node.wg_system_interface = !!outbound.system_interface;
-            node.wg_interface_name = outbound.interface_name || '';
-            node.wg_workers = outbound.workers === null || outbound.workers === undefined ? '' : String(outbound.workers);
-            node.wg_network = typeof outbound.network === 'string' ? outbound.network : '';
-        } else if (type === 'ssh') {
-            node.username = outbound.user || '';
-            if (outbound.private_key) {
-                node.ssh_auth_type = 'key';
-                node.secret = outbound.private_key;
-            } else {
-                node.ssh_auth_type = 'password';
-                node.secret = outbound.password || '';
-            }
-        } else if (type === 'shadowtls') {
-            node.shadowtls_password = outbound.password || '';
-            node.shadowtls_version = String(outbound.version || '3');
-        } else if (type === 'tor') {
-            node.tor_executable_path = outbound.executable_path || '';
-            node.tor_data_directory = outbound.data_directory || '';
-            node.tor_extra_args = Array.isArray(outbound.extra_args) ? outbound.extra_args.join(' ') : '';
-        } else if (type === 'hysteria2') {
-            node.secret = outbound.password || '';
-            node.hy2_up = outbound.up_mbps || '';
-            node.hy2_down = outbound.down_mbps || '';
-            if (outbound.obfs) {
-                node.hy2_obfs_type = outbound.obfs.type || '';
-                node.hy2_obfs_password = outbound.obfs.password || '';
-            }
-            node.hy2_server_ports = toCsv(outbound.server_ports);
-            node.hy2_hop_interval = outbound.hop_interval || '';
-            node.hy2_network = typeof outbound.network === 'string' ? outbound.network : '';
-        } else if (type === 'hysteria') {
-            node.secret = outbound.auth_str || outbound.auth || '';
-            node.hy_auth_type = outbound.auth ? 'base64' : 'str';
-            node.hy_up_mbps = outbound.up_mbps || node.hy_up_mbps;
-            node.hy_down_mbps = outbound.down_mbps || node.hy_down_mbps;
-            node.hy_obfs = outbound.obfs || '';
-            node.hy_server_ports = toCsv(outbound.server_ports);
-            node.hy_hop_interval = outbound.hop_interval || '';
-            node.hy_network = typeof outbound.network === 'string' ? outbound.network : '';
-        } else if (type === 'tuic') {
-            node.secret = outbound.uuid || '';
-            node.tuic_password = outbound.password || '';
-            node.tuic_congestion = outbound.congestion_control || node.tuic_congestion;
-            node.tuic_network = typeof outbound.network === 'string' ? outbound.network : '';
-            node.tuic_udp_over_stream = !!outbound.udp_over_stream;
-            node.tuic_udp_relay_mode = outbound.udp_relay_mode || node.tuic_udp_relay_mode;
-            node.tuic_zero_rtt_handshake = !!outbound.zero_rtt_handshake;
-            node.tuic_heartbeat = outbound.heartbeat || '';
-        } else if (type === 'anytls') {
-            node.secret = outbound.password || '';
-            node.anytls_idle_session_check_interval = outbound.idle_session_check_interval || '';
-        } else if (type === 'naive') {
-            node.username = outbound.username || '';
-            node.secret = outbound.password || '';
-        } else if (type === 'dns') {
-            // no extra fields currently exposed
-        } else {
-            return null;
-        }
-
-        parseRuntimeTls(node, outbound.tls);
-        parseRuntimeTransport(node, outbound.transport);
-        parseRuntimeMultiplex(node, outbound.multiplex);
-        return sanitizeNodeByCapabilities(node);
-    };
-
-    const runtimeOutboundToGroup = (outbound = {}) => {
-        if (!outbound || !['selector', 'urltest'].includes(outbound.type) || !outbound.tag) return null;
-        return ctx.normalizeGroup({
-            tag: outbound.tag,
-            type: outbound.type,
-            members: Array.isArray(outbound.outbounds) ? outbound.outbounds : [],
-            url: outbound.url || 'https://www.gstatic.com/generate_204',
-            interval: outbound.interval || '3m',
-            tolerance: outbound.tolerance === null || outbound.tolerance === undefined ? 50 : outbound.tolerance,
-            collapsed: false,
-        });
-    };
 
     const runtimeDnsServerToPanel = (server = {}, index = 0) => {
         const mapped = {
@@ -601,12 +366,12 @@ export function createRuntimeImporter(ctx, {
                 ctx.tun.value.bind_interface = outbound.bind_interface;
                 return;
             }
-            const group = runtimeOutboundToGroup(outbound);
+            const group = parseRuntimeGroupOutbound(outbound, ctx);
             if (group) {
                 ctx.groups.value.push(group);
                 return;
             }
-            const node = runtimeOutboundToNode(outbound);
+            const node = parseRuntimeOutbound(outbound, ctx);
             if (node) ctx.nodes.value.push(node);
         });
 
