@@ -60,6 +60,9 @@ modules/
     schema.js
   rules.js
   tproxy/
+    conflicts.js
+    extra-inbounds.js
+    marks.js
     nft.js
   tproxy.js
   tun.js
