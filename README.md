@@ -141,6 +141,7 @@ scripts/
     node-ui-regression.mjs
     smoke-helpers.mjs
 main.js
+package.json
 singbox.html
 ```
 
@@ -176,33 +177,46 @@ NOTE：sing-box v1.12 only
 - Put feature-specific logic in `modules/`.
 - Reusable Vue UI components live in `ui/`.
 - Vendored third-party assets used for release packaging live in `vendor/`.
+- Install local test dependencies before running the browser-backed checks:
+
+  ```bash
+  npm install
+  npx playwright install chromium
+  ```
+
 - To build a single-file release HTML from the split source, run:
 
   ```bash
-  node scripts/build-single-html.mjs
+  npm run build
   ```
 
 - The generated `dist/singbox.test.html` inlines Vue, Tailwind, Font Awesome, local modules, and fonts, so it can be opened offline without network access.
 - To run smoke checks for both the live page and the offline bundle, run:
 
   ```bash
-  node scripts/smoke-singbox.mjs
+  npm run smoke
   ```
 
-- The browser stage in `scripts/smoke-singbox.mjs` requires `playwright` to be resolvable from local `node_modules` or `NODE_PATH`. When it is unavailable, the script still performs build + syntax checks and reports that browser coverage was skipped.
+- To run the full local test suite, including protocol capability checks and node UI regression, run:
+
+  ```bash
+  npm test
+  ```
+
+- The browser stage in `scripts/smoke-singbox.mjs` and the required node UI test use Playwright from local `node_modules`. Without Playwright, `scripts/test-node-ui.mjs` can still be run in optional mode and will report a skip instead of failing.
 - To run focused protocol capability rule checks, run:
 
   ```bash
-  node scripts/test-node-capabilities.mjs
+  npm run test:capabilities
   ```
 
 - To run the focused node UI regression for protocol/transport visibility, run:
 
   ```bash
-  node scripts/test-node-ui.mjs
+  npm run test:node-ui
   ```
 
-  Add `--require-playwright` when the command should fail instead of skipping if Playwright is unavailable.
+  Use `npm run test:node-ui:optional` when the command should skip instead of failing if Playwright is unavailable.
 
 
 ## Usage
