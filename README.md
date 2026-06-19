@@ -135,6 +135,7 @@ ui/
 scripts/
   build-single-html.mjs
   smoke-singbox.mjs
+  test-node-capabilities.mjs
   lib/
     smoke-helpers.mjs
 main.js
@@ -187,6 +188,11 @@ NOTE：sing-box v1.12 only
   ```
 
 - The browser stage in `scripts/smoke-singbox.mjs` requires `playwright` to be resolvable from local `node_modules` or `NODE_PATH`. When it is unavailable, the script still performs build + syntax checks and reports that browser coverage was skipped.
+- To run focused protocol capability rule checks, run:
+
+  ```bash
+  node scripts/test-node-capabilities.mjs
+  ```
 
 
 ## Usage
