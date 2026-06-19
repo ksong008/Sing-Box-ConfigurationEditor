@@ -44,6 +44,15 @@ modules/
   groups.js
   nodes.js
   providers.js
+  provider-parsers/
+    hysteria2.js
+    index.js
+    shadowsocks.js
+    trojan.js
+    tuic.js
+    utils.js
+    vless.js
+    vmess.js
   rules.js
   tproxy.js
   tun.js
