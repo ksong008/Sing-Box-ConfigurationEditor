@@ -13,7 +13,9 @@ core/
   state.js
   config/
     dns.js
+    experimental.js
     inbounds.js
+    ntp.js
     outbounds.js
     route.js
   config.js
