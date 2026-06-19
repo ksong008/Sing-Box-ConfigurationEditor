@@ -11,6 +11,8 @@ Current code structure:
 ```text
 core/
   state.js
+  config/
+    outbounds.js
   config.js
   config-utils.js
   import-export.js
